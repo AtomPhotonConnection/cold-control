@@ -6,7 +6,8 @@ Created on 26 Sep 2016
 
 @author: Tom Barrett
 '''
-from ctypes import *
+from ctypes import POINTER, byref, c_double, c_int, c_long, c_short, c_uint, c_int32, \
+c_char, c_char_p, c_ushort, windll
 from pyvisa.ctwrapper.functions import get_attribute
 #from jinja2._stringdefs import combine
 #from DAQ import High_Hysteresis
@@ -296,8 +297,9 @@ class WX218x_DLL(object):
     """
     #wx218x_dll = WinDLL("C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\IVI Foundation\\IVI\\Bin\\wx218x_64.dll")
 
-    wx218x_dll = windll.LoadLibrary("C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\IVI Foundation\\IVI\\Bin\\wx218x_64.dll")
-    
+    #wx218x_dll = windll.LoadLibrary("C:\\Users\\LabUser\\Documents\\cold-control\\dlls\\IVI Foundation\\IVI\\Bin\\wx218x_64.dll")
+    wx218x_dll = windll.LoadLibrary(r"C:\Program Files\IVI Foundation\IVI\Bin\wx218x_64.dll")
+
     # ///////////////////////////////////////////////////////////////////////////
     # /*!
     # Opens the I/O session to the instrument. Driver methods and properties that
@@ -1152,10 +1154,11 @@ class WX218x_DLL(object):
     configure_once_count.restype = c_int
     configure_once_count.argtypes = (ViSession, ViConstString, ViInt32)
     
-    # Sets advance sequence once count (not for WS8351,WS8352).
-    configure_once_count_2 = wx218x_dll.wx218x_ConfigureOnceCount2
-    configure_once_count_2.restype = c_int
-    configure_once_count_2.argtypes = (ViSession, ViConstString, ViInt32)
+    # HACK: Commenting this out as it doesn't work with the new dll??
+    # # Sets advance sequence once count (not for WS8351,WS8352).
+    # configure_once_count_2 = wx218x_dll.wx218x_ConfigureOnceCount2
+    # configure_once_count_2.restype = c_int
+    # configure_once_count_2.argtypes = (ViSession, ViConstString, ViInt32)
     
     # ///////////////////////////////////////////////////////////////////////////
     # Use this method to set the source of the trigger event that will stimulate
@@ -1220,9 +1223,15 @@ class WX218x_DLL(object):
     #     ViConstString Channel,
     #     ViReal64 Level
     # );
-    configure2 = wx218x_dll.wx218x_Configure2
-    configure2.restype = c_int
-    configure2.argtypes = (ViSession, ViConstString, ViReal64)
+    # HACK: Commenting this out as it doesn't work with the new dll??
+    # configure2 = wx218x_dll.wx218x_Configure2
+    # configure2.restype = c_int
+    # configure2.argtypes = (ViSession, ViConstString, ViReal64)
+    
+    # HACK: Using ConfigureTriggerLevel instead as it seems to work
+    configure_trigger_level = wx218x_dll.wx218x_ConfigureTriggerLevel
+    configure_trigger_level.restype = c_int
+    configure_trigger_level.argtypes = (ViSession, ViConstString, ViReal64)
 
     # ///////////////////////////////////////////////////////////////////////////
     # Use this method to define the edge that will affect the trigger input.

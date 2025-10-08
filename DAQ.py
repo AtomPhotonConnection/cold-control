@@ -12,11 +12,14 @@ import re
 from mock.mock import MagicMock
 import time
 import pandas as pd
+import os
 
 # Windows API data types
 BOOLEAN = c_ubyte
 HANDLE = c_void_p
 ULONG_PTR = c_void_p
+
+REPO_PATH = "C:\\Users\\LabUser\\Documents\\cold-control"
 
 # Import DLL using the __stdcall convention
 dll = WinDLL('D2K-Dask64')
@@ -991,6 +994,9 @@ class DAQ_channel(object):
         """
 
         print("WARNING: calibrate_from_txt() METHOD IS DEPRECATED. USE CALIBRATE WITH CSV FILES INSTEAD.")
+
+        #calibrationFname = os.path.join(REPO_PATH, calibrationFname)
+
 
         vData, calData = [], []
         with open(calibrationFname) as f:

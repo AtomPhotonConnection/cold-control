@@ -5,7 +5,7 @@ mot reload = 750000
 iterations = 100
 waveform sequence = 0,0
 waveform stitch delays = 0,0
-waveform aom calibrations location = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/stirap_awg
+waveform aom calibrations location = /calibrations/stirap_awg
 marker levels = 0, 1
 marker width = 0.1
 marker delay = 0.853
@@ -13,11 +13,11 @@ marker delay = 0.853
 [[0]]
 modulation frequency = 75250000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\oli_old\flat_800.csv
+filename = waveforms\oli_old\flat_800.csv
 [[1]]
 modulation frequency = 75250000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\oli_old\flat_800.csv
+filename = waveforms\oli_old\flat_800.csv
 [AWG]
 sample rate = 1250000000.0
 burst count = 12500

@@ -10,31 +10,31 @@ interleave waveforms = False
 [[0]]
 modulation frequency = 60250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[1]]
 modulation frequency = 65250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[2]]
 modulation frequency = 70250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[3]]
 modulation frequency = 75250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[4]]
 modulation frequency = 80250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[5]]
 modulation frequency = 85250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [[6]]
 modulation frequency = 90250000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\single_sin4_85_512.csv
+filename = waveforms\new\single_sin4_85_512.csv
 [AWG]
 sample rate = 1250000000.0
 burst count = 12500
@@ -43,7 +43,7 @@ waveform output channel lags = 0.478, 0.360, 0.586
 marked channels = channel1,
 marker width = 0.1
 marker offset = 0.953
-waveform aom calibrations locations = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/stirap_awg,
+waveform aom calibrations locations = /calibrations/stirap_awg,
 [TDC]
 counter channels = 0,
 marker channel = 7

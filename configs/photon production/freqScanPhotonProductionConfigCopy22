@@ -10,11 +10,11 @@ interleave waveforms = False
 [[0]]
 modulation frequency = 90000000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\Tophat\96 long\90 drive\tophat_100_96.csv
+filename = waveforms\new\Tophat\96 long\90 drive\tophat_100_96.csv
 [[1]]
 modulation frequency = 90000000.0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\Sin4 photon\208 long\single_sin4_80_208\single_0_sin4_80_208.csv
+filename = waveforms\new\Sin4 photon\208 long\single_sin4_80_208\single_0_sin4_80_208.csv
 [AWG]
 sample rate = 1250000000.0
 burst count = 12500
@@ -23,7 +23,7 @@ waveform output channel lags = 0
 marked channels = channel1,
 marker width = 0.1
 marker offset = 0
-waveform aom calibrations locations = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/stirap_awg,
+waveform aom calibrations locations = /calibrations/stirap_awg,
 [TDC]
 counter channels = 0,
 marker channel = 7

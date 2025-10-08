@@ -7,6 +7,7 @@ Created on 22 Sep 2016
 @author: Tom Barrett
 '''
 from ctypes import *
+import os
 
 class TDC_DevType(object):
     (DEVTYPE_1A,                    
@@ -39,7 +40,8 @@ class TDC_BaseDLL(object):
     ctypes funcs to talk to tdcbase.dll.
     """
     #tdc_base_dll = windll.LoadLibrary('C:\\Users\\LabUser\\APC\\Cold Control Heavy\\dlls\\quTAU\\userlib\\lib64\\tdcbase.dll')  from Mark's code
-    tdc_base_dll = windll.LoadLibrary(r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\dlls\quTAU\userlib\lib64\tdcbase.dll")
+    base_path = "C:\\Users\\LabUser\\Documents\\cold-control\\dlls"
+    tdc_base_dll = windll.LoadLibrary(os.path.join(base_path,r"quTAU\userlib\lib64\tdcbase.dll"))
 
     #//////////////////////////////////////////////////////////////////////////
     #/*! 

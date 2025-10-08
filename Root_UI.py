@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import messagebox as tkMessageBox
 import os
 import Styles
+import typing
 
 from DAQ_UI import DAQ_UI
 from Sequence_UI import Sequence_UI
@@ -31,6 +32,8 @@ class ColdControl_UI(tk.Frame):
 
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
+
+        self.master: tk.Misc = parent
         
         self.config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
         self.development_mode = self.config_reader.is_development_mode()
@@ -74,8 +77,8 @@ class ColdControl_UI(tk.Frame):
         
         gridOpts = {'padx': 10, 'pady':10}
         
-        self.title.grid(row=0,column=0,columnspan=3, **gridOpts)
-        self.daq_UI.grid(row=1,column=1,columnspan=2, sticky=tk.N+tk.E+tk.W, **gridOpts)
+        self.title.grid(row=0,column=0,columnspan=3, **gridOpts) # type: ignore
+        self.daq_UI.grid(row=1,column=1,columnspan=2, sticky=tk.N+tk.E+tk.W, **gridOpts) # type: ignore
         self.experimental_UI.grid(row=2,column=1,columnspan=2, sticky=tk.N)
         self.camera_UI.grid(row=1,column=0, sticky=tk.N+tk.E+tk.W)
         self.labbook_UI.grid(row=1, column=3, sticky=tk.N+tk.E+tk.W)
@@ -88,13 +91,13 @@ class ColdControl_UI(tk.Frame):
         menubar = tk.Menu(self.master)
 
         filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Open", command=None)
-        filemenu.add_command(label="Save", command=None)
+        filemenu.add_command(label="Open", command=lambda: None)
+        filemenu.add_command(label="Save", command=lambda: None)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.onExit)
         menubar.add_cascade(label="File", menu=filemenu)
     
-        self.master.config(menu=menubar)
+        self.master.config(menu=menubar) # type: ignore
         
     def onExit(self):
         '''

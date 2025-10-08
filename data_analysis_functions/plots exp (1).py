@@ -396,7 +396,7 @@ def calculate_integrals(root_directory, shots_to_include=[], window_size=32,
 
             # # Guardar resultado por iteración
             # integrals_fl_df = pd.DataFrame({'integral': [area], 'ref 0': [average]})
-            # output_dir = rf'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\integrals_data_analysis\{today}\{folder_name}'
+            # output_dir = rf'\data\integrals_data_analysis\{today}\{folder_name}'
             # os.makedirs(output_dir, exist_ok=True)
             # integrals_fl_df.to_csv(os.path.join(output_dir, f'integrated_area_iteration_{iteration_number}.csv'), index=False)
 
@@ -424,7 +424,7 @@ def calculate_integrals(root_directory, shots_to_include=[], window_size=32,
 
     # Guardar resumen final
     summary_df = pd.DataFrame(output_data)
-    # summary_output_dir = rf'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\integrals_data_analysis\{today}'
+    # summary_output_dir = rf'\data\integrals_data_analysis\{today}'
     # os.makedirs(summary_output_dir, exist_ok=True)
     summary_output_path = os.path.join(root_directory, 'summary_integrals.csv')
     summary_df.to_csv(summary_output_path, index=False)
@@ -437,9 +437,9 @@ if __name__ == "__main__":
     single_shot_path = r'D:\pulse_shaping_data\2025-06-13\16-08-00\sweep_55_opt_126_80\shot0'
 
     # folders_to_process = [
-    #     r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_175ns_20_stokes_175ns_0_2_126_80",
-    #     r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_optimized_stokes_optimized_126_80",
-    #     r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_zero_175_stokes_zero_175_126_80'
+    #     r"\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_175ns_20_stokes_175ns_0_2_126_80",
+    #     r"\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_optimized_stokes_optimized_126_80",
+    #     r'\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_zero_175_stokes_zero_175_126_80'
     # ]
     
     while True:

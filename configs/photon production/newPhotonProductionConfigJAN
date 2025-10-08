@@ -11,23 +11,23 @@ interleave waveforms = True
 [[0]]
 modulation frequency = 107000000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\Sin2 pulse\416 long\sin2_30_416.csv
+filename = waveforms\new\Sin2 pulse\416 long\sin2_30_416.csv
 [[1]]
 modulation frequency = 106000000
 phases = ,
-filename =C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Jan\stokes_pulse_250nsRepump\stokes_250ns_30.csv
+filename =waveforms\new_Jan\stokes_pulse_250nsRepump\stokes_250ns_30.csv
 [[2]]
 modulation frequency = 78500000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Jan\pump_pulse_175nsRepump\pump_175ns_30.csv
+filename = waveforms\new_Jan\pump_pulse_175nsRepump\pump_175ns_30.csv
 [[3]]
 modulation frequency = 62350000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Jan\tophat\tophat_4000ns_100.csv
+filename = waveforms\new_Jan\tophat\tophat_4000ns_100.csv
 [[4]]
 modulation frequency = 0
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Jan\zeros\zero_605.csv
+filename = waveforms\new_Jan\zeros\zero_605.csv
 
 
 [AWG]
@@ -37,7 +37,7 @@ waveform output channels = channel1, channel2, channel3
 waveform output channel lags = 0.015,0, 0
 marked channels = channel1,
 marker width = 0.1
-waveform aom calibrations locations = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/stirap_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/depump_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/repump_awg,  C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/repump_awg
+waveform aom calibrations locations = /calibrations/stirap_awg, /calibrations/depump_awg, /calibrations/repump_awg,  /calibrations/repump_awg
 [TDC]
 counter channels = 1,2
 marker channel = 3

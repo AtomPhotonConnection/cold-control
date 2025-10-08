@@ -32,7 +32,7 @@ def test_standard_waveform(channel=Channel.CHANNEL_1):
 
 def test_arbitrary_waveform():
     '''Test arbitrary waveform output with example waveform'''
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\dlls\IVI Foundation\IVI\Drivers\wx218x\Examples\Matlab\waves'
+    waveform_folder = r'\dlls\IVI Foundation\IVI\Drivers\wx218x\Examples\Matlab\waves'
     waveform_file = r'pulse_2048.wav'
     waveform_filename = os.path.join(waveform_folder, waveform_file)
 
@@ -47,7 +47,7 @@ def test_sequence():
     '''Test sequence output with example waveforms'''
     awg.configure_sample_rate(0.5*10**9)
     awg.set_active_channel(len(Channel.CHANNEL_1), Channel.CHANNEL_1)
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\dlls\IVI Foundation\IVI\Drivers\wx218x\Examples\Matlab\waves'
+    waveform_folder = r'\dlls\IVI Foundation\IVI\Drivers\wx218x\Examples\Matlab\waves'
     waveform1_file = r'sinc_8192.wav'
     waveform2_file = r'square_1024.wav'
     awg.configure_output_mode(WX218x_OutputMode.SEQUENCE)
@@ -67,7 +67,7 @@ def test_sequence():
     
 def test_user_defined_arbitrary_waveform():
     '''Test user defined arbitrary waveform which is specified in a csv file'''
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\Sawtooth\832_long'
+    waveform_folder = r'waveforms\new\Sawtooth\832_long'
     waveform_file = r'sawtooth_832.csv'
     waveform_filename = os.path.join(waveform_folder, waveform_file)
 
@@ -82,7 +82,7 @@ def test_user_defined_arbitrary_waveform():
     
 def test_triggered_user_defined_arbitrary_waveform():
     '''Test user defined arbitrary waveform which is specified in a csv file with a trigger'''
-    waveform_folder =  r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new\Sawtooth\832_long'
+    waveform_folder =  r'waveforms\new\Sawtooth\832_long'
     waveform_file = r'sawtooth_832.csv'
     waveform_filename = os.path.join(waveform_folder, waveform_file)
 
@@ -103,7 +103,7 @@ def test_triggered_user_defined_arbitrary_waveform():
     awg.disable_channel(Channel.CHANNEL_1)
     
 def test_triggered_user_defined_arbitrary_sequence():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms'
+    waveform_folder = r'\waveforms'
     waveform_file1 = r'sin_squared_800.asc'
     waveform_file2 = r'zero_192.asc'
     waveform_file3 = r'double_hump_800.asc'
@@ -138,7 +138,7 @@ def test_triggered_user_defined_arbitrary_sequence():
     awg.disable_channel(Channel.CHANNEL_1)
     
 def test_markers():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms'
+    waveform_folder = r'\waveforms'
     waveform_file1 = r'sin_squared_800.asc'
     waveform_file2 = r'zero_192.asc'
     waveform_file3 = r'double_hump_800.asc'
@@ -186,7 +186,7 @@ def test_markers():
     awg.disable_channel(Channel.CHANNEL_2)
 
 def test_arb_markers():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests\arb con'
+    waveform_folder = r'waveforms\tests\arb con'
     waveform_file = r'sin_squared_800_marked.wav'
     waveform_filename = os.path.join(waveform_folder, waveform_file)
 
@@ -205,9 +205,9 @@ def test_working_asc_files():
 
     import bitstring
 
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests'
-    waveform_good = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests\arb con\0to9.asc'
-    waveform_bad = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests\mine\0to9.asc'
+    waveform_folder = r'waveforms\tests'
+    waveform_good = r'waveforms\tests\arb con\0to9.asc'
+    waveform_bad = r'waveforms\tests\mine\0to9.asc'
     
     def get_data(filename, raw=False):
         
@@ -237,9 +237,9 @@ def test_working_asc_files():
 #         
 
 def test_manual_load():
-#     waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests\mine'
+#     waveform_folder = r'waveforms\tests\mine'
 #     waveform_file = r'sin_squared_800_oli.csv'
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\tests\mine'
+    waveform_folder = r'waveforms\tests\mine'
     waveform_file = r'sin_squared_800.csv'
     waveform_filename = os.path.join(waveform_folder, waveform_file)
 
@@ -266,7 +266,7 @@ def test_manual_load():
     print '...turning channels off'
 
 def test_manual_load_dual_channel():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\oli_old'
+    waveform_folder = r'waveforms\oli_old'
     waveform_file1 = r'sin_squared_800.csv'
     waveform_file2 = r'double_hump_800.csv'
     waveform_filename1 = os.path.join(waveform_folder, waveform_file1)
@@ -299,7 +299,7 @@ def test_manual_load_dual_channel():
     print '...turning channels off'
 
 def test_triggered_user_defined_arbitrary_sequence_dual_channel():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\oli_old'
+    waveform_folder = r'waveforms\oli_old'
     waveform_file1 = r'sin_squared_800.csv'
     waveform_file2 = r'double_hump_800.csv'
     waveform_filename1 = os.path.join(waveform_folder, waveform_file1)
@@ -392,7 +392,7 @@ def test_triggered_user_defined_arbitrary_sequence_dual_channel():
     awg.disable_channel(Channel.CHANNEL_2)
 
 def test_modulate_data():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\oli_old'
+    waveform_folder = r'waveforms\oli_old'
     waveform_file = r'flat_800.csv'
     
     awg.configure_sample_rate(1*10**9)
@@ -473,7 +473,7 @@ def test_run_tone(freq=70*10**6):
    
 
 def test_triggered_user_defined_arbitrary_sequence_dual_channel_with_markers():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new'
+    waveform_folder = r'waveforms\new'
     waveform_file1 = r'single_sin4_95_624.csv'
     waveform_file2 = r'single_sin4_80_512.csv'
     waveform_filename1 = os.path.join(waveform_folder, waveform_file1)
@@ -550,7 +550,7 @@ def test_triggered_user_defined_arbitrary_sequence_dual_channel_with_markers():
     awg.disable_channel(Channel.CHANNEL_2)
 
 def test_triggered_user_defined_arbitrary_sequence_dual_channel_with_markers_3Ch():
-    waveform_folder = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new'
+    waveform_folder = r'waveforms\new'
     waveform_file1 = r'single_sin4_95_624.csv'
     waveform_file2 = r'single_sin4_80_512.csv'
     waveform_filename1 = os.path.join(waveform_folder, waveform_file1)

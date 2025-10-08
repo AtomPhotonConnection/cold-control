@@ -15,9 +15,10 @@ class IC_GrabberDLL(object):
     
     # win32
 #     _ic_grabber_dll = windll.LoadLibrary(r'C:\Users\apc\Documents\The Imaging Source Europe GmbH\TIS Grabber DLL\bin\win32\tisgrabber.dll')
-    windll.LoadLibrary('C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\The Imaging Source Europe GmbH\\TIS Grabber DLL\\bin\\x64\\TIS_DShowLib10_x64.dll')
-    windll.LoadLibrary('C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\The Imaging Source Europe GmbH\\TIS Grabber DLL\\bin\\x64\\TIS_UDSHL10_x64.dll')
-    _ic_grabber_dll = windll.LoadLibrary('C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\The Imaging Source Europe GmbH\\TIS Grabber DLL\\bin\\x64\\tisgrabber_x64.dll')
+    base_path = "C:\\Users\\LabUser\\Documents\\cold-control\\dlls\\The Imaging Source Europe GmbH\\TIS Grabber DLL"
+    windll.LoadLibrary(os.path.join(base_path, 'bin\\x64\\TIS_DShowLib10_x64.dll'))
+    windll.LoadLibrary(os.path.join(base_path, 'bin\\x64\\TIS_UDSHL10_x64.dll'))
+    _ic_grabber_dll = windll.LoadLibrary(os.path.join(base_path, 'bin\\x64\\tisgrabber_x64.dll'))
 
     #//////////////////////////////////////////////////////////////////////////
     #/*! Initialize the ICImagingControl class library. This function must be called

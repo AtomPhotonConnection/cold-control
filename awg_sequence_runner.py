@@ -8,7 +8,7 @@ from configobj import ConfigObj
 from lab_control_functions.awg_control_functions import run_awg
 
 
-path_to_config = r'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\configs\photon production\newPhotonProductionConfigJan'
+path_to_config = r'configs\photon production\newPhotonProductionConfigJan'
 
 
 
@@ -27,8 +27,7 @@ if __name__ == '__main__':
                                     waveform_output_channels = list(config['AWG']['waveform output channels']),
                                     waveform_output_channel_lags = map(float, config['AWG']['waveform output channel lags']),
                                     marked_channels = list(config['AWG']['marked channels']),
-                                    marker_width = eval(config['AWG']['marker width']),
-                                    waveform_aom_calibrations_locations = list(config['AWG']['waveform aom calibrations locations']))
+                                    marker_width = eval(config['AWG']['marker width']))
     # Same as above but for the tdc
     tdc_config = TdcConfiguration(counter_channels = map(eval, config['TDC']['counter channels']),
                                     marker_channel = int(config['TDC']['marker channel']),

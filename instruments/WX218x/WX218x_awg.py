@@ -3,11 +3,15 @@ Created on 26 Sep 2016
 
 @author: Tom Barrett
 '''
-from ctypes import *
+import ctypes
+from ctypes import c_char_p, c_int, c_ulong, byref, c_uint, c_double, c_short, c_int32, \
+    POINTER, create_string_buffer, c_uint32, c_ushort, c_bool, c_long
 import pyvisa as visa
 import numpy as np
 
-from .WX218x_DLL import WX218x_DLL, WX218x_MarkerSource
+from .WX218x_DLL import WX218x_MarkerSource, WX218x_DLL
+#from .WX218x_dll_compat_shim import wx218x_dll as WX218x_DLL
+from .WX218x_dll_compat_shim import WX218x_MarkerSource
 from .WX218x_Exception import WX218x_Exception
 from .WX218x_Warning import WX218x_Warning
 #from esky.slaveproc import ctypes
@@ -42,6 +46,7 @@ class WX218x_awg(object):
             self.name = name
         else:
             resources = visa.ResourceManager().list_resources()
+            print('Currently connected VISA resources are', resources)
             try:
                 self.name = next(r for r in resources if self.MANUFACTURER_ID in r)
             except StopIteration as err:
@@ -62,12 +67,18 @@ class WX218x_awg(object):
         Gory details are described in the DLL documentation for the called
         functions.
         '''
+        name_cstr = bytes(self.name, 'utf-8')
+
+        print("DLL object:", WX218x_DLL)
+
         if not options_string:
-            name_cstr = bytes(self.name, 'utf-8')  # Convert string to bytes
             #WX218x_DLL.init(name_cstr, verify_id, reset, byref(self.vi_session))
-            self._validate_response(WX218x_DLL.init(name_cstr, verify_id, reset, byref(self.vi_session)))
+            print("Calling WX218x_DLL.init with:", name_cstr, verify_id, reset, self.vi_session)
+            self._validate_response(WX218x_DLL.init(name_cstr, verify_id, reset, self.vi_session))
         else:
-            self._validate_response(WX218x_DLL.init_with_options(self.name, verify_id, reset, options_string, byref(self.vi_session)))
+            self._validate_response(WX218x_DLL.init_with_options(name_cstr, verify_id,\
+                                                                reset, options_string,\
+                                                                    self.vi_session))
         print('Connection opened to AWG instrument', self.name)
         
     def close(self):
@@ -247,36 +258,36 @@ class WX218x_awg(object):
                                                               bytes(channel_name, 'utf-8'),
                                                               gain))
     
-    def create_sequence_adv(self, waveform_handles, loop_count, jump_flag=None):
-        sequence_handle = c_int32()
-#         waveform_handles_p = np.array([x.value for x in data]).ctypes.data_as(POINTER(c_int32))
-#         print  waveform_handles_p[:10]
+#     def create_sequence_adv(self, waveform_handles, loop_count, jump_flag=None):
+#         sequence_handle = c_int32()
+# #         waveform_handles_p = np.array([x.value for x in data]).ctypes.data_as(POINTER(c_int32))
+# #         print  waveform_handles_p[:10]
         
-#         loop_count_p = np.array(loop_count).ctypes.data_as(POINTER(c_int32))
-#         if not jump_flag: jump_flag = [0]*len(data)
-#         jump_flag_p  = np.array(jump_flag).ctypes.data_as(POINTER(c_char))
+# #         loop_count_p = np.array(loop_count).ctypes.data_as(POINTER(c_int32))
+# #         if not jump_flag: jump_flag = [0]*len(data)
+# #         jump_flag_p  = np.array(jump_flag).ctypes.data_as(POINTER(c_char))
         
-        waveform_handles_p = (c_int32*len(waveform_handles))()
-        for i in range(len(waveform_handles)):
-            waveform_handles_p[i] = waveform_handles[i]
+#         waveform_handles_p = (c_int32*len(waveform_handles))()
+#         for i in range(len(waveform_handles)):
+#             waveform_handles_p[i] = waveform_handles[i]
              
-        loop_count_p = (c_int32*len(loop_count))()
-        for i in range(len(loop_count)):
-            loop_count_p[i] = loop_count[i]
+#         loop_count_p = (c_int32*len(loop_count))()
+#         for i in range(len(loop_count)):
+#             loop_count_p[i] = loop_count[i]
              
-        jump_flag_p = (c_int32*len(jump_flag))()
-        for i in range(len(jump_flag)):
-            jump_flag_p[i] = jump_flag[i]
+#         jump_flag_p = (c_int32*len(jump_flag))()
+#         for i in range(len(jump_flag)):
+#             jump_flag_p[i] = jump_flag[i]
         
-        self._validate_response(WX218x_DLL.create_sequence_adv1(self.vi_session,
-                                                               len(waveform_handles),
-                                                               waveform_handles_p,
-                                                               len(loop_count),
-                                                               loop_count_p,
-                                                               len(jump_flag),
-                                                               jump_flag_p,
-                                                               byref(sequence_handle)))
-        return sequence_handle
+#         self._validate_response(WX218x_DLL.create_sequence_adv1(self.vi_session,
+#                                                                len(waveform_handles),
+#                                                                waveform_handles_p,
+#                                                                len(loop_count),
+#                                                                loop_count_p,
+#                                                                len(jump_flag),
+#                                                                jump_flag_p,
+#                                                                byref(sequence_handle)))
+#         return sequence_handle
 
     def clear_arbitrary_sequence(self, sequence_handle=-1):
         '''
@@ -330,7 +341,7 @@ class WX218x_awg(object):
         Use this method to program the threshold level for the trigger input signals.
         Valid range is -5V to 5V. The default level is 1.6V.
         '''
-        self._validate_response(WX218x_DLL.configure2(self.vi_session,
+        self._validate_response(WX218x_DLL.configure_trigger_level(self.vi_session,
                                                       bytes(channel_name, 'utf-8'),
                                                       level))
         
@@ -465,7 +476,7 @@ class WX218x_awg(object):
             return
         elif response_code < 0:
             err =  WX218x_Exception(response_code)
-        elif response_code > 0:
+        else:
             err =  WX218x_Warning(response_code)
             
 #         error_message = create_string_buffer(256)

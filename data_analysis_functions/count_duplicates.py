@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-root_path = r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-05-30\18-41-21"
+root_path = r"\data\2025-05-30\18-41-21"
 
 # List all files in the directory
 all_files = os.listdir(root_path)

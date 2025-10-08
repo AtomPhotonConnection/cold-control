@@ -39,49 +39,49 @@ enabled state = Low
 [DAQ channels]
 [[0]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_upper\cool_upper_freq.txt
+calibrationFname = calibrations\cool_upper\cool_upper_freq.txt
 chNum = 0
 default value = 6.10012210012
 chName = Cool upper - freq
 chLimits = 0, 10
 [[1]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_lower\cool_lower_freq.txt
+calibrationFname = calibrations\cool_lower\cool_lower_freq.txt
 chNum = 1
 default value = 6.10500610501
 chName = Cool lower - freq
 chLimits = 0, 10
 [[2]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_center\cool_center_freq.txt
+calibrationFname = calibrations\cool_center\cool_center_freq.txt
 chNum = 2
 default value = 6.05128205128
 chName = Cool center - freq
 chLimits = 0, 10
 [[3]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\ELYSA_spare\ELYSA_spare_freq.txt
+calibrationFname = calibrations\ELYSA_spare\ELYSA_spare_freq.txt
 chNum = 3
 default value = 0
 chName = ELYSA spare - freq
 chLimits = 0, 10
 [[4]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_upper\cool_upper_amp_at_100MHz.txt
+calibrationFname = calibrations\cool_upper\cool_upper_amp_at_100MHz.txt
 chNum = 4
 default value = 2.39316239316
 chName = Cool upper - amp
 chLimits = 0, 10
 [[5]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_lower\cool_lower_amp_at_100MHz.txt
+calibrationFname = calibrations\cool_lower\cool_lower_amp_at_100MHz.txt
 chNum = 5
 default value = 5.51892551893
 chName = Cool lower - amp
 chLimits = 0, 10
 [[6]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_center\cool_center_amp_at_100MHz.txt
+calibrationFname = calibrations\cool_center\cool_center_amp_at_100MHz.txt
 chNum = 6
 default value = 2.6862026862
 chName = Cool center - amp
@@ -95,7 +95,7 @@ chName = ELYSA spare - amp
 chLimits = 0, 10
 [[8]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\vStirap_ref\vStirap_ref_freq.txt
+calibrationFname = calibrations\vStirap_ref\vStirap_ref_freq.txt
 chNum = 8
 default value = 1.9731
 chName = vSTIRAP ref Omega_g (freq)
@@ -109,7 +109,7 @@ chName = vSTIRAP ref Omega_g - amp
 chLimits = 0, 10
 [[10]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cavity_lock\cavity_lock_freq.txt
+calibrationFname = calibrations\cavity_lock\cavity_lock_freq.txt
 chNum = 10
 default value = 4.0732
 chName = Cavity lock - freq
@@ -123,7 +123,7 @@ chName = Cavity lock - amp
 chLimits = 0, 10
 [[12]]
 UIvisible = True
-calibrationFname = "C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\ELYSA_fibre_branch\ELYSA_fibre_branch_freq.txt"
+calibrationFname = "calibrations\ELYSA_fibre_branch\ELYSA_fibre_branch_freq.txt"
 chNum = 12
 default value = 7.834
 chName = ELYSA fibre branch - freq
@@ -137,7 +137,7 @@ chName = ELYSA fibre offset - amp
 chLimits = 0, 1.5
 [[14]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\depump\depump_freq.txt
+calibrationFname = calibrations\depump\depump_freq.txt
 chNum = 14
 default value = 2.82
 chName = UNUSED:Depump - freq
@@ -186,7 +186,7 @@ chName = MOT Repumping
 chLimits =0,5
 [[21]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\repump_offset_lock_vco\repump_offset_lock_vco_freq.txt
+calibrationFname = calibrations\repump_offset_lock_vco\repump_offset_lock_vco_freq.txt
 chNum = 21
 default value = 8.98901098901
 chName = STIRAP offset VCO

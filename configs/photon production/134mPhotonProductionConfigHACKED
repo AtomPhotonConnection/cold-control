@@ -42,7 +42,7 @@ waveform output channels = channel1, channel2, channel3
 waveform output channel lags = 0.478, 0.360, 0.586 
 marked channels = channel1,
 marker width = 0.1
-waveform aom calibrations locations = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/stirap_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/depump_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/repump_awg,
+waveform aom calibrations locations = /calibrations/stirap_awg, /calibrations/depump_awg, /calibrations/repump_awg,
 [TDC]
 counter channels = 1,2
 marker channel = 3

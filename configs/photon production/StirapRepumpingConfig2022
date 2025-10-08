@@ -10,15 +10,15 @@ interleave waveforms = True
 [[0]]
 modulation frequency = 87426000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Tom\Sin4 intensity pulse\614 drive\614 drive_0 pad\sin4_100_614.csv
+filename = waveforms\new_Tom\Sin4 intensity pulse\614 drive\614 drive_0 pad\sin4_100_614.csv
 [[1]]
 modulation frequency = 84926000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Tom\Tophat\202 long\160 drive\tophat_0_202.csv
+filename = waveforms\new_Tom\Tophat\202 long\160 drive\tophat_0_202.csv
 [[2]]
 modulation frequency = 80000000
 phases = ,
-filename = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\waveforms\new_Tom\Tophat\202 long\160 drive\tophat_100_202.csv
+filename = waveforms\new_Tom\Tophat\202 long\160 drive\tophat_100_202.csv
 [AWG]
 sample rate = 1228750000.0
 burst count = 10000
@@ -26,7 +26,7 @@ waveform output channels = channel1, channel2, channel3
 waveform output channel lags = 0.697,0.524,0.333
 marked channels = channel1,
 marker width = 1.12
-waveform aom calibrations locations = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/vStirap_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/StirapEY_awg, C:\Users\apc\Documents\Python Scripts\Cold Control Heavy/calibrations/StirapDL_awg
+waveform aom calibrations locations = /calibrations/vStirap_awg, /calibrations/StirapEY_awg, /calibrations/StirapDL_awg
 [TDC]
 counter channels = 1,2
 marker channel = 3

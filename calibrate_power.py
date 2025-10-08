@@ -7,6 +7,7 @@ Additionally saves the Rabi frequency data corresponding to each amplitude value
 
 
 import os
+import sys
 import numpy as np
 from scipy.constants import c, epsilon_0, hbar
 import numpy as np
@@ -68,24 +69,8 @@ def laserpower_to_rabi(power, d, cg, beam_waist):
     omega=(d*cg*efield)/(hbar*10**6)
     return np.abs(omega) #in MHz with angular dependence
 
-calib_tuples = [
-    #(1, "pump", 126),
-    #(1, "pump", 116),
-    (2, "stokes", 79),
-    #(2, "stokes", 70)
-]
 
-pulse = 'pump'  # 'stokes', 'pump', 'P1', 'P2'
-channel = 1  # AWG channel
-amplitude = 0.2
-amplitude_cal = 0.00
-diff = 1
-results_dict = {}
-# Finding the voltage amplitude that corresponds to this power
-#awg_chan_freqs_map = {1: [126], 2: [80], 3: [62.35], 4: [82.5]}
-
-
-if __name__ == "__main__":
+def default_calib(calib_tuples):
 
     for channel, pulse, freq in calib_tuples:
 
@@ -103,22 +88,38 @@ if __name__ == "__main__":
             raise ValueError("Channel must be 1, 2, 3 or 4")
         
 
-        cg_d2_map = {'stokes': cg_d2_stokes,'pump': cg_d2_pump, 'P1': cg_d2_p1, 'P2': cg_d2_p1}
-        rabi_d2_map = {'stokes': rabi_stirap_d2,'pump': rabi_stirap_d2, 'P1': rabi_p1_d2, 'P2': rabi_p2_d2}
+        cg_d2_map = {'stokes': cg_d2_stokes,'pump': cg_d2_pump, 'P1': cg_d2_p1,\
+                      'P2': cg_d2_p1}
+        rabi_d2_map = {'stokes': rabi_stirap_d2,'pump': rabi_stirap_d2, 'P1': rabi_p1_d2,\
+                        'P2': rabi_p2_d2}
 
-        target_power_d2 = rabi_to_laserpower(rabi_d2_map[pulse], d_d2, cg_d2_map[pulse] , typical_waist_size) # in mW
+        target_power_d2 = rabi_to_laserpower(rabi_d2_map[pulse], d_d2, cg_d2_map[pulse],\
+                                              typical_waist_size) # in mW
         target_power_d2 *= 10**(-3) # to W
         print(f'Target Power for desired Rabi Freq: {target_power_d2*1e3} mW')
 
 
 
-        awg_channels_dict = {1:Channel.CHANNEL_1, 2:Channel.CHANNEL_2, 3:Channel.CHANNEL_3, 4:Channel.CHANNEL_4}
-        amplitude_cal, diff, power, results_dict = calibrate.finding_amplitude_from_power([freq], target_power_d2, awg_channels_dict[channel], n_steps = 75, repeats=3, delay=0.3,\
-                                    calibration_lims = (0.1,0.25), save_all=True, results_dict=results_dict)
+        awg_channels_dict = {1:Channel.CHANNEL_1, 2:Channel.CHANNEL_2, 3:Channel.CHANNEL_3,\
+                              4:Channel.CHANNEL_4}
+        amplitude_cal, diff, power, results_dict = calibrate.finding_amplitude_from_power(\
+                                                            [freq],
+                                                            target_power_d2,
+                                                            awg_channels_dict[channel],
+                                                            n_steps = 75,
+                                                            repeats=3,
+                                                            delay=0.3,
+                                                            calibration_lims = (0.1,0.25),
+                                                            save_all=True,
+                                                            results_dict=results_dict)
         
-        df = pd.DataFrame({'amplitude_cal': results_dict['level'],'power': results_dict['read_value']})
-        df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(p * 1e3,d_d2,
-            cg_d2_map[pulse],typical_waist_size))/np.abs(cg_d2_map[pulse])
+        df = pd.DataFrame({'amplitude_cal': results_dict['level'],\
+                           'power': results_dict['read_value']})
+        df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(\
+                                                        p * 1e3,
+                                                        d_d2,
+                                                        cg_d2_map[pulse],
+                                                        typical_waist_size))/np.abs(cg_d2_map[pulse])
         df['target power']=target_power_d2
         df['rabi_des_no_cg'] = np.abs(rabi_d2_map[pulse]/cg_d2_map[pulse])
         df['closest level']=amplitude_cal
@@ -141,20 +142,41 @@ if __name__ == "__main__":
         print("Instantiating RabiFreqVoltageConverter...")
         converter = RabiFreqVoltageConverter(output_file)
         converter.get_rabi_limits(print_info=True)
+
+
+
+
+
+calib_tuples = [
+    #(1, "pump", 126),
+    #(1, "pump", 116),
+    (2, "stokes", 79),
+    #(2, "stokes", 70)
+]
+
+pulse = 'pump'  # 'stokes', 'pump', 'P1', 'P2'
+channel = 1  # AWG channel
+amplitude = 0.2
+amplitude_cal = 0.00
+diff = 1
+results_dict = {}
+# Finding the voltage amplitude that corresponds to this power
+#awg_chan_freqs_map = {1: [126], 2: [80], 3: [62.35], 4: [82.5]}
+
+
+if __name__ == "__main__":
+
+
+    try:
+        experiment = sys.argv[1]
+    except IndexError:
+        experiment = ""
+
+    if experiment == "":
+        default_calib(calib_tuples)
+
+
+
         
 
-
-    # #file_path = r'C:\Users\apc\Documents\Python Scripts\017-data-analysis\flatg_0.2_ch4_50us.csv'
-    # file_path = r'c:\Users\apc\Documents\marina\06_jun\05-06\x_optimized_21_0.6.csv'
-    # #file_path = r'c:\Users\apc\Documents\marina\06_jun\02-06\0.2\pump\x_optimized_27_0.6.csv'
-    # opt_input = pd.read_csv(file_path, header=None)
-    # opt_input = opt_input.T.to_numpy().flatten()
-    # opt_input = opt_input/opt_input.max()*amplitude_cal
-
-    # output_dir = f'c:\\Users\\apc\\Documents\\marina\\06_jun\\{today}\\opt_from_{amplitude}_to_{amplitude_cal}'
-    # os.makedirs(output_dir, exist_ok=True)
-    # waveform_filename = os.path.join(output_dir, f'{pulse}_optimized.csv')
-    # with open(waveform_filename, 'w', newline='') as csvfile:
-    #     writer = csv.writer(csvfile)
-    #     writer.writerow(opt_input)
 

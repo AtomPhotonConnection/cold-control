@@ -3,9 +3,9 @@ import os
 import matplotlib.pyplot as plt
 
 # Load the CSV file
-#df = pd.read_csv(r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-05-29\A_15-46-37_channels_1_3_data")
-#df = pd.read_csv(r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-05-28\A_17-09-59_channels_1_3_data")
-#df = pd.read_csv(r"C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\2025-05-29\A_15-46-43_channels_1_3_data")
+#df = pd.read_csv(r"\data\2025-05-29\A_15-46-37_channels_1_3_data")
+#df = pd.read_csv(r"\data\2025-05-28\A_17-09-59_channels_1_3_data")
+#df = pd.read_csv(r"\data\2025-05-29\A_15-46-43_channels_1_3_data")
 
 
 

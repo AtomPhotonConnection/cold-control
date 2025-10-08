@@ -39,49 +39,49 @@ enabled state = Low
 [DAQ channels]
 [[0]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\cool_upper_freq.txt
+calibrationFname = calibrations\jan\cool_upper_freq.txt
 chNum = 0
 default value = 6.270792665753371
 chName = Cool upper - freq
 chLimits = 0, 10
 [[1]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\cool_lower_freq.txt
+calibrationFname = calibrations\jan\cool_lower_freq.txt
 chNum = 1
 default value = 6.256222413885866
 chName = Cool lower - freq
 chLimits = 0, 10
 [[2]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\cool_centre_freq.txt
+calibrationFname = calibrations\jan\cool_centre_freq.txt
 chNum = 2
 default value = 6.211045430761255
 chName = Cool center - freq
 chLimits = 0, 10
 [[3]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\abs_imaging_freq.txt
+calibrationFname = calibrations\jan\abs_imaging_freq.txt
 chNum = 3
 default value = 3.7409093554844883
 chName = Abs Imaging - freq
 chLimits = 0, 10
 [[4]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_upper\cool_upper_amp_scaled_at_100MHz.txt
+calibrationFname = calibrations\cool_upper\cool_upper_amp_scaled_at_100MHz.txt
 chNum = 4
 default value = 1.39194139194
 chName = Cool upper - amp
 chLimits = 0, 10
 [[5]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_lower\cool_lower_amp_at_100MHz.txt
+calibrationFname = calibrations\cool_lower\cool_lower_amp_at_100MHz.txt
 chNum = 5
 default value = 2.9304029304
 chName = Cool lower - amp
 chLimits = 0, 10
 [[6]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\cool_center\cool_center_amp_at_100MHz.txt
+calibrationFname = calibrations\cool_center\cool_center_amp_at_100MHz.txt
 chNum = 6
 default value = 2.39316239316
 chName = Cool center - amp
@@ -95,7 +95,7 @@ chName = Abs imaging - amp
 chLimits = 0, 10
 [[8]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\Optical Pump 1_freq.txt
+calibrationFname = calibrations\jan\Optical Pump 1_freq.txt
 chNum = 8
 default value = 0.043956043956
 chName = Optical Pump F2 Elysa - freq
@@ -109,7 +109,7 @@ chName = Optical Pump F2 Elysa - amp
 chLimits = 0, 2
 [[10]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\cavity_freq.txt
+calibrationFname = calibrations\jan\cavity_freq.txt
 chNum = 10
 default value = 4.05860805861
 chName = Cavity lock - freq
@@ -137,7 +137,7 @@ chName = Unused1 - amp
 chLimits = 0, 1.5
 [[14]]
 UIvisible = True
-calibrationFname =C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\jan\Optical Pump 2_freq.txt
+calibrationFname =calibrations\jan\Optical Pump 2_freq.txt
 chNum = 14
 default value = 2.48595848596
 chName = Optical Pump F1 DL - freq
@@ -186,7 +186,7 @@ chName = MOT Repumping
 chLimits =0,5
 [[21]]
 UIvisible = True
-calibrationFname = C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\calibrations\repump_offset_lock_vco\repump_offset_lock_vco_freq.txt
+calibrationFname = calibrations\repump_offset_lock_vco\repump_offset_lock_vco_freq.txt
 chNum = 21
 default value = 9.34554334554
 chName = STIRAP offset VCO

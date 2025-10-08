@@ -133,7 +133,7 @@ class DataFolderManager:
 
                 # Guardar resultado por iteración
                 integrals_fl_df = pd.DataFrame({'integral': [area], 'ref 0': [average]})
-                output_dir = rf'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\integrals_data_analysis\{today}\{folder_name}'
+                output_dir = rf'\data\integrals_data_analysis\{today}\{folder_name}'
                 os.makedirs(output_dir, exist_ok=True)
                 integrals_fl_df.to_csv(os.path.join(output_dir, f'integrated_area_iteration_{iteration_number}.csv'), index=False)
 
@@ -155,7 +155,7 @@ class DataFolderManager:
 
         # Guardar resumen final
         summary_df = pd.DataFrame(output_data)
-        # summary_output_dir = rf'C:\Users\apc\Documents\Python Scripts\Cold Control Heavy\data\integrals_data_analysis\{today}'
+        # summary_output_dir = rf'\data\integrals_data_analysis\{today}'
         # os.makedirs(summary_output_dir, exist_ok=True)
         summary_output_path = os.path.join(self.base_path, 'summary_integrals.csv')
         summary_df.to_csv(summary_output_path, index=False)
