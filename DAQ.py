@@ -7,7 +7,8 @@ Created on 2 Apr 2016. Revised 8 Jan 2025.
 '''
 
 import numpy as np
-from ctypes import *
+from ctypes import c_ubyte, c_short, c_ushort, c_long, c_ulong, c_float, c_double, c_void_p,\
+      POINTER, byref, WinDLL
 import re
 from mock.mock import MagicMock
 import time
@@ -849,6 +850,7 @@ class DAQ2502(object):
         
         self.card = dll.D2K_Register_Card(DAQ_2502, card_number)
         self.n_samples = {}
+        self.numChs = 8
         
         da_ch = (U16*8)(0, 1, 2, 3, 4, 5, 6, 7)
         
@@ -1057,9 +1059,9 @@ class DAQ_channel(object):
         calData = df[data_col].values
 
         # Sort data by voltage for consistent interpolation
-        sorted_idx = np.argsort(vData)
-        vData = vData[sorted_idx]
-        calData = calData[sorted_idx]
+        sorted_idx = np.argsort(np.array(vData))
+        vData = np.array(vData)[sorted_idx]
+        calData = np.array(calData)[sorted_idx]
 
         self.calibrationToVFunc = lambda x: np.interp(x, calData, vData)
         self.calibrationFromVFunc = lambda x: np.interp(x, vData, calData)
@@ -1075,7 +1077,7 @@ class DAQ_channel(object):
         
     def getHelpText(self):
         formatArgs = [self.chNum, self.chLimits, self.defaultValue]
-        if self.isCalibrated:
+        if self.isCalibrated and self.calibrationFromVFunc is not None:
             formatArgs[2] = '{0}{1}'.format(self.calibrationFromVFunc(self.defaultValue), self.calibrationUnits)
         return ('DAQ channel: {0}\n' + \
                 'Channel limits: {1}V\n' + \
@@ -1083,7 +1085,7 @@ class DAQ_channel(object):
                 self.getCalibrationText()).format(*formatArgs)
                 
     def getCalibrationText(self):
-        if not self.isCalibrated:
+        if not self.isCalibrated or self.calibrationToVFunc is None or self.calibrationFromVFunc is None:
             return 'There is no calibration on this channel.'
         else:
             return (('Channel units: {0}\n' +\
@@ -1112,9 +1114,13 @@ class DAQ_dio:
         self.read_fn = read_fn
         
     def write(self, value):
+        if self.write_fn is None:
+            raise Exception('No write function has been registered for this digital IO.')
         return self.write_fn(value)
         
     def read(self):
+        if self.read_fn is None:
+            raise Exception('No read function has been registered for this digital IO.')
         return self.read_fn()
     
     def toggle_state(self, return_state=False):
@@ -1191,12 +1197,18 @@ class DAQ_card(DAQ2502):
             digital_values[reqChOrder.index(i)] = \
                 np.interp(np.clip(sequenceArray[i], self.channels[i].chLimits[0], self.channels[i].chLimits[1]),
                           self.chVoltageLimits, self.chDigitalLimits)
-                
-        # I think the DAQ card expects the matrix shape to be (numSamps, numChs) so let's correct for that -
-        # however, .transpose only changes the representation of the data (i.e. for the user/validation)m
-        # to change the order the card access the array data we set order='c'. (Thanks Dustin!)
-        digital_values= digital_values.transpose()
-        return digital_values.astype(np.uint16, order='c')
+            
+        # NOTE: The following was the old way of ensuring the array was in the right format for the DAQ card
+        # # I think the DAQ card expects the matrix shape to be (numSamps, numChs) so let's correct for that -
+        # # however, .transpose only changes the representation of the data (i.e. for the user/validation)m
+        # # to change the order the card access the array data we set order='c'. (Thanks Dustin!)
+        # digital_values= digital_values.transpose()
+        # return digital_values.astype(np.uint16, order='c')
+        
+        # NOTE: Transpose, force C-contiguous layout, and set data type to uint16
+        digital_values = digital_values.T
+        digital_values = np.ascontiguousarray(digital_values, dtype=np.uint16)
+        return digital_values
     
     def play(self, t_step=1, buffer_id=None):
         '''Note t_step is in microseconds'''
@@ -1225,7 +1237,7 @@ class DAQ_card(DAQ2502):
             channels = channels[:self.numChs]
         elif self.numChs > regChs:
             print("WARNING: fewer DAQ channels were registered than are available. Unassigned channels will use default labelling and values.")
-            channels + [DAQ_channel(i) for i in range(regChs,self.numChs)]
+            channels += [DAQ_channel(i) for i in range(regChs,self.numChs)]
         
         # Sort channels by number and check that we have the expected channel numbers (e.g. 0,1,2,...) registered.
         # Note that for slaves the first channel number might be, e.g., 8 which would correspond to ch 0 on the card

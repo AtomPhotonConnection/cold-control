@@ -2,7 +2,7 @@
 import re
 import numpy as np
 import os
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from Config import ConfigReader, DaqReader
 from DAQ import DAQ_controller, DAQ_channel
@@ -14,9 +14,14 @@ daq_reader = DaqReader(daq_config_fname)
 
 channels:List[DAQ_channel] = []
 for _,v in daq_reader.config['DAQ channels'].items():
-    #This line uses the map() function to apply a series of type conversions to the configuration data.
-    channelArgs = map(lambda x,y:x(y), [int, str, lambda x: (float(x[0]), float(x[1])), float, eval, str],
-                            [v['chNum'],v['chName'],v['chLimits'],v['default value'],v['UIvisible'],v['calibrationFname']])
+    channelArgs: Tuple[int, str, tuple[float, float], float, bool, str] = (
+        int(v['chNum']),                                              # chNum (int)
+        str(v['chName']),                                            # chName (str)
+        (float(v['chLimits'][0]), float(v['chLimits'][1])),           # chLimits (tuple[float,float])
+        float(v['default value']),                                    # default value (float)
+        bool(v['UIvisible']),                                          # UIvisible (bool) or use v['UIvisible'] if already bool
+        str(v['calibrationFname']),                                   # calibrationFname (str)
+    )
     channels.append(DAQ_channel(*channelArgs))
 
 #print(channels)
@@ -35,16 +40,16 @@ def main_loop():
         main_loop()
         return
     
-    channel_found = False
+    calib_from_V = calib_to_V = None
+    
     for channel in channels:
         #print(channel.chNum)
         if channel.chNum == ch_num:
             calib_to_V = channel.calibrationToVFunc
             calib_from_V = channel.calibrationFromVFunc
-            channel_found = True
             print(f"This channel is {channel.chName}")
     
-    if not channel_found:
+    if calib_to_V is None or calib_from_V is None:
         print("channel not found")
         main_loop()
         return

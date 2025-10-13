@@ -18,7 +18,7 @@ from mock import patch
 import numpy as np
 import glob
 import re, ast
-from typing import Dict, List
+from typing import Dict, List, Any, Tuple
 
 GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
 
@@ -69,16 +69,21 @@ class DaqReader(object):
 
     def __init__(self, fname):
         self.fname = fname
-        self.config = ConfigObj(fname)
+        self.config:Dict[str, Any] = ConfigObj(fname)
         
     def load_DAQ_controller(self):
         '''Returns a DAQ controller object as configured in the config file.'''
         
         channels = []
         for _,v in self.config['DAQ channels'].items():
-            #This line uses the map() function to apply a series of type conversions to the configuration data.
-            channelArgs = map(lambda x,y:x(y), [int, str, lambda x: (float(x[0]), float(x[1])), float, eval, str],
-                                 [v['chNum'],v['chName'],v['chLimits'],v['default value'],v['UIvisible'],v['calibrationFname']])
+            channelArgs: Tuple[int, str, tuple[float, float], float, bool, str] = (
+                int(v['chNum']),                                              # chNum (int)
+                str(v['chName']),                                            # chName (str)
+                (float(v['chLimits'][0]), float(v['chLimits'][1])),           # chLimits (tuple[float,float])
+                float(v['default value']),                                    # default value (float)
+                bool(v['UIvisible']),                                          # UIvisible (bool) or use v['UIvisible'] if already bool
+                str(v['calibrationFname']),                                   # calibrationFname (str)
+            )
             channels.append(DAQ_channel(*channelArgs))
 
         dios = []

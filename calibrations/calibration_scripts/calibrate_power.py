@@ -71,19 +71,20 @@ def laserpower_to_rabi(power, d, cg, beam_waist):
 
 
 def default_calib(calib_tuples):
+    results_dict = {}
 
     for channel, pulse, freq in calib_tuples:
 
         print(f"\n\nCalibrating {pulse} pulse on channel {channel} at {freq} MHz\n\n")
 
         if channel==1:
-            config_save_path="calibrations\pulse_shaping_expt\STIRAP_ELYSA"
+            config_save_path=r"calibrations\pulse_shaping_expt\STIRAP_ELYSA"
         elif channel==2:
-            config_save_path="calibrations\pulse_shaping_expt\STIRAP_DL_PRO"
+            config_save_path=r"calibrations\pulse_shaping_expt\STIRAP_DL_PRO"
         elif channel==3:
-            config_save_path="calibrations\pulse_shaping_expt\OPT_PUMP_ELYSA"
+            config_save_path=r"calibrations\pulse_shaping_expt\OPT_PUMP_ELYSA"
         elif channel==4:
-            config_save_path="calibrations\pulse_shaping_expt\OPT_PUMP_DL_PRO"
+            config_save_path=r"calibrations\pulse_shaping_expt\OPT_PUMP_DL_PRO"
         else:
             raise ValueError("Channel must be 1, 2, 3 or 4")
         
@@ -113,8 +114,10 @@ def default_calib(calib_tuples):
                                                             save_all=True,
                                                             results_dict=results_dict)
         
-        df = pd.DataFrame({'amplitude_cal': results_dict['level'],\
-                           'power': results_dict['read_value']})
+        if results_dict is None:
+            raise ValueError("results_dict returned from finding_amplitude_from_power is None.")
+        df = pd.DataFrame({'amplitude_cal': results_dict.get('level', []),\
+                           'power': results_dict.get('read_value', [])})
         df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(\
                                                         p * 1e3,
                                                         d_d2,

@@ -10,9 +10,9 @@ import os
 import serial
 import time
 import numpy as np
-from Config import ConfigReader, DaqReader
 import matplotlib.pyplot as plt
 import re
+
 from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
 import pyvisa as visa
@@ -22,6 +22,7 @@ Load required classes for awg driven AOM calibration
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
 from ExperimentalConfigs import Waveform
+from DAQ import DAQ_controller
 
 # helper functions in a separate file
 from lab_control_functions.calibration_helper_functions import *
@@ -31,7 +32,7 @@ from lab_control_functions.calibration_helper_functions import *
 
 
 
-def daq_driven_aom_response(daq_controller:DaqReader, frequency_channel:int,\
+def daq_driven_aom_response(daq_controller:DAQ_controller, frequency_channel:int,\
                     amp_channel:int, frequency_voltage_pairs:dict, v_range, v_step = default_v_step(),\
                     delay=0.1, repeats = 3, save_folder="unfiled_data"):
     '''
