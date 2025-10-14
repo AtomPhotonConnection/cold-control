@@ -138,8 +138,6 @@ def fit_and_interpolate(calib_csv: str, out_png: Optional[str] = None) -> Tuple[
     r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else float("nan")
     rmse = np.sqrt(np.mean(residuals ** 2))
 
-    interp_fn = interp1d(x, y, kind="linear", bounds_error=False, fill_value=(y_pred.min(), y_pred.max()))
-
     def predict(p1: float) -> float:
         return float(a * p1 + b)
 
@@ -189,8 +187,8 @@ if __name__ == "__main__":
     try:
         pm_target_res = rm.open_resource(pm_address_target)
         #inst = rm.get_instrument(resource)
-        print(pm_target_res.query("*IDN?").split(','))
-        if pm_target_res.query("*IDN?").split(',')[1] == 'PM100A':
+        print(pm_target_res.query("*IDN?").split(',')) # type: ignore
+        if pm_target_res.query("*IDN?").split(',')[1] == 'PM100A': # type: ignore
             pm_target = ThorlabsPM100(pm_target_res) # --> Thorlabs,PM100A,P1002563,2.3.0
     except visa.errors.VisaIOError as e:
         print(f"powermeter with address {pm_address_target} is not available.")
@@ -199,8 +197,8 @@ if __name__ == "__main__":
     try:
         pm_flip_res = rm.open_resource(pm_address_flip)
         #inst = rm.get_instrument(resource)
-        print(pm_flip_res.query("*IDN?").split(','))
-        if pm_flip_res.query("*IDN?").split(',')[1] == 'PM100A':
+        print(pm_flip_res.query("*IDN?").split(',')) # type: ignore
+        if pm_flip_res.query("*IDN?").split(',')[1] == 'PM100A': # type: ignore
             pm_flip = ThorlabsPM100(pm_flip_res) # --> Thorlabs,PM100A,P1002563,2.3.0
     except visa.errors.VisaIOError as e:
         print(f"powermeter with address {pm_address_flip} is not available.")
@@ -223,8 +221,8 @@ if __name__ == "__main__":
         else:
             raise ValueError("flip position must be 'up' or 'down'")
         
-    read_fn_target = lambda: float(pm_target.read)
-    read_fn_flip = lambda: float(pm_flip.read)
+    read_fn_target = lambda: float(pm_target.read) # type: ignore
+    read_fn_flip = lambda: float(pm_flip.read) # type: ignore
 
     # Now call measure_loop with your real functions:
     measure_loop(r"calibrations\miscellaneous\flip_mirror_calib.csv", set_v, read_fn_flip,

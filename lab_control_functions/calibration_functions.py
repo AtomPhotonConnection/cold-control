@@ -29,7 +29,7 @@ from lab_control_functions.calibration_helper_functions import *
 
 
 
-
+CALIB_CSV = r"calibrations\miscellaneous\flip_mirror_calib.csv"
 
 
 def daq_driven_aom_response(daq_controller:DAQ_controller, frequency_channel:int,\
@@ -55,7 +55,7 @@ def daq_driven_aom_response(daq_controller:DAQ_controller, frequency_channel:int
     file_path = os.path.join(os.getcwd(), 'calibrations', save_folder)
 
     # Find and configure a power meter connected to the computer
-    inst, power_meter = get_power_meter(return_inst=True)
+    inst, power_meter = get_power_meter()
     power_meter:ThorlabsPM100 = power_meter #declare the type for easier editing
     configure_power_meter(power_meter, nMeasurmentCounts=repeats)
 
@@ -130,13 +130,13 @@ def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, d
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(awg_channel, 2)
 
-    inst, power_meter = get_power_meter(return_inst=True)
+    inst, power_meter = get_power_meter()
     power_meter:ThorlabsPM100 = power_meter #declare the type for easier editing
     configure_power_meter(power_meter, nMeasurmentCounts=repeats)
     
     for freq in freqs:
         # Run through the voltages and record the TF930 output
-        levelData = np.linspace(*calibration_lims, n_steps)
+        levelData = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
         calData = np.empty(n_steps)
         print ('Running through awg levels...might take a while...')
 
@@ -361,7 +361,7 @@ def percentage_power(daq_controller, chNum_to_calibrate, calibration_V_range = (
                           (note 1 measurement is about 3ms).
     '''
     # Find and configure a power meter connected to the computer
-    power_meter = get_power_meter()
+    inst, power_meter = get_power_meter()
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
     
     # Run through the voltages and record the TF930 output
@@ -393,7 +393,7 @@ def percentage_power(daq_controller, chNum_to_calibrate, calibration_V_range = (
 
     units = '%'
     
-    power_meter.close()
+    inst.close()
         
     return vData, calData, units
     
@@ -423,7 +423,7 @@ def test_stirap_aom_freq_response(level=0.5,
     awg.configure_arb_gain(Channel.CHANNEL_1, 2)
     awg.configure_arb_gain(Channel.CHANNEL_2, 2)
     
-    power_meter = get_power_meter()
+    inst, power_meter = get_power_meter()
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
     
     calData = []
@@ -447,7 +447,7 @@ def test_stirap_aom_freq_response(level=0.5,
     awg.reset()
     awg.close()
 
-    power_meter.close()
+    inst.close()
    
     fig = plt.figure()
     
@@ -478,6 +478,19 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
     """
     if flip_mirror:
         print("Is the flip mirror in the beam path?")
+        def compensate_for_flip(power):
+            """Compensate for the power measurement located after the flip mirror rather than
+            at the target."""
+            df = pd.read_csv(CALIB_CSV)
+            if "power_flip" not in df.columns or "power_target" not in df.columns:
+                raise ValueError(f"Calibration CSV {CALIB_CSV} does not have the required columns 'power_flip' and 'power_target'.")
+
+            x = df["power_flip"].values.astype(float)
+            y = df["power_target"].values.astype(float)
+
+            a, b = np.polyfit(x, y, 1)
+
+            return a * power + b
         
     sample_rate = 1.25 * 10**9
     print('Creating AWG instance')
@@ -490,7 +503,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(awg_channel, 2)
 
-    inst, power_meter = get_power_meter(return_inst=True)
+    inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
     configure_power_meter(power_meter, nMeasurmentCounts=repeats)
     
@@ -504,7 +517,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
         results_dict['rabi']=[]
 
     for freq in freqs:
-        levelData = np.linspace(*calibration_lims, n_steps)
+        levelData = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
         calData = np.empty(n_steps)
         print('Running through awg levels...might take a while...')
 
@@ -514,7 +527,9 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
              
             awg.enable_channel(awg_channel)
             time.sleep(delay)
-            read_value = float(power_meter.read)
+            read_value = float(power_meter.read) # type: ignore
+            if flip_mirror:
+                read_value = compensate_for_flip(read_value)
             print(f'{level}V, {read_value*1e3}mW')
 
             calData[i] = read_value

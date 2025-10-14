@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))) # add parent directory to path
+
 from instruments.WX218x.WX218x_awg import Channel
 import lab_control_functions.calibration_functions as calibrate
 from rabi_voltage_converter import RabiFreqVoltageConverter
@@ -71,19 +73,7 @@ def laserpower_to_rabi(power, d, cg, beam_waist):
     return np.abs(omega) #in MHz with angular dependence
 
 
-def compensate_for_flip(power):
-    """Compensate for the power measurement located after the flip mirror rather than
-    at the target."""
-    df = pd.read_csv(calib_csv)
-    if "power_flip" not in df.columns or "power_target" not in df.columns:
-        raise ValueError(f"Calibration CSV {calib_csv} does not have the required columns 'power_flip' and 'power_target'.")
 
-    x = df["power_flip"].values.astype(float)
-    y = df["power_target"].values.astype(float)
-
-    a, b = np.polyfit(x, y, 1)
-
-    return a * power + b
 
 
 def default_calib(calib_tuples):
@@ -135,8 +125,7 @@ def default_calib(calib_tuples):
         df = pd.DataFrame({'amplitude_cal': results_dict.get('level', []),\
                            'power': results_dict.get('read_value', [])})
         
-        if using_flip_mirror:
-            df["power"] = df["power"].apply(compensate_for_flip)
+
         df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(\
                                                         p * 1e3,
                                                         d_d2,
@@ -170,9 +159,9 @@ def default_calib(calib_tuples):
 
 
 calib_tuples = [
-    #(1, "pump", 126),
+    (1, "pump", 126),
     #(1, "pump", 116),
-    (2, "stokes", 79),
+    (2, "stokes", 80),
     #(2, "stokes", 70)
 ]
 

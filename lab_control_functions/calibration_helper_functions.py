@@ -42,7 +42,7 @@ class testWaveform(Waveform):
     level (float): see above
     mod_freq (float): inherited from Waveform class
     '''
-    def __init__(self, samp_rate, level=1, mod_freq=75.25*10**6):
+    def __init__(self, samp_rate, level:float=1.0, mod_freq=75.25*10**6):
         self.mod_frequency = mod_freq
         self.phases = []
         self.t_step = 2*np.pi/samp_rate
@@ -68,7 +68,7 @@ def default_v_step():
     return f(1) - f(0)
 
 
-def get_power_meter(return_inst = False, debug_mode = False):
+def get_power_meter(debug_mode = False):
     '''
     Finds a Thor Labs PM100A power_meter if one is connected and returns a ThorlabsPM100 instance
     for it.  If no power meter is found the function raises an exception
@@ -107,10 +107,9 @@ def get_power_meter(return_inst = False, debug_mode = False):
     if power_meter == None:
         print('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
-    if return_inst:
-        return inst, power_meter
-    else:
-        return power_meter
+    
+    return inst, power_meter
+
 
 
 def configure_power_meter(power_meter:ThorlabsPM100, nMeasurmentCounts = 1):
