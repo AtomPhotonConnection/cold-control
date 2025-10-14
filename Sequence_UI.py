@@ -50,6 +50,7 @@ class Sequence_UI(tk.Toplevel):
         
         self.parent=parent
         self.sequence_fname:str = sequence_fname
+        print(f"Loading sequence from file: {self.sequence_fname}")
         self.sequence_reader = SequenceReader(self.sequence_fname)
         self.sequence:Sequence = self.sequence_reader.loadSequence()
         self.configured_channel_labels:Dict = configured_channel_labels

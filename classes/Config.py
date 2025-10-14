@@ -508,9 +508,14 @@ class ExperimentConfigReader():
             return array.tolist()
         
         def toIntList(arg):
-            return list(map(int,arg))
+            if arg is None:
+                return None
+            else:
+                return list(map(int,arg))
         
         def toFloatList(arg):
+            if arg is None:
+                return None
             if isinstance(arg, list):
                 return list(map(float, arg))
             elif isinstance(arg, (int, float)):
@@ -528,6 +533,8 @@ class ExperimentConfigReader():
         def ensure_list(value):
             if isinstance(value, list):
                 return value
+            elif value is None:
+                return None
             else:
                 return [value]
         
@@ -537,11 +544,11 @@ class ExperimentConfigReader():
 
         if sweep_type == "awg_sequence":
             defaults = self.config["defaults"]
-            wave_idxs = toIntList(defaults['waveform_indices'])
-            rabi_freqs = toFloatList(defaults['rabi_frequencies'])
-            mod_freqs = toFloatList(defaults['modulation_frequencies'])
-            waveforms = ensure_list(defaults["waveforms"])
-            calib_paths = ensure_list(defaults["calibration_paths"])
+            wave_idxs = toIntList(defaults.get('waveform_indices', None))
+            rabi_freqs = toFloatList(defaults.get('rabi_frequencies', None))
+            mod_freqs = toFloatList(defaults.get('modulation_frequencies', None))
+            waveforms = ensure_list(defaults.get("waveforms", None))
+            calib_paths = ensure_list(defaults.get("calibration_paths", None))
 
             all_sweeps = []
             for sweep_idx in self.config["sweeps"]:
@@ -558,8 +565,8 @@ class ExperimentConfigReader():
                         sweep_changes[key] = ensure_list(value)
                     elif key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
-
-                    assert len(sweep_changes[key]) == len(wave_idxs), f"Length mismatch for {key} in sweep {sweep_idx}"
+                    if wave_idxs is not None:
+                        assert len(sweep_changes[key]) == len(wave_idxs), f"Length mismatch for {key} in sweep {sweep_idx}"
 
                 all_sweeps.append(sweep_changes)
 
