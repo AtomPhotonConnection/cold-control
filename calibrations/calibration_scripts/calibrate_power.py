@@ -1,6 +1,7 @@
 '''
 Script to calibrate the power. Outputs the required input amplitude to achieve target power. 
 Additionally saves the Rabi frequency data corresponding to each amplitude value.
+Compensates for flip mirror if using_flip_mirror is set to True.
 
 @author: marina llano, Jan Ole Ernst, Matt King
 '''

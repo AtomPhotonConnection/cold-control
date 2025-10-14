@@ -122,9 +122,9 @@ class MotFluoresceConfiguration(GenericConfiguration):
                  use_cam,
                  use_scope,
                  use_awg,
-                 awg_dict: Dict = None,
-                 cam_dict: Dict = None,
-                 scope_dict: Dict = None):
+                 awg_dict: Dict|None = None,
+                 cam_dict: Dict|None = None,
+                 scope_dict: Dict|None = None):
         super().__init__(save_location, mot_reload, iterations)
 
         self.use_scope = use_scope
@@ -132,6 +132,8 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_awg = use_awg
 
         if use_cam == True:
+            if cam_dict is None:
+                raise ValueError("cam_dict must be provided if use_cam is True")
             self.cam_exposure = cam_dict["cam_exposure"]
             self.cam_gain = cam_dict["cam_gain"]
             self.camera_trigger_channel = cam_dict["camera_trig_ch"]
@@ -142,6 +144,8 @@ class MotFluoresceConfiguration(GenericConfiguration):
             print("No camera will be used.")
 
         if self.use_scope:
+            if scope_dict is None:
+                raise ValueError("scope_dict must be provided if use_scope is True")
             self.scope_trigger_channel = scope_dict["trigger_channel"]
             self.scope_trigger_level = scope_dict["trigger_level"]
             self.scope_sample_rate = scope_dict["sample_rate"]
@@ -150,7 +154,8 @@ class MotFluoresceConfiguration(GenericConfiguration):
             self.scope_data_channels = scope_dict["data_channels"]
 
         if self.use_awg:
-            
+            if awg_dict is None:
+                raise ValueError("awg_dict must be provided if use_awg is True")
             self.awg_config_path = awg_dict["config_path_full"]
             self.awg_config = awg_dict["awg_config"]
             self.awg_sequence_config = awg_dict["sequence_config"]
@@ -165,7 +170,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
 class MotFluoresceConfigurationSweep:
 
     def __init__(self, base_config: 'MotFluoresceConfiguration', base_sequence: Sequence,
-                 sweep_type: str, num_shots:int, sweep_params: Dict[Any:Any]):
+                 sweep_type: str, num_shots:int, sweep_params: Dict[Any, Any]):
 
         self.base_config = base_config
         self.base_sequence = base_sequence
@@ -561,7 +566,7 @@ class Waveform:
                 if len(row) > 1:
                     data += list(map(float, row))
                 else:
-                    data += float(row[0])
+                    data.append(float(row[0]))
         return data
 
     def get(self, sample_rate: float, calibration_function=lambda level: level,
@@ -587,6 +592,8 @@ class Waveform:
             if i == next_i_flip:
                 phi = next_phi
                 next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
+            if phi is None:
+                raise ValueError("Phase not set before modulation.")
             mod_data[i] *= np.sin(i * t_step * self.__mod_frequency + phi)
 
         return mod_data

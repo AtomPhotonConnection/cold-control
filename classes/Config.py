@@ -63,7 +63,29 @@ class ConfigWriter(object):
         self.config['absorbtion_images_config_filename'] = absorbtion_imaging_config_fname
         self.config['photon_production_config_filename'] = photon_production_config_fname
 
-        self.config.write()   
+        self.config.write()
+
+class MyConfig:
+    """
+    Simple wrapper around ConfigObj to provide dictionary-like access and additional methods.
+    """
+    def __init__(self, fname: str):
+        self._cfg = ConfigObj(fname)
+
+    def __getitem__(self, key: str) -> Any:
+        return self._cfg[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._cfg[key] = value
+
+    @property
+    def filename(self) -> str:
+        if self._cfg.filename is None:
+            raise ValueError("Config filename is None.")
+        return self._cfg.filename
+
+    def write(self) -> None:
+        self._cfg.write()
 
 class DaqReader(object):
 
@@ -141,38 +163,44 @@ class DaqWriter(object):
     
     def save(self, master, *slaves):
         
-        self.config['DAQ cards'] = {}
+        daq_cards = {}
     
-        self.config['DAQ cards']['master'] = {'card number': master.card, 'channels': [ch.chNum for ch in master.channels]}
-        self.config['DAQ cards']['slaves'] = {}
-        for slave in slaves:
-            self.config['DAQ cards']['slaves']['1'] = {'card number': slave.card, 'channels': [ch.chNum for ch in slave.channels]}
+        daq_cards['master'] = {'card number': master.card, 'channels': [ch.chNum for ch in master.channels]}
+        daq_cards['slaves'] = {}
+        for idx, slave in enumerate(slaves, start=1):
+            daq_cards['slaves'][str(idx)] = {'card number': slave.card, 'channels': [ch.chNum for ch in slave.channels]}
 
-        self.config['DAQ channels'] = {}
+        self.config['DAQ cards'] = daq_cards
+
+        daq_channels = {}
     
         i = 0
         # Note sum(x,[]) is a cheeky way to flatten a list of lists (x).        
         for ch in sum( [card.channels for card in [master] + list(slaves)], []):
-            self.config['DAQ channels'][str(i)] = {'chNum':ch.chNum,
-                                                   'chName':ch.chName,
-                                                   'chLimits':ch.chLimits,
-                                                   'default value':ch.defaultValue,
-                                                   'UIvisible':ch.isUIVisable,
-                                                   'calibrationFname':ch.calibrationFname if ch.isCalibrated else ''}
+            daq_channels[str(i)] = {'chNum':ch.chNum,
+                                    'chName':ch.chName,
+                                    'chLimits':ch.chLimits,
+                                    'default value':ch.defaultValue,
+                                    'UIvisible':ch.isUIVisable,
+                                    'calibrationFname':ch.calibrationFname if ch.isCalibrated else ''}
             i += 1
             
+        self.config['DAQ channels'] = daq_channels
+
         self.config.write()
 
 class SequenceReader(object):
     
     def __init__(self, fname):
         self.fname = fname
-        self.config = ConfigObj(fname)
+        self.config = MyConfig(self.fname)
         
     def loadSequence(self):
         seq = Sequence(*self.get_sequence_init_args())
-        
-        for _,v in self.config['sequence channels'].items():
+        sequence_channels: Dict[str, Any] = {}
+        sequence_channels = self.config['sequence channels']
+
+        for _,v in sequence_channels.items():
             channelArgs = map(lambda x,y:x(y), [int, lambda x: [eval(y) for y in x], lambda x: [int(y) for y in x]],
                                  [v['chNum'],v['tV_pairs'],v['V_interval_styles']])
             seq.addChannelSeq(*channelArgs)
@@ -180,7 +208,7 @@ class SequenceReader(object):
         return seq
     
     def get_sequence_init_args(self):
-        return int(self.config['sequence']['n_samples']), float(self.config['sequence']['t_step'])
+        return int(self.config['sequence']['n_samples']), int(self.config['sequence']['t_step'])
     
     def get_global_timings(self):
         return [eval(x) for x in self.config['sequence']['global_timings']]
@@ -204,7 +232,7 @@ class SequenceWriter(object):
     
     def __init__(self, fname):
         self.fname = fname
-        self.config = ConfigObj(fname)
+        self.config = MyConfig(fname)
     
 #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, sequence, sequence_channel_labels, global_timings, user_notes):
@@ -246,7 +274,7 @@ class ExperimentConfigReader():
     def __init__(self, fname):
         self.fname = fname
         print(f"Reading config file: {fname}")
-        self.config = ConfigObj(fname)
+        self.config = MyConfig(fname)
 
     
     def get_expt_type(self):
@@ -267,20 +295,21 @@ class ExperimentConfigReader():
         awg_config = AwgConfiguration(sample_rate = float(self.config['AWG']['sample rate']),
                                       burst_count = int(self.config['AWG']['burst count']),
                                       waveform_output_channels = list(self.config['AWG']['waveform output channels']),
-                                      waveform_output_channel_lags = map(float, self.config['AWG']['waveform output channel lags']),
+                                      waveform_output_channel_lags = list(map(float, self.config['AWG']['waveform output channel lags'])),
                                       marked_channels = list(self.config['AWG']['marked channels']),
-                                      marker_width = eval(self.config['AWG']['marker width']),
-                                      waveform_aom_calibrations_locations = list(self.config['AWG']['waveform aom calibrations locations']))
+                                      marker_width = eval(self.config['AWG']['marker width']))
 
-        tdc_config = TdcConfiguration(counter_channels = map(eval, self.config['TDC']['counter channels']),
+        tdc_config = TdcConfiguration(counter_channels = list(map(eval, self.config['TDC']['counter channels'])),
                                       marker_channel = int(self.config['TDC']['marker channel']),
                                       timestamp_buffer_size = int(self.config['TDC']['timestamp buffer size']))
         
         waveforms = []
         for x,v in self.config['waveforms'].items():
+            _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
             waveforms.append(Waveform(fname = v['filename'],
                                       mod_frequency= float(v['modulation frequency']),
-                                      phases = map(float, v['phases'])))
+                                      phases = _phases))
+            
         print(self.config['waveform sequence'])
         photon_production_config = \
         PhotonProductionConfiguration(save_location = self.config['save location'],
@@ -343,14 +372,14 @@ class ExperimentConfigReader():
             config_path = awg["config_path"]
             config_path_single = awg["config_path_single"]
 
-            config = ConfigObj(config_path)
-            config_single = ConfigObj(config_path_single) if config_path_single else None
+            config = MyConfig(config_path)
+            config_single = MyConfig(config_path_single) if config_path_single else None
 
             # Reads the awg properties from the config object, and creates a new awg configuration with those settings        
             awg_config = AwgConfiguration(sample_rate=float(config['AWG']['sample rate']),
                                         burst_count=int(config['AWG']['burst count']),
                                         waveform_output_channels=list(config['AWG']['waveform output channels']),
-                                        waveform_output_channel_lags=map(float, config['AWG']['waveform output channel lags']),
+                                        waveform_output_channel_lags=list(map(float, config['AWG']['waveform output channel lags'])),
                                         marked_channels=list(config['AWG']['marked channels']),
                                         marker_width=eval(config['AWG']['marker width']))
 
@@ -385,20 +414,20 @@ class ExperimentConfigReader():
             }
 
             # Only add single configuration if config_path_single is not an empty string
-            if config_path_single:
+            if config_single is not None and config_path_single != "":
                 awg_config_single = AwgConfiguration(sample_rate=float(config_single['AWG']['sample rate']),
                                                     burst_count=int(config_single['AWG']['burst count']),
                                                     waveform_output_channels=list(config_single['AWG']['waveform output channels']),
-                                                    waveform_output_channel_lags=map(float, config_single['AWG']['waveform output channel lags']),
+                                                    waveform_output_channel_lags=list(map(float, config_single['AWG']['waveform output channel lags'])),
                                                     marked_channels=list(config_single['AWG']['marked channels']),
-                                                    marker_width=eval(config_single['AWG']['marker width']),
-                                                    waveform_aom_calibrations_locations=list(config_single['AWG']['waveform aom calibrations locations']))
+                                                    marker_width=eval(config_single['AWG']['marker width']))
 
                 waveforms_single = []
                 for x, v in config_single['waveforms'].items():
+                    _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
                     waveforms_single.append(Waveform(fname=v['filename'],
                                                     mod_frequency=float(v['modulation frequency']),
-                                                    phases=map(float, v['phases'])))
+                                                    phases=_phases))
 
                 awg_sequence_config_single = AWGSequenceConfiguration(waveform_sequence=list(eval(config_single['waveform sequence'])),
                                                                     waveforms=waveforms_single,
@@ -620,7 +649,7 @@ class PhotonProductionWriter(object):
     
     def __init__(self, fname):
         self.fname = fname
-        self.config = ConfigObj(fname)
+        self.config = MyConfig(fname)
     
 #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, photon_producion_config:PhotonProductionConfiguration):
@@ -635,17 +664,12 @@ class PhotonProductionWriter(object):
         self.config['waveform sequence'] = photon_producion_config.waveform_sequence
         self.config['waveforms'] = photon_producion_config.waveforms
         self.config['waveform stitch delays'] = photon_producion_config.waveform_stitch_delays
-        self.config['waveform aom calibrations location'] = photon_producion_config.waveform_aom_calibrations_location
-        self.config['marker levels'] = photon_producion_config.marker_levels
-        self.config['marker width'] = photon_producion_config.marker_width
-        self.config['marker delay']= photon_producion_config.marker_delay
         
         awg_config:AwgConfiguration = photon_producion_config.awg_configuration
         
         self.config['AWG'] = {}
         self.config['AWG']['sample rate'] = awg_config.sample_rate
         self.config['AWG']['burst count'] = awg_config.burst_count
-        self.config['AWG']['waveform output channel'] = awg_config.waveform_output_channel
         
         tdc_config = photon_producion_config.tdc_configuration
         
@@ -674,7 +698,7 @@ class ExperimentalAutomationReader(object):
 
     def __init__(self, fname):
         self.fname = fname
-        self.config = ConfigObj(fname)
+        self.config = MyConfig(fname)
     
     def get_experimental_automation_configuration(self):
         
@@ -724,8 +748,8 @@ def _makeRootConfig():
     config.write()
 
 def _makeDaqConfig():
-    config = ConfigObj()
-    config.filename =  os.getcwd() + '/configs/daq/configCalibs'
+    filename =  os.getcwd() + '/configs/daq/configCalibs'
+    config = MyConfig(filename)
     
     config['DAQ cards'] = {}
     
@@ -885,9 +909,8 @@ def _makeDaqConfig():
     config.write()
     
 def _makePhotonProductionConfig():
-    
-    config = ConfigObj()
-    config.filename = os.getcwd() + '/configs/photon production/freqScanPhotonProductionConfig'
+    filename = os.getcwd() + '/configs/photon production/freqScanPhotonProductionConfig'
+    config = MyConfig(filename)
     
     config['date'] = time.strftime("%d/%m/%y")
     config['time'] = time.strftime("%H:%M:%S")
@@ -940,8 +963,8 @@ def _makePhotonProductionConfig():
     config.write()
     
 def _makeSequenceConfig():
-    config = ConfigObj()
-    config.filename = os.getcwd() + '/configs/sequence/abs_img/feb24_just_flash.ini'
+    filename = os.getcwd() + '/configs/sequence/abs_img/feb24_just_flash.ini'
+    config = MyConfig(filename)
     
     config['date'] = time.strftime("%d/%m/%y")
     config['time'] = time.strftime("%H:%M:%S")
@@ -1070,9 +1093,10 @@ def _makeExperimentalAutomationConfig():
      
     seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans\-22.5 MHz offset'
     
-    config = ConfigObj()
-    config.filename =  os.getcwd() + '/configs/experimental automation/JuanExperimentalAutomationConfig'
-    
+    filename =  os.getcwd() + '/configs/experimental automation/JuanExperimentalAutomationConfig'
+    config = MyConfig(filename)
+
+
     config['save_location'] = 'Z:/Results017_New/data'
     config['summary_fname'] = 'automated_experiments_summary'
     
@@ -1108,12 +1132,13 @@ def _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=[], cav_daq_channe
     
     min_freq, max_freq = map(lambda x: str(x).replace('.','_'), [min(cavity_freqs), max(cavity_freqs)]) 
     
-    config = ConfigObj()
+    
 #     config.filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/Juan_scan_cav__{0}_to_{1}'.\
 #                                         format(min_freq, max_freq)
 
-    config.filename =  os.getcwd() + '/configs/experimental automation/Juan_scan_cav__{0}_to_{1}'.\
+    filename =  os.getcwd() + '/configs/experimental automation/Juan_scan_cav__{0}_to_{1}'.\
                                         format(min_freq, max_freq)
+    config = MyConfig(filename)
                                         
                                         
 #     config.filename =  os.getcwd() + '/configs/experimental automation/Juan_try'                                        
@@ -1147,11 +1172,11 @@ def _makeExperimentalAutomationConfig_xBiasScan(x_biases = [], iterations=50, mo
     
     min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(x_biases), max(x_biases)])
     
-    config = ConfigObj()
-
-    config.filename =  os.getcwd() + '/configs/experimental automation/scans/x bias scan/scan_x_bias__{0}A_to_{1}A'.\
-                                        format(min_bias, max_bias)
     
+
+    filename =  os.getcwd() + '/configs/experimental automation/scans/x bias scan/scan_x_bias__{0}A_to_{1}A'.\
+                                        format(min_bias, max_bias)
+    config = MyConfig(filename)
     
     config['save_location'] = 'Z:/Results017_New/data'
     config['summary_fname'] = 'automated_experiments_summary'
@@ -1184,10 +1209,9 @@ def _makeExperimentalAutomationConfig_yBiasScan(y_biases = [], iterations=50, mo
     
     min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(y_biases), max(y_biases)])
     
-    config = ConfigObj()
-
-    config.filename =  os.getcwd() + '/configs/experimental automation/scans/y bias scan/scan_y_bias__{0}A_to_{1}A'.\
+    filename =  os.getcwd() + '/configs/experimental automation/scans/y bias scan/scan_y_bias__{0}A_to_{1}A'.\
                                         format(min_bias, max_bias)
+    config = MyConfig(filename)
     
     
     config['save_location'] = 'Z:/Results017_New/data'
@@ -1221,10 +1245,10 @@ def _makeExperimentalAutomationConfig_zBiasScan(z_biases = [], iterations=500, m
     
     min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(z_biases), max(z_biases)])
     
-    config = ConfigObj()
 
-    config.filename =  os.getcwd() + '/configs/experimental automation/scans/z bias scan/scan_z_bias__{0}A_to_{1}A'.\
+    filename =  os.getcwd() + '/configs/experimental automation/scans/z bias scan/scan_z_bias__{0}A_to_{1}A'.\
                                         format(min_bias, max_bias)
+    config = MyConfig(filename)
     
     
     config['save_location'] = 'Z:/Results017_New/data'
@@ -1256,8 +1280,8 @@ def _makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=[], iterations
      
     seq_loc =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction'
     
-    config = ConfigObj()
-    config.filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/scan_stirap_freqs'
+    filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/scan_stirap_freqs'
+    config = MyConfig(filename)
     
     config['save_location'] = 'Z:/Results017_New/data'
     config['summary_fname'] = 'automated_experiments_summary'
