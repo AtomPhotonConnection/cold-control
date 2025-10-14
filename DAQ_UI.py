@@ -6,13 +6,13 @@ Created on 25 Mar 2016
 import tkinter as tk
 import ToolTip_UI as tooltip
 from PIL import Image, ImageTk
-from DAQ import DAQ_controller, DAQ_channel
+from classes.DAQ import DAQ_controller, DAQ_channel
 import copy
 from tkinter import messagebox as tkMessageBox
 import numpy as np
 import math
 from tkinter import filedialog as tkFileDialog
-from Config import DaqReader, DaqWriter
+from classes.Config import DaqReader, DaqWriter
 
 class DAQ_UI(tk.Frame):
 

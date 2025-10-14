@@ -4,8 +4,8 @@ import numpy as np
 import os
 from typing import List, Dict, Tuple
 
-from Config import ConfigReader, DaqReader
-from DAQ import DAQ_controller, DAQ_channel
+from classes.Config import ConfigReader, DaqReader
+from classes.DAQ import DAQ_controller, DAQ_channel
 
 
 config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')

@@ -13,7 +13,7 @@ import os
 import serial
 import time
 import numpy as np
-from Config import ConfigReader, DaqReader
+from classes.Config import ConfigReader, DaqReader
 import matplotlib.pyplot as plt
 import re
 from instruments.TF930 import TF930

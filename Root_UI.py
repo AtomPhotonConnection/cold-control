@@ -11,7 +11,7 @@ from Sequence_UI import Sequence_UI
 from Camera_UI import Camera_UI
 from Experimental_UI import Experimental_UI
 from Labbook_UI import Labbook_UI
-from Config import ConfigReader
+from classes.Config import ConfigReader
 
 class ColdControl_UI(tk.Frame):
     '''

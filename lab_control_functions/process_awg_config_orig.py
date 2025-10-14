@@ -8,7 +8,7 @@ import re
 import matplotlib.pyplot as plt
 import csv
 
-from Config import ConfigReader, DaqReader
+from classes.Config import ConfigReader, DaqReader
 from ExperimentalConfigs import AbsorbtionImagingConfiguration,\
     PhotonProductionConfiguration, AwgConfiguration, TdcConfiguration, Waveform,\
         ExperimentSessionConfig , SingleExperimentConfig

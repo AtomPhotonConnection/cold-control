@@ -8,7 +8,7 @@ Refactored 09/12/2024
 
 import os
 import time
-from Config import ConfigReader, DaqReader
+from classes.Config import ConfigReader, DaqReader
 from instruments.WX218x.WX218x_awg import Channel
 
 import lab_control_functions.calibration_functions as calibrate

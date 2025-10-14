@@ -1098,12 +1098,12 @@ class DAQ_channel(object):
 class DAQ_dio:
      
     def __init__(self, dio_name, dio_num, port, line, direction, enabled_state):
-        self.dio_name = dio_name
-        self.dio_num = dio_num
-        self.port = port
-        self.line = line
-        self.direction = direction
-        self.enabled_state = enabled_state
+        self.dio_name: str = dio_name
+        self.dio_num: int = dio_num
+        self.port: int = port
+        self.line: int = line
+        self.direction: int = direction
+        self.enabled_state: int = enabled_state
         
         self.write_fn, self.read_fn = None, None
         
@@ -1315,6 +1315,20 @@ class DAQ_controller(object):
             #TODO : WHY DO I NEED THIS HACK???
             self.write( np.array([[v] for _,v in sorted(self.channelValues.items())]) )
             self.write( np.array([[v] for _,v in sorted(self.channelValues.items())]) )
+
+    def update_dio(self, dio_num: int, value: bool):
+        """
+        Set a digital output line by its DIO number.
+        Example: daq.update_dio(5, True)  # set DIO 5 high
+        """
+        for dio in self.getDIOs():
+            if dio.dio_num == dio_num:
+                try:
+                    dio.write(int(value))
+                except Exception as e:
+                    raise RuntimeError(f"Failed to write DIO {dio_num}: {e}")
+                return
+        raise ValueError(f"No DIO found with dio_num={dio_num}")
     
     def writeChannelValues(self):
         #TODO : WHY DO I NEED THIS HACK???
@@ -1430,7 +1444,7 @@ class DAQ_controller(object):
             channels = [ch for ch in channels if ch.isUIVisable]
         return channels        
     
-    def getDIOs(self):
+    def getDIOs(self) -> list[DAQ_dio]:
         '''Returns a list of all the DAQ_dio (digital in/out) objects registered with the controller.'''
         return sum([card.dios for card in [self.master] + self.slaves],[])
         

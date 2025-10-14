@@ -19,7 +19,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
-from Sequence import Sequence
+from classes.Sequence import Sequence
 from rabi_voltage_converter import RabiFreqVoltageConverter
 
 def toBool(string):

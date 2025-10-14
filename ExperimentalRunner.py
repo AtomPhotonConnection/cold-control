@@ -36,7 +36,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import re, ast
 
-from DAQ import DAQ_controller, DaqPlayException, DAQ_channel
+from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \
     WX218x_SequenceAdvanceMode, WX218x_TraceMode, WX218x_TriggerImpedance, WX218x_TriggerMode,\
@@ -49,7 +49,7 @@ from instruments.pyicic.IC_Camera import IC_Camera
 from instruments.TF930 import TF930
 from lab_control_functions.awg_control_functions_psh import run_awg
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
-from Sequence import IntervalStyle, Sequence
+from classes.Sequence import IntervalStyle, Sequence
 from serial.serialutil import SerialException
 from ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingConfiguration,\
     PhotonProductionConfiguration, MotFluoresceConfiguration, AWGSequenceConfiguration,\

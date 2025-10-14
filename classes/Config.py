@@ -5,10 +5,10 @@ Created on 22 Apr 2016
 '''
 from copy import deepcopy
 from configobj import ConfigObj
-from DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE, INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH,\
+from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE, INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH,\
     Channel_P2A
 from instruments.WX218x.WX218x_awg import Channel
-from Sequence import Sequence
+from classes.Sequence import Sequence
 from ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
       AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig , SingleExperimentConfig,\
       MotFluoresceConfiguration, AWGSequenceConfiguration, MotFluoresceConfigurationSweep

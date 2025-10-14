@@ -22,7 +22,7 @@ Load required classes for awg driven AOM calibration
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
 from ExperimentalConfigs import Waveform
-from DAQ import DAQ_controller
+from classes.DAQ import DAQ_controller
 
 # helper functions in a separate file
 from lab_control_functions.calibration_helper_functions import *
@@ -462,7 +462,7 @@ def test_stirap_aom_freq_response(level=0.5,
 
 
 def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, repeats=3, delay=0.2,
-                                 calibration_lims=(0, 1), save_all=False, results_dict=None):
+                                 calibration_lims=(0, 1), save_all=False, results_dict=None, flip_mirror=True):
     """ Provides with the value of the voltage amplitude we have to send to the AWG if we want an output 
     of the aom with a specific power value.
     
@@ -476,7 +476,9 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
         delay (float) - How long to wait between writing a new voltage and querying the frequency counter
         calibration_lims (tuple) - limits of the calibration
     """
-
+    if flip_mirror:
+        print("Is the flip mirror in the beam path?")
+        
     sample_rate = 1.25 * 10**9
     print('Creating AWG instance')
     awg = WX218x_awg()

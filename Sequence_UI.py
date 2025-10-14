@@ -19,8 +19,8 @@ import ToolTip_UI as tooltip
 import numpy as np
 #import wx
 
-from Config import SequenceReader, SequenceWriter
-from Sequence import Sequence, IntervalStyle, MultipleInvalidSequenceChannelException, InvalidSequenceChannelException
+from classes.Config import SequenceReader, SequenceWriter
+from classes.Sequence import Sequence, IntervalStyle, MultipleInvalidSequenceChannelException, InvalidSequenceChannelException
 
 
 '''

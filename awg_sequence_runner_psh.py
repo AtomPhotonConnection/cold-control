@@ -2,7 +2,7 @@ from time import sleep
 import os
 import time
 
-from Config import ConfigReader, DaqReader
+from classes.Config import ConfigReader, DaqReader
 from ExperimentalConfigs import AWGSequenceConfiguration, AwgConfiguration, Waveform
 from configobj import ConfigObj
 from lab_control_functions.awg_control_functions_psh import run_awg

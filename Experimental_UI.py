@@ -18,12 +18,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk as NavigationToolbar2TkAgg
 import matplotlib.pyplot as plt
 
-from Config import ExperimentConfigReader, ExperimentalAutomationReader
+from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader
 from ToolTip_UI import ToolTip
 from Sequence_UI import Sequence_UI
 from DAQ_UI import DAQ_UI
 from PIL import Image, ImageTk
-from DAQ import DaqPlayException, DAQ_dio
+from classes.DAQ import DaqPlayException, DAQ_dio
 from ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
      AwgConfiguration, TdcConfiguration, Waveform, MotFluoresceConfiguration,\
      MotFluoresceConfigurationSweep
