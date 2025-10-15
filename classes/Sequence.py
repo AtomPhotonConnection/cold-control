@@ -15,8 +15,7 @@ class Sequence(object):
     '''
     def __init__(self, n_samples, t_step=1):
         self.n_samples = n_samples
-        self.chSeqs = Dict[int, _ChannelSequence]
-        self.chSeqs = {}
+        self.chSeqs:Dict[int, _ChannelSequence] = {}
         self.t_step = t_step
         
     def getArray(self):
@@ -152,8 +151,10 @@ class _ChannelSequence(object):
             # between the time points provided - so if t_0 and t_1 are not in t_span then some unwanted values will be set!
             
             try:            
-                changeFunc = self.getChangeFunc(changeStyle , (t_interval[0], V_0), (t_interval[-1], V_1))                    
-                V_span = np.append(V_span, list(map(changeFunc, t_interval)))
+                changeFunc = self.getChangeFunc(changeStyle , (t_interval[0], V_0), (t_interval[-1], V_1))
+                if changeFunc == None:
+                    raise ValueError('Invalid change style {0} provided'.format(changeStyle))                    
+                V_span = np.append(V_span, np.array(list(map(changeFunc, t_interval)), dtype=np.float64))
             except IndexError:
                 # If t_interval is an empty list wel'll catch that here - it just means that t_0 and t_1
                 # are so close together (or identical) so no times in t_span are between them.  The card
