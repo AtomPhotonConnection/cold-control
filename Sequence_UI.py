@@ -10,7 +10,7 @@ from tkinter import ttk
 from tkinter import filedialog as tkFileDialog
 from tkinter import messagebox as tkMessageBox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk
 import matplotlib.pyplot as plt
 #from IPython.core.display import display
 #from tkinter.constants import ANCHOR
@@ -30,6 +30,15 @@ TODO -
 3. Implement channel wrapper (e.g. V <--> Hz for AOMs)
 4. Sequence: update interval --> sequence speed
 '''
+
+class ImageButton(tk.Button):
+    """Important class to prevent image being garbage collected.
+    Usage: 
+    self.addButton = ImageButton(..., image=icon)
+    self.addButton.image_ref=icon
+    """
+    image_ref: ImageTk.PhotoImage
+
 
 class Sequence_UI(tk.Toplevel):
         
@@ -146,7 +155,7 @@ class Sequence_UI(tk.Toplevel):
         return buttons
     
     def loadSeq(self):
-        fname = tkFileDialog.askopenfilename(master=self, title="Load a sequence", initialdir="")
+        fname = tkFileDialog.askopenfilename(title="Load a sequence", initialdir="")
         
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname!= '':
@@ -193,7 +202,7 @@ class Sequence_UI(tk.Toplevel):
             self.chEditor.refreshRows(liveChNum)
             
             # Create a warning label explaining why the change was rejected.
-            self.displayWarning(err.message, 3000)
+            self.displayWarning(str(err), 3000)
             
     def updateGlobalTimings(self):
         self.chEditor.global_timings = self.seqEditor.global_timings
@@ -274,10 +283,10 @@ class Sequence_UI(tk.Toplevel):
             
         # Catch validation errors, reset the variables in the UI and display an appropriate warning message
         except MultipleInvalidSequenceChannelException as mulErr:
-            errMsg = mulErr.message + "\n"
+            errMsg = str(mulErr) + "\n"
             for i in range(0,len(mulErr.errors)):
-                errMsg += '\nChannel {0} - {1}'.format(mulErr.errorChannels[i], mulErr.errors[i].message)
-                print(mulErr.errorChannels[i], mulErr.errors[i].message)
+                errMsg += '\nChannel {0} - {1}'.format(mulErr.errorChannels[i], str(mulErr.errors[i]))
+                print(mulErr.errorChannels[i], str(mulErr.errors[i]))
             
             tkMessageBox.showwarning('Unable to applySamplingConfiguration changes', errMsg)
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
@@ -381,17 +390,22 @@ class SequenceEditor_UI(tk.Frame):
 
         self.gridOpts = {'padx':5, 'pady':5}
 
-        samlabel.grid(row=0, column=0, **self.gridOpts)
-        self.samWid.grid(row=0, column=1, **self.gridOpts)
+        samlabel.grid(row=0, column=0, 
+                      padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])
+        self.samWid.grid(row=0, column=1, 
+                         padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])
        
-        tSteplabel.grid(row=1,column=0, **self.gridOpts)
-        self.tStepWid.grid(row=1,column=1, **self.gridOpts)
+        tSteplabel.grid(row=1, column=0, 
+                        padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])
+        self.tStepWid.grid(row=1, column=1, 
+                           padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])
         self.tStepTooltip = tooltip.createToolTip(self.tStepWid,
                                                   '{0}kHz rep. rate'.format( 10**3 / float(self.tStepWid.get()) ),
                                                   openDelay=500)
         self.tStepWid.bind('<FocusOut>', lambda event: self.tStepTooltip.updateText('{0}kHz rep. rate'.format(10**3 / float(self.tStepWid.get()))))
         
-        self.applyButton.grid(row=0, column=2, rowspan=2, **self.gridOpts)
+        self.applyButton.grid(row=0, column=2, rowspan=2, 
+                              padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])
         
         samplingConfigFrame.pack(side=tk.TOP, padx=15, pady=15, fill=tk.X, expand=1)
         
@@ -409,8 +423,8 @@ class SequenceEditor_UI(tk.Frame):
             
         icon = Image.open("icons/add_icon.png").resize((12,12))
         icon = ImageTk.PhotoImage(icon)
-        self.addButton = tk.Button(globalTimingFrame, image=icon, command= lambda: self.addRow(globalTimingFrame), height=12, width=12)
-        self.addButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        self.addButton = ImageButton(globalTimingFrame, image=icon, command= lambda: self.addRow(globalTimingFrame), height=12, width=12)
+        self.addButton.image_ref = icon# prevent garbage collection
         self.addButton.grid(row=i, column=0, sticky=tk.W,  padx=10, pady=10)
         
         globalTimingFrame.pack(side=tk.BOTTOM, padx=15, pady=15, fill=tk.BOTH, expand=1)
@@ -430,7 +444,8 @@ class SequenceEditor_UI(tk.Frame):
         
         newRow = Frame_GlobalTimingRow(rowFrame, time='', name=namePopup.value)
         self.globalTimingRows.append(newRow)
-        newRow.grid(row=nRows-1, column=0, sticky=tk.W, **self.gridOpts)    
+        newRow.grid(row=nRows-1, column=0, sticky=tk.W, 
+                    padx=self.gridOpts['padx'], pady=self.gridOpts['pady'])    
         
     def validateSamVar(self, newValue):
         '''Check the input is an integer and enable the applySamplingConfiguration button if the new value is not that
@@ -466,7 +481,7 @@ class SequenceEditor_UI(tk.Frame):
         
     def updateGlobalTimings(self, event):
         self.global_timings = [(x.time, x.name) for x in self.globalTimingRows if x.isComplete() and x.isActive()]
-        self.winfo_toplevel().updateGlobalTimings()
+        self.winfo_toplevel().updateGlobalTimings() # type: ignore
       
     def applySamplingConfiguration(self):
         '''Update self.n_samples and self.t_step
@@ -476,14 +491,14 @@ class SequenceEditor_UI(tk.Frame):
         otherwise force updates to the res of the UI'''        
         self.n_samples = self.samVar.get()
         self.t_step = self.tStepVar.get()
-        self.winfo_toplevel().updateSequenceSamplingConfiguration()
+        self.winfo_toplevel().updateSequenceSamplingConfiguration()  # type: ignore
  
 class Frame_GlobalTimingRow(tk.Frame):
     
     def __init__(self, parent, time='', name='', **kwargs):             
         tk.Frame.__init__(self, parent, **kwargs)
 
-        self.time = time
+        self.time: str = time
         self.name = name
         self.active=True
         
@@ -500,8 +515,8 @@ class Frame_GlobalTimingRow(tk.Frame):
         
         icon = Image.open("icons/delete_icon.png").resize((12,12))
         icon = ImageTk.PhotoImage(icon)
-        self.deleteButton = tk.Button(self, image=icon, command=self.delete, height=12, width=12)
-        self.deleteButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        self.deleteButton = ImageButton(self, image=icon, command=self.delete, height=12, width=12)
+        self.deleteButton.image_ref = icon # prevent garbage collection
         
         self.grid_columnconfigure(0, weight=1, pad=3, uniform='cols')
         self.grid_columnconfigure(1, weight=1, pad=3, uniform='cols')
@@ -516,7 +531,7 @@ class Frame_GlobalTimingRow(tk.Frame):
             self.time = self.timeWid.get()
         else:
             try:
-                self.time = float(self.timeWid.get())
+                self.time = str(self.timeWid.get())
             except ValueError:
                 self.timeWid.delete(0, tk.END)
                 self.timeWid.insert(0, self.time)
@@ -875,9 +890,9 @@ class ChannelEditor_UI(tk.Frame):
         up_icon = Image.open("icons/up_icon.png").resize((12,12))
         up_icon = ImageTk.PhotoImage(up_icon)
         sortRowsButton = tk.Button(rowsFrame, text=u"Time (\u03bcs)", font=lab_font, image=down_icon, compound=tk.RIGHT, relief=tk.FLAT)
-        sortRowsButton.down_icon = down_icon
-        sortRowsButton.up_icon = up_icon
-        sortRowsButton.downState = None
+        sortRowsButton.down_icon = down_icon # type: ignore
+        sortRowsButton.up_icon = up_icon # type: ignore
+        sortRowsButton.downState = None # type: ignore
         sortRowsButton.configure(command=lambda sortButton=sortRowsButton, rows=rows: self.sortRows(sortButton, rows))
         
         value_col_label  = tk.Label(rowsFrame, text="Value ({0})".format(valueUnits), font=lab_font)
@@ -894,8 +909,8 @@ class ChannelEditor_UI(tk.Frame):
             
         icon = Image.open("icons/add_icon.png").resize((12,12))
         icon = ImageTk.PhotoImage(icon)
-        addRowButton = tk.Button(rowsFrame, image=icon)
-        addRowButton.image = icon
+        addRowButton = ImageButton(rowsFrame, image=icon)
+        addRowButton.image_ref = icon
         addRowButton.configure(command=lambda chNum=chNum, chCalibration=chCalibration: self.addRow(rowsFrame, chNum, chCalibration, addRowButton))
         addRowButton.grid(row=i, column=0, sticky=tk.W)
         
@@ -972,7 +987,7 @@ class ChannelEditor_UI(tk.Frame):
             channelOptions.append(self.sequence_channel_labels[chNum])
 #             self.dropdown['menu'].add_command(label=channelOptions[-1], command=tk._setit(self.liveChannel, channelOptions[-1]))
 
-        self.dropdown.set_menu(self.liveChannel if self.liveChannel in channelOptions else channelOptions[0],
+        self.dropdown.set_menu(self.liveChannel.get() if self.liveChannel.get() in channelOptions else channelOptions[0],
                                *channelOptions)
 
 #         if not self.liveChannel.get() in channelOptions:
@@ -1066,7 +1081,7 @@ class TimeCombobox(ttk.Combobox):
             self.set(newValue)
             
         if triggerUpdate:
-            self.winfo_toplevel().updateLiveSequenceChannel()
+            self.winfo_toplevel().updateLiveSequenceChannel() # type: ignore
             
     def onValidate(self, event):
         if self.doValidation(self.get()):
@@ -1103,7 +1118,7 @@ class ValueEntry(ttk.Entry):
         self.insert(0, self.value)
         
         if triggerUpdate:
-            self.winfo_toplevel().updateLiveSequenceChannel()
+            self.winfo_toplevel().updateLiveSequenceChannel() # type: ignore
         
     def focusOut(self, params):
         # If the entry can be converted to a float it is valid, otherwise do not update
@@ -1147,7 +1162,7 @@ class IntervalStyleDropdown(tk.OptionMenu):
         self.variable.set(IntervalStyle.toString(newValue))
         
         if triggerUpdate:
-            self.winfo_toplevel().updateLiveSequenceChannel()
+            self.winfo_toplevel().updateLiveSequenceChannel() # type: ignore
     
     def focusOut(self, params):
         self.setValue(IntervalStyle.fromString(self.variable.get()), triggerUpdate=True)

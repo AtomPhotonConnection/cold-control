@@ -201,9 +201,12 @@ class SequenceReader(object):
         sequence_channels = self.config['sequence channels']
 
         for _,v in sequence_channels.items():
-            channelArgs = map(lambda x,y:x(y), [int, lambda x: [eval(y) for y in x], lambda x: [int(y) for y in x]],
-                                 [v['chNum'],v['tV_pairs'],v['V_interval_styles']])
-            seq.addChannelSeq(*channelArgs)
+            ch = int(v["chNum"])
+            tV_pairs = [tuple(ast.literal_eval(x)) for x in v['tV_pairs']]
+            V_interval_styles = [int(x) for x in v['V_interval_styles']]
+
+            seq.addChannelSeq(ch, tV_pairs, V_interval_styles)
+
             
         return seq
     

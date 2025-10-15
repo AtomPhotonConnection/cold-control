@@ -15,7 +15,7 @@ import re
 import os
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk as NavigationToolbar2TkAgg
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk as NavigationToolbar2TkAgg
 import matplotlib.pyplot as plt
 
 from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader
@@ -51,6 +51,15 @@ from msilib import init_database
 from tkinter import filedialog as tkFileDialog
 
 
+class ImageButton(tk.Button):
+    """Important class to prevent image being garbage collected.
+    Usage: 
+    self.addButton = ImageButton(..., image=icon)
+    self.addButton.image_ref=icon
+    """
+    image_ref: ImageTk.PhotoImage
+
+
 class Experimental_UI(tk.LabelFrame):
 
     def __init__(self, parent, daq_ui:DAQ_UI, sequence_ui:Sequence_UI, experiment_config_fname, absorbtion_imaging_config_fname,
@@ -72,22 +81,22 @@ class Experimental_UI(tk.LabelFrame):
         
         icon = Image.open("icons/graph_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.set_seq_button = tk.Button(self, image=icon, text="Set sequence", command=self.openSeqWindow, background='green4', **butt_opts)
-        self.set_seq_button.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        self.set_seq_button = ImageButton(self, image=icon, text="Set sequence", command=self.openSeqWindow, background='green4', **butt_opts)
+        self.set_seq_button.image_ref = icon # see ImageButton class
         
         icon = Image.open("icons/play_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.run_seq_button = tk.Button(self, image=icon, text="Run sequence", command=self.runSeq,  background='green2', **butt_opts)
-        self.run_seq_button.image = icon # store the image as a variable in the widget to prevent garbage collection.
-        
-        self.run_auto_exp_button = tk.Button(self, image=icon, text="Run automated exp.", command=self.runAutomatedExp,  background='green1', **butt_opts)
-        self.run_auto_exp_button.image = icon # store the image as a variable in the widget to prevent garbage collection.
-        
+        self.run_seq_button = ImageButton(self, image=icon, text="Run sequence", command=self.runSeq,  background='green2', **butt_opts)
+        self.run_seq_button.image_ref = icon # see ImageButton class
+
+        self.run_auto_exp_button = ImageButton(self, image=icon, text="Run automated exp.", command=self.runAutomatedExp,  background='green1', **butt_opts)
+        self.run_auto_exp_button.image_ref = icon # see ImageButton class
+
         icon = Image.open("icons/config_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.configure_photon_production_button = tk.Button(self, image=icon, width=25, height=25, command=self.experiment_config_button, background='green2')
-        self.configure_photon_production_button.image = icon
-        
+        self.configure_photon_production_button = ImageButton(self, image=icon, width=25, height=25, command=self.experiment_config_button, background='green2')
+        self.configure_photon_production_button.image_ref = icon # see ImageButton class
+
         self.total_iterations_frame = Frame_ExperimentalParam(self, 'Num. iterations', initVal=self.photon_production_config.iterations, dataType=int,
                                                        helpText='The number of times the experimental sequence will be run.',
                                                        action = lambda entry_value: self.photon_production_config.set_iterations(entry_value))
@@ -97,34 +106,34 @@ class Experimental_UI(tk.LabelFrame):
         
         icon = Image.open("icons/play_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.run_abs_img_button = tk.Button(self, image=icon, text="Run abs. imaging", command=lambda:self.runAbsorbtionImaging(),
+        self.run_abs_img_button = ImageButton(self, image=icon, text="Run abs. imaging", command=lambda:self.runAbsorbtionImaging(),
                                              background='deep sky blue', **butt_opts)
-        self.run_abs_img_button.image = icon 
-        self.test_bkg_button = tk.Button(self, image=icon, text="Test background", command=lambda: self.runAbsorbtionImaging(bkg_test=True), background='light sky blue', **butt_opts)
-        self.test_bkg_button.image = icon 
+        self.run_abs_img_button.image_ref = icon
+        self.test_bkg_button = ImageButton(self, image=icon, text="Test background", command=lambda: self.runAbsorbtionImaging(bkg_test=True), background='light sky blue', **butt_opts)
+        self.test_bkg_button.image_ref = icon
 
         
         icon = Image.open("icons/config_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.configure_abs_img_button = tk.Button(self, image=icon, width=25, height=25, command=self.absorbtionImagingConfigButton, background='deep sky blue')
-        self.configure_abs_img_button.image = icon
+        self.configure_abs_img_button = ImageButton(self, image=icon, width=25, height=25, command=self.absorbtionImagingConfigButton, background='deep sky blue')
+        self.configure_abs_img_button.image_ref = icon
 
         # Flash channel button and settings
         with Image.open("icons/play_icon.png") as img:
             icon = ImageTk.PhotoImage(img.resize((30,30)))
-            self.flash_channel_button = tk.Button(self, image=icon, text="Flash channel", command=self.flash_channel, background='light salmon', **butt_opts)
-            self.flash_channel_button.image = icon # store the image as a variable in the widget to prevent garbage collection.
+            self.flash_channel_button = ImageButton(self, image=icon, text="Flash channel", command=self.flash_channel, background='light salmon', **butt_opts)
+            self.flash_channel_button.image_ref = icon
         with Image.open("icons/config_icon.png") as img:
             icon = ImageTk.PhotoImage(img.resize((30,30)))
-            self.configure_flash_channel_button = tk.Button(self, image=icon, width=25, height=25, command=self.configure_flash_channel, background='light salmon')
-            self.configure_flash_channel_button.image = icon
+            self.configure_flash_channel_button = ImageButton(self, image=icon, width=25, height=25, command=self.configure_flash_channel, background='light salmon')
+            self.configure_flash_channel_button.image_ref = icon
         self.flash_channel_config = {"channel":-1, "duration":1, "low_val":0, "high_val":10, "repeats":10}
 
         # Run sweep button and settings
         with Image.open("icons/play_icon.png") as img:
             icon = ImageTk.PhotoImage(img.resize((30,30)))
-            self.fluoresce_sweep_btn = tk.Button(self, image=icon, text="Run MOT Fluoresce Sweep", command=self.fluoresce_sweep, background='green2', **butt_opts)
-            self.fluoresce_sweep_btn.image = icon # store the image as a variable in the widget to prevent garbage collection.
+            self.fluoresce_sweep_btn = ImageButton(self, image=icon, text="Run MOT Fluoresce Sweep", command=self.fluoresce_sweep, background='green2', **butt_opts)
+            self.fluoresce_sweep_btn.image_ref = icon # store the image as a variable in the widget to prevent garbage collection.
         # with Image.open("icons/config_icon.png") as img:
         #     icon = ImageTk.PhotoImage(img.resize((30,30)))
         #     self.config_fluoresce_sweep_btn = tk.Button(self, image=icon, width=25, height=25, command=self.configure_fluoresce_sweep, background='green4')

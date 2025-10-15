@@ -52,17 +52,19 @@ class Sequence(object):
         
         return np.array( [[chArr[col]] for chArr in [self.getChannelValArray(n) for n in chNums]] )
     
-    def get_tV_pairs(self, chNum):
+    def get_tV_pairs(self, chNum) -> list:
         return self.chSeqs[chNum].tV_pairs
     
-    def get_V_intervalStyles(self, chNum):
+    def get_V_intervalStyles(self, chNum) -> list:
         return self.chSeqs[chNum].V_interval_styles
         
     def updateChannel(self, chNum, tV_pairs, V_interval_styles):
         channel:_ChannelSequence = self.chSeqs[chNum]
         old_tV_pairs, old_V_interval_styles = channel.tV_pairs, channel.V_interval_styles
         try:
-            channel.tV_pairs, channel.V_interval_styles = zip(*sorted(zip(tV_pairs,V_interval_styles), key=lambda x: x[0][0]))
+            tV_sorted, V_interval_sorted = zip(*sorted(zip(tV_pairs, V_interval_styles), key=lambda x: x[0][0]))
+            channel.tV_pairs = list(tV_sorted)
+            channel.V_interval_styles = list(V_interval_sorted)
             channel.validate()
         except InvalidSequenceChannelException as err:
             channel.tV_pairs = old_tV_pairs
@@ -111,9 +113,13 @@ class _ChannelSequence(object):
     '''
     A class containing all the information needed to create a sequence for one DAQ channel.
     '''
-    def __init__(self, parentSequence, tV_pairs=[(0.,0.)], V_intervalStyles=[]):     
+    def __init__(self, parentSequence, tV_pairs: list[tuple[float, float]]=[(0.,0.)], V_interval_styles: list[int]=[]):     
         self.parent = parentSequence
-        self.tV_pairs, self.V_interval_styles = zip(*sorted(zip(tV_pairs,V_intervalStyles), key=lambda x: x[0][0]))
+
+        self.tV_pairs, self.V_interval_styles = map(
+            list, zip(*sorted(zip(tV_pairs, V_interval_styles), key=lambda x: x[0][0]))
+        )
+
         self.validate()
         
     def getValArray(self):
