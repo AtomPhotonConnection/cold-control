@@ -82,9 +82,9 @@ class ExperimentalDataProcessor:
         return df_smooth
     
     def validate_data(self, df: pd.DataFrame, 
-                     marker_time_range: Tuple[float, float] = None,
-                     fluor_drop_voltage: float = None,
-                     fluor_drop_time_range: Tuple[float, float] = None) -> bool:
+                     marker_time_range: Optional[Tuple[float, float]] = None,
+                     fluor_drop_voltage: Optional[float] = None,
+                     fluor_drop_time_range: Optional[Tuple[float, float]] = None) -> bool:
         """
         Validate that data meets experimental conditions.
         
@@ -101,7 +101,7 @@ class ExperimentalDataProcessor:
         if marker_time_range and self.channel_cols[self.marker_channel] in df.columns:
             marker_data = df[self.channel_cols[self.marker_channel]]
             # Find minimum of marker pulse (voltage drop)
-            marker_min_idx = marker_data.idxmin()
+            marker_min_idx = int(marker_data.idxmin())
             marker_min_time = df.iloc[marker_min_idx][self.time_col]
             
             if not (marker_time_range[0] <= marker_min_time <= marker_time_range[1]):
@@ -119,7 +119,7 @@ class ExperimentalDataProcessor:
             if not drop_indices.any():
                 return False
                 
-            first_drop_idx = drop_indices.idxmax()  # First True index
+            first_drop_idx = int(drop_indices.idxmax())  # First True index
             first_drop_time = time_data.iloc[first_drop_idx]
             
             if not (fluor_drop_time_range[0] <= first_drop_time <= fluor_drop_time_range[1]):
@@ -128,10 +128,10 @@ class ExperimentalDataProcessor:
         return True
     
     def average_shot_data(self, shot_folder: str, 
-                         marker_time_range: Tuple[float, float] = None,
-                         fluor_drop_voltage: float = None,
-                         fluor_drop_time_range: Tuple[float, float] = None,
-                         output_path: str = None) -> pd.DataFrame:
+                         marker_time_range: Optional[Tuple[float, float]] = None,
+                         fluor_drop_voltage: Optional[float] = None,
+                         fluor_drop_time_range: Optional[Tuple[float, float]] = None,
+                         output_path: Optional[Path] = None) -> pd.DataFrame:
         """
         Average all valid CSV files from a shot folder.
         
@@ -176,12 +176,12 @@ class ExperimentalDataProcessor:
     
     def average_shot_data_aligned(self, shot_folder: str,
                                  fluor_drop_voltage: float,
-                                 marker_time_range: Tuple[float, float] = None,
-                                 fluor_drop_time_range: Tuple[float, float] = None,
+                                 marker_time_range: Optional[Tuple[float, float]] = None,
+                                 fluor_drop_time_range: Optional[Tuple[float, float]] = None,
                                  time_before_drop: float = 1.1e-3,
                                  time_after_drop: float = 4e-3,
                                  num_points: int = 50000,
-                                 output_path: str = None) -> pd.DataFrame:
+                                 output_path: Optional[Path] = None) -> pd.DataFrame:
         """
         Average CSV files after aligning them based on fluorescence drop timing.
         Uses interpolation to create aligned time series.
@@ -219,7 +219,7 @@ class ExperimentalDataProcessor:
             if not drop_indices.any():
                 continue
                 
-            first_drop_idx = drop_indices.idxmax()
+            first_drop_idx = int(drop_indices.idxmax())
             drop_time = time_data.iloc[first_drop_idx]
             
             valid_dfs.append(df)
@@ -302,8 +302,8 @@ class ExperimentalDataProcessor:
             raise ValueError(f"Channel {self.fluorescence_channel} not found in data")
         
         # Get time and channel 4 data
-        time_data = df[self.time_col].values
-        channel4_data = df[channel4_col].values
+        time_data = np.asarray(df[self.time_col].values)
+        channel4_data = np.asarray(df[channel4_col].values)
         
         # Calculate background average and std
         bg_mask = (time_data >= background_time_range[0]) & (time_data <= background_time_range[1])
@@ -333,15 +333,15 @@ class ExperimentalDataProcessor:
             'num_integration_points': len(integration_data)
         }
     
-    def process_all_experiments(self, root_folder: str,
-                              marker_time_range: Tuple[float, float] = None,
-                              fluor_drop_voltage: float = None,
-                              fluor_drop_time_range: Tuple[float, float] = None,
+    def process_all_experiments(self, root_folder: Path,
+                              marker_time_range: Optional[Tuple[float, float]] = None,
+                              fluor_drop_voltage: Optional[float] = None,
+                              fluor_drop_time_range: Optional[Tuple[float, float]] = None,
                               background_time_range: Tuple[float, float] = (0, 1),
                               integration_time_range: Tuple[float, float] = (2, 3),
                               save_averaged_csvs: bool = True,
                               use_alignment: bool = False,
-                              alignment_params: Dict = None) -> pd.DataFrame:
+                              alignment_params: Optional[Dict] = None) -> pd.DataFrame:
         """
         Process all experiments in the root folder.
         

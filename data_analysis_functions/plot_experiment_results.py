@@ -1,3 +1,4 @@
+from typing import Optional
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -22,7 +23,8 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     plt.figure(figsize=(10, 6))
     for file in files:
         df = pd.read_csv(file)
-        plt.plot(df["Time (s)"], df["Channel 4 Voltage (V)"].rolling(window=64).mean(), color='gray', alpha=0.3)
+        plt.plot(df["Time (s)"], df["Channel 4 Voltage (V)"].rolling(window=64).mean(),
+                 color='gray', alpha=0.3, label='Individual Shots' if file == files[0] else None)
 
     if suffix == '_aligned.csv':
         time_correction = 0.6e-3
@@ -45,7 +47,7 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     plt.close()
 
 
-def plot_experiment_summary(summary_path: str, save_path: str = None):
+def plot_experiment_summary(summary_path: str, save_path: Optional[str] = None):
     """
     Plot integrated_value vs shot number for each parameter folder.
 
@@ -81,7 +83,7 @@ def plot_experiment_summary(summary_path: str, save_path: str = None):
     plt.show()
 
 
-def plot_all_shots_in_folder(root_folder: str, suffix='_averaged.csv'):
+def plot_all_shots_in_folder(root_folder: Path, suffix='_averaged.csv'):
     """
     Iterate through all shots in parameter folders and generate individual plots.
 
