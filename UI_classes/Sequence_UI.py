@@ -15,12 +15,12 @@ import matplotlib.pyplot as plt
 #from IPython.core.display import display
 #from tkinter.constants import ANCHOR
 from PIL import Image, ImageTk
-import ToolTip_UI as tooltip
 import numpy as np
 #import wx
 
 from classes.Config import SequenceReader, SequenceWriter
 from classes.Sequence import Sequence, IntervalStyle, MultipleInvalidSequenceChannelException, InvalidSequenceChannelException
+import UI_classes.ToolTip_UI as tooltip
 
 
 '''

@@ -3,16 +3,20 @@ Created on 25 Mar 2016
 
 @author: tombarrett
 '''
-import tkinter as tk
-import ToolTip_UI as tooltip
-from PIL import Image, ImageTk
-from classes.DAQ import DAQ_controller, DAQ_channel
 import copy
-from tkinter import messagebox as tkMessageBox
 import numpy as np
 import math
+
+import tkinter as tk
+from tkinter import messagebox as tkMessageBox
 from tkinter import filedialog as tkFileDialog
+from PIL import Image, ImageTk
+
+
+from classes.DAQ import DAQ_controller, DAQ_channel
 from classes.Config import DaqReader, DaqWriter
+import UI_classes.ToolTip_UI as tooltip
+
 
 class DAQ_UI(tk.Frame):
 

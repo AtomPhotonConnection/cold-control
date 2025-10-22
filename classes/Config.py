@@ -5,13 +5,6 @@ Created on 22 Apr 2016
 '''
 from copy import deepcopy
 from configobj import ConfigObj
-from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE, INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH,\
-    Channel_P2A
-from instruments.WX218x.WX218x_awg import Channel
-from classes.Sequence import Sequence
-from ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
-      AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig , SingleExperimentConfig,\
-      MotFluoresceConfiguration, AWGSequenceConfiguration, MotFluoresceConfigurationSweep
 import time
 import os
 from mock import patch
@@ -19,6 +12,15 @@ import numpy as np
 import glob
 import re, ast
 from typing import Dict, List, Any, Tuple
+
+from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
+      INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
+
+from instruments.WX218x.WX218x_awg import Channel
+from classes.Sequence import Sequence
+from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
+      AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig , SingleExperimentConfig,\
+      MotFluoresceConfiguration, AWGSequenceConfiguration, MotFluoresceConfigurationSweep
 
 GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
 

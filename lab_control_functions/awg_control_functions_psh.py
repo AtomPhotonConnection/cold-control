@@ -3,14 +3,15 @@ import os
 import numpy as np
 import glob
 import re
-from ExperimentalConfigs import AWGSequenceConfiguration
-from ExperimentalConfigs import AwgConfiguration, Waveform
+import matplotlib.pyplot as plt
+import ctypes
+
+from classes.ExperimentalConfigs import AWGSequenceConfiguration, AwgConfiguration, Waveform
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 from instruments.WX218x.WX218x_DLL import (
     WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode, WX218x_TriggerSlope, WX218x_TraceMode
 )
-import matplotlib.pyplot as plt
-import ctypes
+
 
 # Constants for marker configuration
 

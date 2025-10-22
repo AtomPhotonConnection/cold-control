@@ -19,15 +19,15 @@ from matplotlib.backends._backend_tk import NavigationToolbar2Tk as NavigationTo
 import matplotlib.pyplot as plt
 
 from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader
-from ToolTip_UI import ToolTip
-from Sequence_UI import Sequence_UI
-from DAQ_UI import DAQ_UI
+from UI_classes.ToolTip_UI import ToolTip
+from UI_classes.Sequence_UI import Sequence_UI
+from UI_classes.DAQ_UI import DAQ_UI
 from PIL import Image, ImageTk
+
 from classes.DAQ import DaqPlayException, DAQ_dio
-from ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
+from classes.ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
      AwgConfiguration, TdcConfiguration, Waveform, MotFluoresceConfiguration,\
      MotFluoresceConfigurationSweep
-
 from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment,\
     ExperimentalAutomationRunner,  MotFluoresceExperiment, GenericExperiment,\
     MotFluoresceSweepExperiment
