@@ -16,11 +16,8 @@ The below is not an exhaustive list and neglects most specfics, however it hopef
   - The data handling and an interface for custom sequences played on the DAQ cards to control a given experimental run are provided by [Sequence](Sequence.py) and [Sequence_UI](Sequence_UI.py).
   - Controlling all other aspects of the experimental run (automated staging of multiple experiments, data aquisition, on-the-fly analysis etc) are provided by the [ExperimentalRunner](ExperimentalRunner.py) and [Experimental_UI](Experimental_UI.py).
   - The camera used to view the experiment and take absorbition images of the atomic cloud is viewed through the [Camera_UI](Camera_UI.py).
-  - A simple text-window for writing, saving and loading a daily labbook is provided by [Labbook_UI](Labook_UI.py).  _This is not fancy but, take it from me, you'll be thankful you made those notes of what you were actually doing when it comes to writing everything up!_
-  - The [instruments](instruments) folder contains python wrappers to talk to various devices including:
-    - [Tarbor Electronics WX218x AWG](instruments/WX218x)
-    - [IC Imaging Control camera](instruments/pyicic)
-    - [qutools quTAU TDC](instruments/quTAU) 
-    - [ThorlabsPM100 powermeter](instruments/ThorlabsPM100)
-    - [TF930 frequency counter](instruments/TF930)
-    - Other instruments in this folder are not currently integrated with cold-control, however some work has been done on proving a wrapper for doing so and this is included.
+  - A simple text-window for writing, saving and loading a daily labbook is provided by [Labbook_UI](Labook_UI.py).  _This is not fancy but, takhowever some work has been done on proving a wrapper for doing so and this is included.
+  
+
+
+  testing adding new stuff to the readme to make a commit
