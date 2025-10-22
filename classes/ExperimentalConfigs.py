@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from classes.Sequence import Sequence
-from rabi_voltage_converter import RabiFreqVoltageConverter
+from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 def toBool(string):
     GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']

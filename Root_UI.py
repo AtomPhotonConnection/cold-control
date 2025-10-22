@@ -3,15 +3,17 @@
 import tkinter as tk
 from tkinter import messagebox as tkMessageBox
 import os
-import Styles
 import typing
 
-from DAQ_UI import DAQ_UI
-from Sequence_UI import Sequence_UI
-from Camera_UI import Camera_UI
-from Experimental_UI import Experimental_UI
-from Labbook_UI import Labbook_UI
+
+import classes.Styles as Styles
 from classes.Config import ConfigReader
+
+from UI_classes.DAQ_UI import DAQ_UI
+from UI_classes.Sequence_UI import Sequence_UI
+from UI_classes.Camera_UI import Camera_UI
+from UI_classes.Experimental_UI import Experimental_UI
+from UI_classes.Labbook_UI import Labbook_UI
 
 class ColdControl_UI(tk.Frame):
     '''

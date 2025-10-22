@@ -19,7 +19,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 
 from instruments.WX218x.WX218x_awg import Channel
 import lab_control_functions.calibration_functions as calibrate
-from rabi_voltage_converter import RabiFreqVoltageConverter
+from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 
 # general coefficients
