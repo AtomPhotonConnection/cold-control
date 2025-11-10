@@ -458,7 +458,7 @@ if __name__ == "__main__":
         IMG_WIDTH = 450e-6 # The width of the imaging pulse
         TARGET_TIME = 1.45e-3 # The expected time of the AWG marker
         TOLERANCE = 50e-6 # How far around the target time to check for the marker
-        MOT_DROP = 0.0145 # The level below which the fluorescence will drop after the MOT is turned off
+        MOT_DROP = 0.0203 # The level below which the fluorescence will drop after the MOT is turned off
         MOT_DROP_TIME = 590e-6 # The expected time of the MOT drop, when the MOT is turned off
         T_RISE = 1.61e-3
 
