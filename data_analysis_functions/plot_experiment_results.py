@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 import numpy as np
 
+
+DATA_CH = 3  # Channel to plot (e.g., fluorescence channel)
+
 def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     """
     Plot all iterations in grey and the averaged shot in color.
@@ -23,7 +26,7 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     plt.figure(figsize=(10, 6))
     for file in files:
         df = pd.read_csv(file)
-        plt.plot(df["Time (s)"], df["Channel 4 Voltage (V)"].rolling(window=64).mean(),
+        plt.plot(df["Time (s)"], df[f"Channel {DATA_CH} Voltage (V)"].rolling(window=64).mean(),
                  color='gray', alpha=0.3, label='Individual Shots' if file == files[0] else None)
 
     if suffix == '_aligned.csv':
@@ -34,10 +37,10 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     # Plot the averaged CSV
     if avg_file.exists():
         avg_df = pd.read_csv(avg_file)
-        plt.plot(avg_df["Time (s)"]+time_correction, avg_df["Channel 4 Voltage (V)"], color='blue', label=f'{suffix[1:-4]}')
+        plt.plot(avg_df["Time (s)"]+time_correction, avg_df[f"Channel {DATA_CH} Voltage (V)"], color='blue', label=f'{suffix[1:-4]}')
 
     plt.xlabel("Time (s)")
-    plt.ylabel("Channel 4 Voltage (V)")
+    plt.ylabel(f"Channel {DATA_CH} Voltage (V)")
     plt.title(f"Averaged and Individual Shots: {shot_path.name}")
     plt.legend()
     plt.tight_layout()

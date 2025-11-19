@@ -586,7 +586,7 @@ if __name__ == "__main__":
         # Initialize processor with optional rolling average (e.g., 5-point window)
         processor = ExperimentalDataProcessor(
             marker_channel=2, 
-            fluorescence_channel=4,
+            fluorescence_channel=3,
             rolling_window=64  # Apply rolling average to reduce noise
         )
 

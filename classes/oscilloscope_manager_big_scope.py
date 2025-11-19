@@ -177,8 +177,8 @@ class OscilloscopeManager:
         # Set the trigger level and slope
         self.scope.write(":TRIGGER:SWEEP TRIGGERED")
         self.scope.write(":TRIGGER:MODE EDGE")
-        self.scope.write(f":TRIGGER:EDGE:SOURCE CHANNEL{trigger_channel}")
-        self.scope.write(f":TRIGGER:EDGE:LEVEL {trigger_level}")
+        self.scope.write(f":TRIGger:LEVel CHANnel{trigger_channel}, {trigger_level}")
+        print(self.scope.query(f":TRIGger:LEVel? CHANnel{trigger_channel}"))
         
         if trigger_slope == "+":
             self.scope.write(":TRIGGER:EDGE:SLOPE POSITIVE")
@@ -267,14 +267,15 @@ class OscilloscopeManager:
             print(f"Collecting data from channel {channel}...")
             errors = self.scope.query('SYSTem:ERRor?')  # Check for errors
             print(f"Errors: {errors.strip()}")  # Print any errors that might have occurred
-            preamble = self.scope.query('WAVEFORM:PREAMBLE?')  # Get preamble information
+            #preamble = self.scope.query('WAVEFORM:PREAMBLE?')  # Get preamble information
             opc = self.scope.query('*OPC?')  # Wait for operation complete
             if opc.strip() != '1':
                 raise RuntimeError(f"Operation did not complete successfully. OPC returned: {opc.strip()}")
-            print(f"Preamble info: {preamble}")
-            y_incr = float(self.scope.query('WAVEFORM:YINCREMENT?'))
-            y_orig = float(self.scope.query('WAVEFORM:YORIGIN?'))
-            y_data = self.scope.query_binary_values('WAVEFORM:DATA?', datatype='H', container=np.array, is_big_endian=False)
+            #print(f"Preamble info: {preamble}")
+            y_incr = float(self.scope.query('WAVeform:YINCrement?'))
+            y_orig = float(self.scope.query('WAVeform:YORigin?'))
+            self.scope.write(":WAVeform:STReaming OFF")
+            y_data = self.scope.query_binary_values('WAVeform:DATA?', datatype='H', container=np.array, is_big_endian=False)
             y_data = y_data * y_incr + y_orig
 
             if len(y_data) == 0:
@@ -283,9 +284,9 @@ class OscilloscopeManager:
 
             if collected_data is None:
                 print("collecting time data")
-                x_incr = float(self.scope.query('WAVEFORM:XINCREMENT?'))
-                x_orig = float(self.scope.query('WAVEFORM:XORIGIN?'))
-                num_points = int(self.scope.query('WAVEFORM:POINTS?'))
+                x_incr = float(self.scope.query('WAVeform:XINCrement?'))
+                x_orig = float(self.scope.query('WAVeform:XORigin?'))
+                num_points = int(self.scope.query('WAVeform:POINts?'))
                 time_data = np.linspace(x_orig, x_orig + x_incr * (num_points - 1), num_points)
                 collected_data = pd.DataFrame({'Time (s)': time_data})
             
@@ -347,11 +348,13 @@ class OscilloscopeManager:
     
 
     def arm_scope(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
+        self.scope.query(":AER?")  # clear the AER register
         self.scope.write(':SINGLE')                                # arm single acquisition
         end = time.perf_counter() + max_acq_wait_sec
         while time.perf_counter() < end:
             try:
                 if int(self.scope.query(':AER?')) == 1:            # Trigger Armed Event Register
+                    print("Oscilloscope armed successfully.")
                     return True
             except Exception:
                 break
@@ -361,12 +364,22 @@ class OscilloscopeManager:
 
     def wait_for_acquisition(self, max_acq_wait_sec=1, poll_interval_sec=0.01):
         end = time.perf_counter() + max_acq_wait_sec
+        ready = [False, False]
         while time.perf_counter() < end:
+            ter = self.scope.query(':TER?').strip()
+            oper = self.scope.query(':OPER?').strip()
+            rstate = self.scope.query(':RSTATE?').strip()
+            pder = self.scope.query(':PDER?').strip()
+            #print(f"ter: {ter}, oper: {oper}, rstate: {rstate}, pder: {pder}")
             try:
-                # ACQuire:COMPlete? == 100 and run state STOP are good indicators; TER? shows a trigger occurred
-                if int(self.scope.query(':ACQuire:COMPlete?')) == 100 and \
-                self.scope.query(':RSTATE?').strip().upper() == 'STOP' and \
-                int(self.scope.query(':TER?')) != 0:
+                if int(ter) != 0:
+                    print("Trigger Event occurred")
+                    ready[0] = True
+                if rstate.upper() == 'STOP' and int(oper) == 2 and int(pder) == 1:
+                    print("Other conditions met")
+                    ready[1] = True
+                if ready[0] and ready[1]:
+                    print("Success")
                     return True
             except Exception:
                 break
