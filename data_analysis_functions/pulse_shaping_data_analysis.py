@@ -131,7 +131,8 @@ class ExperimentalDataProcessor:
                          marker_time_range: Optional[Tuple[float, float]] = None,
                          fluor_drop_voltage: Optional[float] = None,
                          fluor_drop_time_range: Optional[Tuple[float, float]] = None,
-                         output_path: Optional[Path] = None) -> pd.DataFrame:
+                         output_path: Optional[Path] = None,
+                         validate_data: bool = True) -> pd.DataFrame:
         """
         Average all valid CSV files from a shot folder.
         
@@ -150,7 +151,9 @@ class ExperimentalDataProcessor:
         # Filter valid data
         valid_dfs = []
         for df in dataframes:
-            if self.validate_data(df, marker_time_range, fluor_drop_voltage, fluor_drop_time_range):
+            if not validate_data:
+                valid_dfs.append(df)
+            elif self.validate_data(df, marker_time_range, fluor_drop_voltage, fluor_drop_time_range):
                 valid_dfs.append(df)
         
         if len(valid_dfs) == 0:
@@ -284,7 +287,8 @@ class ExperimentalDataProcessor:
     
     def calculate_channel4_metrics(self, df: pd.DataFrame,
                                  background_time_range: Tuple[float, float],
-                                 integration_time_range: Tuple[float, float]) -> Dict:
+                                 integration_time_range: Tuple[float, float],
+                                 subtract_int_from_background: bool=False) -> Dict:
         """
         Calculate average and integral of channel 4 with uncertainty.
         
@@ -306,7 +310,12 @@ class ExperimentalDataProcessor:
         channel4_data = np.asarray(df[channel4_col].values)
         
         # Calculate background average and std
-        bg_mask = (time_data >= background_time_range[0]) & (time_data <= background_time_range[1])
+        if not subtract_int_from_background:
+            bg_mask = (time_data >= background_time_range[0]) & (time_data <= background_time_range[1])
+        elif subtract_int_from_background:
+            bg_mask = ((time_data >= background_time_range[0]) & (time_data <= background_time_range[1]) &
+                       ~((time_data >= integration_time_range[0]) & (time_data <= integration_time_range[1])))
+        
         background_data = channel4_data[bg_mask]
         bg_average = np.mean(background_data)
         bg_std = np.std(background_data)
@@ -341,7 +350,8 @@ class ExperimentalDataProcessor:
                               integration_time_range: Tuple[float, float] = (2, 3),
                               save_averaged_csvs: bool = True,
                               use_alignment: bool = False,
-                              alignment_params: Optional[Dict] = None) -> pd.DataFrame:
+                              alignment_params: Optional[Dict] = None,
+                              _validate_data: bool = True) -> pd.DataFrame:
         """
         Process all experiments in the root folder.
         
@@ -407,7 +417,8 @@ class ExperimentalDataProcessor:
                             marker_time_range, 
                             fluor_drop_voltage,
                             fluor_drop_time_range,
-                            output_path
+                            output_path,
+                            validate_data=_validate_data
                         )
                     
                     # Calculate channel 4 metrics
@@ -443,14 +454,139 @@ class ExperimentalDataProcessor:
         print(f"\nSummary saved to: {summary_path}")
         
         return summary_df
+    
+
+    def process_img_sweep_expts(self, root_folder: Path,
+                                marker_time_range: Optional[Tuple[float, float]] = None,
+                                fluor_drop_voltage: Optional[float] = None,
+                                fluor_drop_time_range: Optional[Tuple[float, float]] = None,
+                                save_averaged_csvs: bool = True,
+                                use_alignment: bool = True,
+                                alignment_params: Optional[Dict] = None) -> pd.DataFrame:
+        
+        """
+        Process all experiments in the root folder.
+        
+        Args:
+            root_folder: Path to root experimental folder
+            marker_time_range: Time range for valid marker pulse (voltage drop)
+            fluor_drop_voltage: Voltage threshold for fluorescence drop
+            fluor_drop_time_range: Time range for valid fluorescence drop
+            background_time_range: Time range for background calculation
+            integration_time_range: Time range for integration
+            save_averaged_csvs: Whether to save averaged CSV files
+            use_alignment: Whether to use time-aligned averaging
+            alignment_params: Parameters for alignment (time_before_drop, time_after_drop, num_points)
+            
+        Returns:
+            DataFrame with summary results for all experiments
+        """
+        if alignment_params is None:
+            alignment_params = {
+                'time_before_drop': 1.1e-3,
+                'time_after_drop': 4e-3,
+                'num_points': 50000
+            }
+        root_path = Path(root_folder)
+        results = []
+        
+        # Iterate through parameter folders
+        for param_folder in root_path.iterdir():
+            if not param_folder.is_dir():
+                continue
+                
+            print(f"Processing parameter folder: {param_folder.name}")
+            img_start_time = param_folder.name[4:-2]  # Extract timing info from folder name
+            print(f"  Image pulse start time: {img_start_time} us")
+            img_start_time = float(img_start_time)*1e-6  # Convert to seconds
+            img_start_time -= 14500e-6 # Scope trigger timing offset
+
+            new_integration_time_range = (img_start_time-590e-6, img_start_time + 500e-6-590e-6)
+            print(f"  New integration time range: {new_integration_time_range[0]:.6f} to {new_integration_time_range[1]:.6f} seconds")
+
+            new_background_time_range = (0.7e-3-590e-6, 3.7e-3-590e-6)  # Fixed background range
+
+            # Iterate through shot folders
+            for shot_folder in param_folder.iterdir():
+                if not shot_folder.is_dir() or not shot_folder.name.startswith('shot'):
+                    continue
+                
+                try:
+                    print(f"  Processing {shot_folder.name}")
+                    
+                    # Average the shot data
+                    output_path = None
+                    if save_averaged_csvs:
+                        suffix = "_aligned" if use_alignment else "_averaged"
+                        output_path = shot_folder / f"{shot_folder.name}{suffix}.csv"
+                    
+                    if use_alignment:
+                        if fluor_drop_voltage is None:
+                            raise ValueError("fluor_drop_voltage must be specified for alignment")
+                        
+                        averaged_df = self.average_shot_data_aligned(
+                            str(shot_folder),
+                            fluor_drop_voltage,
+                            marker_time_range,
+                            fluor_drop_time_range,
+                            output_path=output_path,
+                            **alignment_params
+                        )
+                    else:
+                        averaged_df = self.average_shot_data(
+                            str(shot_folder), 
+                            marker_time_range, 
+                            fluor_drop_voltage,
+                            fluor_drop_time_range,
+                            output_path
+                        )
+                    
+                    # Calculate channel 4 metrics
+                    metrics = self.calculate_channel4_metrics(
+                        averaged_df,
+                        new_background_time_range,
+                        new_integration_time_range,
+                        subtract_int_from_background=True
+                    )
+                    
+                    # Store results
+                    result = {
+                        'parameter_folder': param_folder.name,
+                        'shot_folder': shot_folder.name,
+                        'shot_path': str(shot_folder),
+                        **metrics
+                    }
+                    results.append(result)
+                    
+                except Exception as e:
+                    print(f"    Error processing {shot_folder.name}: {e}")
+                    continue
+        
+        # Create summary DataFrame
+        summary_df = pd.DataFrame(results)
+        
+        # Save summary
+        if use_alignment:
+            summary_path = root_path / "experiment_summary_aligned.csv"
+        else:
+            summary_path = root_path / "experiment_summary_averaged.csv"
+
+        summary_df.to_csv(summary_path, index=False)
+        print(f"\nSummary saved to: {summary_path}")
+        
+        return summary_df
+        
 
 # Example usage
 if __name__ == "__main__":
     while True:
+
+        timing_sweep = False  # THIS CONTROLS WHETHER THE TIMING OF THE IMAGING PULSE IS SWEPT OR NOT
+
         # Initialize processor with optional rolling average (e.g., 5-point window)
         processor = ExperimentalDataProcessor(
             marker_channel=2, 
-            fluorescence_channel=4,
+            fluorescence_channel=3,
             rolling_window=64  # Apply rolling average to reduce noise
         )
 
@@ -458,7 +594,7 @@ if __name__ == "__main__":
         IMG_WIDTH = 450e-6 # The width of the imaging pulse
         TARGET_TIME = 1.45e-3 # The expected time of the AWG marker
         TOLERANCE = 50e-6 # How far around the target time to check for the marker
-        MOT_DROP = 0.0145 # The level below which the fluorescence will drop after the MOT is turned off
+        MOT_DROP = 0.0195 # The level below which the fluorescence will drop after the MOT is turned off
         MOT_DROP_TIME = 590e-6 # The expected time of the MOT drop, when the MOT is turned off
         T_RISE = 1.61e-3
 
@@ -479,42 +615,81 @@ if __name__ == "__main__":
         background_time_range = (T_RISE+IMG_WIDTH+10e-6, 1)  # Time range for background calculation
         
         # Process all experiments with standard averaging
-        try:
-            summary_standard = processor.process_all_experiments(
-                root_folder=root_folder,
-                marker_time_range=marker_time_range,
-                fluor_drop_voltage=fluor_drop_voltage,
-                fluor_drop_time_range=fluor_drop_time_range,
-                background_time_range=background_time_range,
-                integration_time_range=integration_time_range,
-                save_averaged_csvs=True,
-                use_alignment=False
-            )
-            
-            print("Standard averaging complete!")
-            def adjust_time(timings, offset):
-                return tuple(np.subtract(timings, (offset, offset)))
-            
-            # Process with time alignment
-            summary_aligned = processor.process_all_experiments(
-                root_folder=root_folder,
-                marker_time_range=adjust_time(marker_time_range, MOT_DROP_TIME),
-                fluor_drop_voltage=fluor_drop_voltage,
-                fluor_drop_time_range=adjust_time(fluor_drop_time_range, MOT_DROP_TIME),
-                background_time_range=adjust_time(background_time_range, MOT_DROP_TIME),  # Background after drop
-                integration_time_range=adjust_time(integration_time_range, MOT_DROP_TIME),   # Integration after drop
-                save_averaged_csvs=True,
-                use_alignment=True,
-                alignment_params={
-                    'time_before_drop': 1.0e-3,  # 1.1ms before drop
-                    'time_after_drop': 3.5e-3,   # 1.8ms after drop
-                    'num_points': 50000          # High resolution
-                }
-            )
-            
-            print("Time-aligned averaging complete!")
-            print(f"Processed {len(summary_aligned)} shots total")
-            
-        except Exception as e:
-            print(f"Error: {e}")
-            print("Please check your file paths and parameters.")
+        if timing_sweep:
+            try:
+                summary_standard = processor.process_img_sweep_expts(
+                    root_folder=root_folder,
+                    marker_time_range=marker_time_range,
+                    fluor_drop_voltage=fluor_drop_voltage,
+                    fluor_drop_time_range=fluor_drop_time_range,
+                    save_averaged_csvs=True,
+                    use_alignment=False
+                )
+                
+                # print("Standard averaging complete!")
+                def adjust_time(timings, offset):
+                    return tuple(np.subtract(timings, (offset, offset)))
+                
+                # Process with time alignment
+                summary_aligned = processor.process_img_sweep_expts(
+                    root_folder=root_folder,
+                    marker_time_range=adjust_time(marker_time_range, MOT_DROP_TIME),
+                    fluor_drop_voltage=fluor_drop_voltage,
+                    fluor_drop_time_range=adjust_time(fluor_drop_time_range, MOT_DROP_TIME),
+                    save_averaged_csvs=True,
+                    use_alignment=True,
+                    alignment_params={
+                        'time_before_drop': 1.0e-3,  # 1.1ms before drop
+                        'time_after_drop': 3.5e-3,   # 1.8ms after drop
+                        'num_points': 50000          # High resolution
+                    }
+                )
+                
+                print("Time-aligned averaging complete!")
+                print(f"Processed {len(summary_aligned)} shots total")
+                
+            except Exception as e:
+                print(f"Error: {e}")
+                print("Please check your file paths and parameters.")
+
+        else:
+            try:
+                summary_standard = processor.process_all_experiments(
+                    root_folder=root_folder,
+                    marker_time_range=marker_time_range,
+                    fluor_drop_voltage=fluor_drop_voltage,
+                    fluor_drop_time_range=fluor_drop_time_range,
+                    background_time_range=background_time_range,
+                    integration_time_range=integration_time_range,
+                    save_averaged_csvs=True,
+                    use_alignment=False,
+                    _validate_data=False
+                )
+                
+                # print("Standard averaging complete!")
+                def adjust_time(timings, offset):
+                    return tuple(np.subtract(timings, (offset, offset)))
+                
+                # Process with time alignment
+                summary_aligned = processor.process_all_experiments(
+                    root_folder=root_folder,
+                    marker_time_range=adjust_time(marker_time_range, MOT_DROP_TIME),
+                    fluor_drop_voltage=fluor_drop_voltage,
+                    fluor_drop_time_range=adjust_time(fluor_drop_time_range, MOT_DROP_TIME),
+                    background_time_range=adjust_time(background_time_range, MOT_DROP_TIME),  # Background after drop
+                    integration_time_range=adjust_time(integration_time_range, MOT_DROP_TIME),   # Integration after drop
+                    save_averaged_csvs=True,
+                    use_alignment=True,
+                    alignment_params={
+                        'time_before_drop': 1.0e-3,  # 1.1ms before drop
+                        'time_after_drop': 3.5e-3,   # 1.8ms after drop
+                        'num_points': 50000          # High resolution
+                    }
+                )
+                
+                print("Time-aligned averaging complete!")
+                print(f"Processed {len(summary_aligned)} shots total")
+                
+            except Exception as e:
+                print(f"Error: {e}")
+                print("Please check your file paths and parameters.")

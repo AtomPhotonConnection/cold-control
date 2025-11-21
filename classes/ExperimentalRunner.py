@@ -28,7 +28,7 @@ import collections
 import pandas as pd
 import _tkinter
 from typing import List, Tuple, Dict, Any
-import classes.oscilloscope_manager as osc
+import classes.oscilloscope_manager_big_scope as osc
 import pyvisa
 from configobj import ConfigObj
 from numpy import trapz
