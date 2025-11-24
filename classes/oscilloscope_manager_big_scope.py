@@ -176,7 +176,16 @@ class OscilloscopeManager:
         """
         # Set the trigger level and slope
         self.scope.write(":TRIGGER:SWEEP TRIGGERED")
+
+        # try window triggering to improve reliability
+        # print(self.scope.query("TRIGger:WINDow:CONDition?"))
+        # self.scope.write(":TRIGGER:MODE WINDOW")
+        # self.scope.write(":TRIGger:WINDow:CONDition EXIT")
+        # self.scope.write(f":TRIGger:WINDow:SOURce CHANnel{trigger_channel}")
+
+
         self.scope.write(":TRIGGER:MODE EDGE")
+        self.scope.write(f":TRIGger:LEVel EXT,{trigger_level}")
         self.scope.write(f":TRIGger:LEVel CHANnel{trigger_channel}, {trigger_level}")
         print(self.scope.query(f":TRIGger:LEVel? CHANnel{trigger_channel}"))
         
@@ -370,7 +379,7 @@ class OscilloscopeManager:
             oper = self.scope.query(':OPER?').strip()
             rstate = self.scope.query(':RSTATE?').strip()
             pder = self.scope.query(':PDER?').strip()
-            #print(f"ter: {ter}, oper: {oper}, rstate: {rstate}, pder: {pder}")
+            print(f"ter: {ter}, oper: {oper}, rstate: {rstate}, pder: {pder}")
             try:
                 if int(ter) != 0:
                     print("Trigger Event occurred")
