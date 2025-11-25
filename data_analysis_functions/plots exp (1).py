@@ -60,6 +60,7 @@ def calculate_integrals_single_trace(data, i=0):
         below = ch2 < MARKER_DROP
         if not below.any():
             print("Channel 2 never drops below {MARKER_DROP} V")
+            drop_time = None
         else:
             drop_index = below.idxmax()
             drop_time = time[drop_index]
@@ -103,18 +104,21 @@ def calculate_integrals_single_trace(data, i=0):
 
 
         # only consider the result if the timing of the awg marker is correct
-        if abs(drop_time - TARGET_TIME) <= TOLERANCE:
-            print("The drop time is close enough to the expected time")
-        
-            if area is not None and not np.isnan(area):
-                processed_df[f'Time (s) {i}'] = data['Time (s)']
-                processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
-                processed_df[f'Channel 4 Voltage (V) {i}'] = data['Channel 4 Voltage (V)']
-                processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
+        if drop_time is not None:
+            if abs(drop_time - TARGET_TIME) <= TOLERANCE:
+                print("The drop time is close enough to the expected time")
+            
+                if area is not None and not np.isnan(area):
+                    processed_df[f'Time (s) {i}'] = data['Time (s)']
+                    processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
+                    processed_df[f'Channel 4 Voltage (V) {i}'] = data['Channel 4 Voltage (V)']
+                    processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
 
-            print(f"Average background: {average}, Integrated area: {area}\n")
+                print(f"Average background: {average}, Integrated area: {area}\n")
 
-            return (area, average, processed_df)
+                return (area, average, processed_df)
+            else:
+                return (area, average, None)
         else:
             return (area, average, None)
 
@@ -245,15 +249,15 @@ def plot_shot_results(folder_path):
         ax1.set_ylabel('Channel 4 Voltage (V)', color='tab:blue')
         ax1.tick_params(axis='y', labelcolor='tab:blue')
 
-        ax2 = ax1.twinx()
-        ax2.plot(time, ch2, label='CH2 (marker)', color='tab:orange')
-        ax2.set_ylabel('Channel 2 Voltage (V)', color='tab:orange')
-        ax2.tick_params(axis='y', labelcolor='tab:orange')
+        # ax2 = ax1.twinx()
+        # ax2.plot(time, ch2, label='CH2 (marker)', color='tab:orange')
+        # ax2.set_ylabel('Channel 2 Voltage (V)', color='tab:orange')
+        # ax2.tick_params(axis='y', labelcolor='tab:orange')
 
         # Combinar leyendas de ambos ejes
         lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+        #lines2, labels2 = ax2.get_legend_handles_labels()
+        #ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
         plt.title('Detecting rise and fall of imaging beam with CH2 Marker')
         plt.tight_layout()

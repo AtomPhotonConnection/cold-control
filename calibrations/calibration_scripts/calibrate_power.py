@@ -19,7 +19,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 
 from instruments.WX218x.WX218x_awg import Channel
 import lab_control_functions.calibration_functions as calibrate
-from rabi_voltage_converter import RabiFreqVoltageConverter
+from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 
 # general coefficients
@@ -79,6 +79,7 @@ def laserpower_to_rabi(power, d, cg, beam_waist):
 
 def default_calib(calib_tuples):
     results_dict = {}
+    rab_results = []
 
     for channel, pulse, freq in calib_tuples:
 
@@ -114,8 +115,8 @@ def default_calib(calib_tuples):
                                                             [freq],
                                                             target_power_d2,
                                                             awg_channels_dict[channel],
-                                                            n_steps = 75,
-                                                            repeats=3,
+                                                            n_steps = 30,
+                                                            repeats=5,
                                                             delay=0.3,
                                                             calibration_lims = (0.1,0.25),
                                                             save_all=True,
@@ -153,17 +154,27 @@ def default_calib(calib_tuples):
 
         print("Instantiating RabiFreqVoltageConverter...")
         converter = RabiFreqVoltageConverter(output_file)
-        converter.get_rabi_limits(print_info=True)
+        rab_max, rab_min = converter.get_rabi_limits(print_info=True)
+        rab_results.append((channel, freq, rab_max, rab_min))
+
+    # Print summary of Rabi frequency ranges
+    print("\n\nRabi Frequency Ranges Summary:")
+    for channel, freq, rab_max, rab_min in rab_results:
+        print(f"Channel {channel}, Frequency {freq} MHz: Rabi Frequency Range = {rab_min:.2f} MHz to {rab_max:.2f} MHz")
+
 
 
 
 
 
 calib_tuples = [
-    (1, "pump", 126),
-    #(1, "pump", 116),
-    (2, "stokes", 80),
-    #(2, "stokes", 70)
+    #(1, "pump", 123),
+    (1, "pump", 124),
+    # (1, "pump", 125),
+    # (1, "pump", 127),
+    # (2, "stokes", 80),
+    # (2, "stokes", 79),
+    # (2, "stokes", 81)
 ]
 
 using_flip_mirror = True
