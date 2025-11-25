@@ -120,7 +120,8 @@ def default_calib(calib_tuples):
                                                             delay=0.3,
                                                             calibration_lims = (0.1,0.25),
                                                             save_all=True,
-                                                            results_dict=results_dict)
+                                                            results_dict=results_dict,
+                                                            flip_mirror=using_flip_mirror)
         
         if results_dict is None:
             raise ValueError("results_dict returned from finding_amplitude_from_power is None.")
@@ -196,6 +197,8 @@ if __name__ == "__main__":
         experiment = ""
 
     if experiment == "":
+        if using_flip_mirror:
+            input("is the flip mirror in the beam path?")
         default_calib(calib_tuples)
 
 

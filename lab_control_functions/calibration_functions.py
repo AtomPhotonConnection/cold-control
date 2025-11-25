@@ -477,7 +477,6 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
         calibration_lims (tuple) - limits of the calibration
     """
     if flip_mirror:
-        print("Is the flip mirror in the beam path?")
         def compensate_for_flip(power):
             """Compensate for the power measurement located after the flip mirror rather than
             at the target."""
