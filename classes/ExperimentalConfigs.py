@@ -9,6 +9,7 @@ created: 2025-05-30
 
 """
 from __future__ import annotations
+import shutil
 import numpy as np
 import threading
 import csv
@@ -216,6 +217,11 @@ class MotFluoresceConfigurationSweep:
 
 
     def __iter__(self):
+        """
+        When iterating over the object it returns a tuple containing a MOTFluoresceConfiguration
+        object and the associated Sequence object. These can then be used to run a single shot
+        of the sweep.
+        """
         return iter(zip(self.configs, self.sequences))
 
     def __len__(self):
@@ -224,7 +230,19 @@ class MotFluoresceConfigurationSweep:
 
     def __configure_awg_sweep(self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
                               calib_paths, all_sweeps):
-
+        """
+        Creates the list of MOTFluoresceConfiguration objects and Sequence objects for each
+        of the different experiments to be run by the sweep. This function changes the 
+        MOTFluoresceConfiguration objects so that the AWG configs are different, allowing
+        for experiments with different pulse shapes.
+        """
+        
+        # Delete the temp folder and its contents if it exists, then recreate it
+        temp_root = "temp"
+        if os.path.exists(temp_root):
+            shutil.rmtree(temp_root)
+        os.makedirs(temp_root, exist_ok=True)
+        
         for shot in range(self.num_shots):
             for sweep_dict in all_sweeps:
                 sweep_title = sweep_dict["title"]
@@ -240,12 +258,16 @@ class MotFluoresceConfigurationSweep:
                         # This means the pulse shouldn't be changed
                         new_paths[idx] = waves[j]  # No rescaling needed
                     else:
-                        calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
-                        rabi_converter = RabiFreqVoltageConverter(calib_path)
                         pulse_path = f"temp/{sweep_title}/{idx}.csv"
-                        os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
-                        rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
-                                                    pulse_path, normalised=False)
+                        
+                        if not os.path.exists(pulse_path):
+                            os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
+                            calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
+                            rabi_converter = RabiFreqVoltageConverter(calib_path)
+                        
+                            rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
+                                                        pulse_path, normalised=False)
+                        
                         new_paths[idx] = pulse_path
 
                 # Clone and modify base configuration
