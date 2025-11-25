@@ -1138,6 +1138,9 @@ class DAQ_dio:
                 '(Technical details: port {3},  line {4}).').\
                     format(direction, self.dio_num, 'HIGH' if self.enabled_state==1 else 'LOW', self.port, self.line)
     
+    def get_state(self):
+        return self.read()
+    
 class DAQ_card(DAQ2502):
     '''A subclass of DAQ2502 to extend it's functionality to be more user friendly.  In particular the conversion of
     sequences from a user friendly format (arrays of voltages on channel in numeric order) to the form expected by the
