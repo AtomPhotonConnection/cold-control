@@ -4,6 +4,7 @@
 .settings
 *.pyc
 .idea
+.conda
 
 labbook/**
 
