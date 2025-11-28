@@ -21,6 +21,17 @@ class RabiFreqVoltageConverter:
         # Load data
         self.df = pd.read_csv(csv_path)
         self.data_dir = os.path.dirname(os.path.abspath(csv_path))
+        path = os.path.normpath(csv_path)
+
+        # Split into components
+        parts = path.split(os.sep)
+
+        # Get the two parent folders before the file name
+        #   parts[-1] = filename
+        #   parts[-2] = direct parent
+        #   parts[-3] = grandparent
+        parent_two = parts[-3:-1]
+        print(f"Loaded calibration for: {'/'.join(parent_two)}")
 
         # Extract amplitude (x) and Rabi frequency (y)
         self.x = self.df['amplitude_cal'].values

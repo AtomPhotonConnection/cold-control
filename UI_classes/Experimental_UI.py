@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox as tkMessageBox
 import math
+from typing import List
 # import matlab.engine
 import numpy as np
 import copy
@@ -321,6 +322,12 @@ class Experimental_UI(tk.LabelFrame):
         for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
             if state:
                 button.invoke()
+
+        # If the flip mirror is up, warn the user
+        dios:List[DAQ_dio] = sorted(self.daq_ui.daq_controller.getDIOs())
+        if dios[0].get_state() == 0:
+            tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
+            return
                 
         fname = tkFileDialog.askopenfilename(master=self, title="Choose an MOT Fluoresce Sweep Configuration",
                                              initialdir=os.path.join(os.getcwd(),"/configs/pulse_shaping_expt/sweeps/"))

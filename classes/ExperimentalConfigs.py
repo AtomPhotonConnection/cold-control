@@ -9,6 +9,7 @@ created: 2025-05-30
 
 """
 from __future__ import annotations
+import shutil
 import numpy as np
 import threading
 import csv
@@ -18,6 +19,7 @@ from typing import List, Tuple, Dict, Any
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+from itertools import product
 
 from classes.Sequence import Sequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
@@ -202,8 +204,10 @@ class MotFluoresceConfigurationSweep:
             # all these parameters need to be extracted from the config file
             _beam_powers: List[float] = self.sweep_params["beam_powers"]
             _beam_frequencies: List[float] = self.sweep_params["beam_frequencies"]
-            _pulse_lengths: List[float] = self.sweep_params["pulse_lengths"]
-            self.__configure_imaging_sweep(_beam_powers, _beam_frequencies, _pulse_lengths)
+            _pulse_lengths: List[int] = self.sweep_params["pulse_lengths"]
+            _pulse_times: List[int] = self.sweep_params["pulse_times"]
+            self.__configure_imaging_sweep(_beam_powers, _beam_frequencies, _pulse_lengths,
+                                            _pulse_times)
 
         else:
             raise ValueError("Sweep type not supported")
@@ -213,6 +217,11 @@ class MotFluoresceConfigurationSweep:
 
 
     def __iter__(self):
+        """
+        When iterating over the object it returns a tuple containing a MOTFluoresceConfiguration
+        object and the associated Sequence object. These can then be used to run a single shot
+        of the sweep.
+        """
         return iter(zip(self.configs, self.sequences))
 
     def __len__(self):
@@ -221,7 +230,19 @@ class MotFluoresceConfigurationSweep:
 
     def __configure_awg_sweep(self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
                               calib_paths, all_sweeps):
-
+        """
+        Creates the list of MOTFluoresceConfiguration objects and Sequence objects for each
+        of the different experiments to be run by the sweep. This function changes the 
+        MOTFluoresceConfiguration objects so that the AWG configs are different, allowing
+        for experiments with different pulse shapes.
+        """
+        
+        # Delete the temp folder and its contents if it exists, then recreate it
+        temp_root = "temp"
+        if os.path.exists(temp_root):
+            shutil.rmtree(temp_root)
+        os.makedirs(temp_root, exist_ok=True)
+        
         for shot in range(self.num_shots):
             for sweep_dict in all_sweeps:
                 sweep_title = sweep_dict["title"]
@@ -237,12 +258,16 @@ class MotFluoresceConfigurationSweep:
                         # This means the pulse shouldn't be changed
                         new_paths[idx] = waves[j]  # No rescaling needed
                     else:
-                        calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
-                        rabi_converter = RabiFreqVoltageConverter(calib_path)
                         pulse_path = f"temp/{sweep_title}/{idx}.csv"
-                        os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
-                        rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
-                                                    pulse_path, normalised=False)
+                        
+                        if not os.path.exists(pulse_path):
+                            os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
+                            calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
+                            rabi_converter = RabiFreqVoltageConverter(calib_path)
+                        
+                            rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
+                                                        pulse_path, normalised=False)
+                        
                         new_paths[idx] = pulse_path
 
                 # Clone and modify base configuration
@@ -276,50 +301,72 @@ class MotFluoresceConfigurationSweep:
                 self.configs.append(new_config)
                 self.sequences.append(new_sequence)
 
-    def __configure_imaging_sweep(self, beam_powers, beam_frequencies, pulse_lengths):
+    def __configure_imaging_sweep(self, beam_powers, beam_frequencies, pulse_lengths, pulse_times):
+        to_sweep = []
+        if len(beam_powers) > 1:
+            to_sweep.append("beam_powers")
+        if len(beam_frequencies) > 1:
+            to_sweep.append("beam_frequencies")
+        if len(pulse_lengths) > 1:
+            to_sweep.append("pulse_lengths")
+        if len(pulse_times) > 1:
+            to_sweep.append("pulse_times")
+        print(f"Sweeping over the following parameters: {to_sweep}")
+
         for i in range(self.num_shots):
-            for power in beam_powers:
-                for freq in beam_frequencies:
-                    for length in pulse_lengths:
-                        # Clone and modify the base sequence and config
-                        new_config = deepcopy(self.base_config)
-                        new_sequence = deepcopy(self.base_sequence)
+            for power, freq, length, time in product(beam_powers, beam_frequencies,\
+                                                     pulse_lengths, pulse_times):
+                # Clone and modify the base sequence and config
+                new_config = deepcopy(self.base_config)
+                new_sequence = deepcopy(self.base_sequence)
+                
+                # Create unique filename suffix based on swept parameters
+                file_text = ""
+                for param in to_sweep:
+                    if param == "beam_powers":
+                        file_text += f"power{power:.2f}V_"
+                    elif param == "beam_frequencies":
+                        file_text += f"freq{freq:.2f}V_"
+                    elif param == "pulse_lengths":
+                        file_text += f"length{length}us_"
+                    elif param == "pulse_times":
+                        file_text += f"time{time}us_"
 
-                        # Modify save location to easily manage data
-                        new_config.save_location = os.path.join(
-                            self.base_config.save_location,
-                            self.current_date,
-                            self.current_time,
-                            f"swept_{power:.2f}V_{freq:.2f}V_{length}us",
-                            f"shot{i}"
-                        )
+                # Modify save location to easily manage data
+                new_config.save_location = os.path.join(
+                    self.base_config.save_location,
+                    self.current_date,
+                    self.current_time,
+                    file_text.rstrip('_'),
+                    f"shot{i}"
+                )
 
-                        # Modifies the sequence
-                        freq_ch = 2 # These values shouldn't be hardcoded
-                        power_ch = 6
-                        new_sequence.updateChannel(freq_ch, [(0, freq),], [0,])
-                        tv_pairs = list(new_sequence.get_tV_pairs(power_ch))
-                        print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
-                        #HACK to change the correct power value and pulse length
-                        img_start_tv = tv_pairs[2]# This is a tuple representing a time voltage pair
-                        img_end_tv = tv_pairs[3]
-                        new_start_tv = (img_start_tv[0], power)
-                        new_end_tv = (img_start_tv[0]+length, img_end_tv[1])
-                        tv_pairs[2] = new_start_tv
-                        tv_pairs[3] = new_end_tv
-                        print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
-                        new_vint_styles = new_sequence.get_V_intervalStyles(power_ch)
-                        new_sequence.updateChannel(power_ch, tv_pairs, new_vint_styles)
+                # Modifies the sequence
+                freq_ch = 2 # These values shouldn't be hardcoded
+                power_ch = 6
+                new_sequence.updateChannel(freq_ch, [(0, freq),], [0,])
+                tv_pairs = list(new_sequence.get_tV_pairs(power_ch))
+                print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
+                #HACK to change the correct power value and pulse length
+                img_start_tv = tv_pairs[2]# This is a tuple representing a time voltage pair
+                img_end_tv = tv_pairs[3]
+                new_start_tv = (time, power)
+                new_end_tv = (time+length, img_end_tv[1])
+                tv_pairs[2] = new_start_tv
+                tv_pairs[3] = new_end_tv
+                print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
+                new_vint_styles = new_sequence.get_V_intervalStyles(power_ch)
+                new_sequence.updateChannel(power_ch, tv_pairs, new_vint_styles)
 
-                        # Ensure directory exists
-                        if not os.path.exists(self.base_config.save_location):
-                            raise FileNotFoundError(f"Base save location does not exist: {self.base_config.save_location}")
-                        save_dir = os.path.dirname(new_config.save_location)
-                        os.makedirs(save_dir, exist_ok=True)
+                # Ensure directory exists
+                if not os.path.exists(self.base_config.save_location):
+                    raise FileNotFoundError(f"Base save location does not exist: {self.base_config.save_location}")
+                save_dir = os.path.dirname(new_config.save_location)
+                os.makedirs(save_dir, exist_ok=True)
 
-                        # Append sequence and config files to the list
-                        self.configs.append(new_config)
-                        self.sequences.append(new_sequence)
+                # Append sequence and config files to the list
+                self.configs.append(new_config)
+                self.sequences.append(new_sequence)
 
 
 

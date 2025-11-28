@@ -21,7 +21,7 @@ Load required classes for awg driven AOM calibration
 '''
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
-from ExperimentalConfigs import Waveform
+from classes.ExperimentalConfigs import Waveform
 from classes.DAQ import DAQ_controller
 
 # helper functions in a separate file
@@ -477,7 +477,6 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
         calibration_lims (tuple) - limits of the calibration
     """
     if flip_mirror:
-        print("Is the flip mirror in the beam path?")
         def compensate_for_flip(power):
             """Compensate for the power measurement located after the flip mirror rather than
             at the target."""

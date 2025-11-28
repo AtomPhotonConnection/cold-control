@@ -593,10 +593,12 @@ class ExperimentConfigReader():
             beam_powers = generate_float_list("beam_powers")
             beam_frequencies = generate_float_list("beam_frequencies")
             pulse_lengths = generate_int_list("pulse_lengths")
+            pulse_times = generate_int_list("pulse_times")
             sweep_dict = {
                 "beam_powers": beam_powers,
                 "beam_frequencies": beam_frequencies,
-                "pulse_lengths": pulse_lengths
+                "pulse_lengths": pulse_lengths,
+                "pulse_times": pulse_times
             }
             return sweep_type, num_shots, sweep_dict
 
