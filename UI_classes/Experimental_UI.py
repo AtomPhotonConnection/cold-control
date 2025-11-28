@@ -323,9 +323,9 @@ class Experimental_UI(tk.LabelFrame):
             if state:
                 button.invoke()
 
-        # If the flip mirror is up, warn the user
-        dios:List[DAQ_dio] = sorted(self.daq_ui.daq_controller.getDIOs())
-        if dios[0].get_state() == 0:
+        #if the flip mirror is up, warn the user
+        dios:List[DAQ_dio] = list(self.daq_ui.daq_controller.getDIOs())
+        if dios[0].get_state() == 1:
             tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
             return
                 

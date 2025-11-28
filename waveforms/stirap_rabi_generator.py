@@ -20,10 +20,10 @@ import scipy.special as sc
 
 
 # ----------------- GLOBAL VARIABLES (edit these) -----------------
-PULSE_LENGTHS = [1.0, 2.0]   # list of pulse durations (T) to generate files for, in us
+PULSE_LENGTHS = [0.7]   # list of pulse durations (T) to generate files for, in us
 OUTPUT_DIR = r"C:\Users\LabUser\Documents\cold-control\waveforms\pulse_shaping_exp\stirap"
 SAMPLE_RATE = 1000       # points per unit T
-PULSE_SHAPE = 'standard'     # "standard" 'gaussian', 'sech', 'sin_cos'
+PULSE_SHAPE = 'sin'     # "standard" 'gaussian', 'sech', 'sin_cos'
 OPTIONS = {
     "tau": 1e-7
 }
@@ -130,6 +130,14 @@ def generate_rabi(T, shape='standard', sample_rate=1000, output_dir='.',
     if shape == "standard":
         Omega_S = stokes2(t, T)
         Omega_P = pump2(t, T)
+
+    elif shape == 'sin':
+        Omega_P = np.zeros_like(t)
+        Omega_S = np.zeros_like(t)
+        for i, ti in enumerate(t):
+            s = math.sin(math.pi * ti / T)
+            Omega_P[i] = s
+            Omega_S[i] = s
     # elif shape == 'gaussian':
     #     Omega_S = gaussian(t, options["t_s"], T, options["sigma_factor"])
     #     Omega_P = gaussian(t, options["t_p"], T, options["sigma_factor"])
