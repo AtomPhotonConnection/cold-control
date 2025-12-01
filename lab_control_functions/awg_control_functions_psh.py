@@ -250,7 +250,7 @@ def write_channels(awg_chs, _rel_offsets, _wf_data, _awg:WX218x_awg):
         _awg.configure_arb_gain(channel, 2)
 
 
-def run_awg(awg_config: AwgConfiguration):
+def run_awg(awg_config: AwgConfiguration, dev_mode:bool = False):
     """
     Main function to configure the AWG for the experiment.
     Input args:
@@ -263,12 +263,12 @@ def run_awg(awg_config: AwgConfiguration):
                                     - marker width
     photon_production_config (PhotonProductionConfiguration): photon production configuration instance
     """
+    if not dev_mode:
+        awg = connect_awg()
 
-    awg = connect_awg()
-
-    # General AWG settings
-    configure_awg_general(awg, awg_config.sample_rate, awg_config.burst_count)
-    configure_trigger(awg, awg_config.waveform_output_channels, awg_config.burst_count)
+        # General AWG settings
+        configure_awg_general(awg, awg_config.sample_rate, awg_config.burst_count)
+        configure_trigger(awg, awg_config.waveform_output_channels, awg_config.burst_count)
 
     # Calculate channel offsets
     abs_offsets, rel_offsets = calculate_offsets(awg_config.waveform_output_channel_lags,\
@@ -285,6 +285,8 @@ def run_awg(awg_config: AwgConfiguration):
 
     wf_list, wf_data, wf_stitched_delays, seq_marker_data, queud_markers= create_waveform_lists(wfs,\
                                     wf_seq, awg_config.waveform_output_channels)
+    
+    print(wf_list)
      
     if awg_config.interleave_waveforms:  
         wf_stitched_delays = stitch_waveforms(awg_config.waveform_output_channels,\
@@ -495,14 +497,15 @@ def run_awg(awg_config: AwgConfiguration):
     # Plot marker data
     plot_marker_data(marker_data)
 
-    # Add markers to channels
-    write_markers(seq_marker_data, awg, awg_config.waveform_output_channels, marker_wid)  
+    if not dev_mode:
+        # Add markers to channels
+        write_markers(seq_marker_data, awg, awg_config.waveform_output_channels, marker_wid)  
 
-    awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)
+        awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)
 
 
-    # Configure channels and write data
-    write_channels(awg_config.waveform_output_channels, rel_offsets, wf_data, awg) 
+        # Configure channels and write data
+        write_channels(awg_config.waveform_output_channels, rel_offsets, wf_data, awg) 
 
 
     print("AWG configuration complete.")
