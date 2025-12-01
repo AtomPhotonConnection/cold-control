@@ -160,11 +160,8 @@ class MotFluoresceConfiguration(GenericConfiguration):
                 raise ValueError("awg_dict must be provided if use_awg is True")
             self.awg_config_path = awg_dict["config_path_full"]
             self.awg_config = awg_dict["awg_config"]
-            self.awg_sequence_config = awg_dict["sequence_config"]
             self.awg_config_path_single = awg_dict["config_path_single"]
             self.awg_config_single = awg_dict["awg_config_single"]
-            self.awg_sequence_config_single = awg_dict[
-                "sequence_config_single"]
         else:
             print("No AWG will be used.")
 
@@ -276,13 +273,13 @@ class MotFluoresceConfigurationSweep:
 
                 # Modify waveform and frequency settings
                 modified_sequence_config = self.modify_awg_sequence_config(
-                    base_config=new_config.awg_sequence_config,
+                    base_config=new_config.awg_config,
                     waveform_csvs = {idx: new_paths[idx] for idx in wave_idxs},
                     mod_freqs={idx: freqs[j] for j, idx in enumerate(wave_idxs)}
                 )
 
                 # Update the new config with modified sequence
-                new_config.awg_sequence_config = modified_sequence_config
+                new_config.awg_config = modified_sequence_config
 
                 new_config.save_location = os.path.join(
                     self.base_config.save_location,
@@ -373,9 +370,9 @@ class MotFluoresceConfigurationSweep:
 
     
     @staticmethod
-    def modify_awg_sequence_config(*, base_config: AWGSequenceConfiguration,
+    def modify_awg_sequence_config(*, base_config: AwgConfiguration,
                                 waveform_csvs: Dict[int, str],
-                                mod_freqs: Dict[int, float]) -> AWGSequenceConfiguration:
+                                mod_freqs: Dict[int, float]) -> AwgConfiguration:
         new_config = deepcopy(base_config)
 
         for idx, wf in enumerate(new_config.waveforms):
@@ -708,14 +705,26 @@ class AwgConfiguration:
     """
     Configuration for an Arbitrary Waveform Generator (AWG), including sample rate,
     output channels, timing lags, marker widths, and calibration locations.
+    It also includes the waveform sequence and associated waveforms that the AWG will
+    play.
     """
     def __init__(self,
+                 waveform_sequence:List[List[int]],
+                 waveforms:List[Waveform],
+                 interleave_waveforms: bool,
+                 waveform_stitch_delays:List[List[Any]],
                  sample_rate: float,
                  burst_count: int,
                  waveform_output_channels: List[int],
                  waveform_output_channel_lags: List[float],
                  marked_channels: List[int],
                  marker_width: int):
+
+        self._waveform_sequence = waveform_sequence
+        self.waveforms = waveforms
+        self.interleave_waveforms = interleave_waveforms
+        self.waveform_stitch_delays = waveform_stitch_delays
+
         self._sample_rate = sample_rate
         self._burst_count = burst_count
         self._waveform_output_channels = waveform_output_channels
@@ -735,6 +744,16 @@ class AwgConfiguration:
     def set_sample_rate(self, value: float):
         self._sample_rate = value
 
+    @property
+    def waveform_sequence(self):
+        return self._waveform_sequence
+    @waveform_sequence.setter
+    def waveform_sequence(self, value):
+        print('Setting waveform sequence to', value, [type(x) for x in value])
+        self._waveform_sequence = value
+    @waveform_sequence.deleter
+    def waveform_sequence(self):
+        del self._waveform_sequence
 
 
 

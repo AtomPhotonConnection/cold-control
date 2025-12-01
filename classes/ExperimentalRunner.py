@@ -50,7 +50,7 @@ from lab_control_functions.awg_control_functions_psh import run_awg
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 
 from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingConfiguration,\
-    PhotonProductionConfiguration, MotFluoresceConfiguration, AWGSequenceConfiguration,\
+    PhotonProductionConfiguration, MotFluoresceConfiguration,\
     ExperimentSessionConfig, SingleExperimentConfig, Waveform, AwgConfiguration,\
     MotFluoresceConfigurationSweep
 from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
@@ -1006,9 +1006,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
         if self.with_awg:
             self.awg_config = self.mot_fluoresce_config.awg_config
-            self.awg_sequence_config = self.mot_fluoresce_config.awg_sequence_config
             self.awg_config_single = self.mot_fluoresce_config.awg_config_single
-            self.awg_sequence_config_single = self.mot_fluoresce_config.awg_sequence_config_single
 
 
         if self.with_cam:
@@ -1115,9 +1113,9 @@ class MotFluoresceExperiment(GenericExperiment):
         awg.close()
         if self.awg_config_single is not None:
             print("Configuring single AWG")
-            run_awg_single(self.awg_config_single, self.awg_sequence_config_single)
+            run_awg_single(self.awg_config_single)
 
-        run_awg(self.awg_config, self.awg_sequence_config) 
+        run_awg(self.awg_config) 
 
 
     def __run_with_scope(self):

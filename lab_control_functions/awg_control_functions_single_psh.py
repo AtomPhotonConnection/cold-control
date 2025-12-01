@@ -176,7 +176,7 @@ def load_marker_data(awg: WX218x_awg, awg_ch, marker_data, marker_width):
 
 
 
-def run_awg_single(awg_config: AwgConfiguration, photon_config: AWGSequenceConfiguration):
+def run_awg_single(awg_config: AwgConfiguration):
     """
     Configures the AWG for a single-channel experiment.
     """
@@ -192,17 +192,17 @@ def run_awg_single(awg_config: AwgConfiguration, photon_config: AWGSequenceConfi
     # Process waveforms and markers
     marker_wid = int(awg_config.marker_width * 10**-6 * awg_config.sample_rate)
     wf_list, wf_data, wf_stitched_delay, seq_marker_data, queued_markers = create_waveform_lists(
-        photon_config.waveforms,
-        photon_config.waveform_sequence,
+        awg_config.waveforms,
+        awg_config.waveform_sequence,
         [awg_config.waveform_output_channels[0]],
         awg_config.sample_rate  # <-- Pasamos sample_rate
     )
     
-    if photon_config.interleave_waveforms:
+    if awg_config.interleave_waveforms:
         wf_stitched_delay = stitch_waveforms(
             [awg_config.waveform_output_channels[0]],
-            [photon_config.waveform_stitch_delays],
-            photon_config.waveforms,
+            [awg_config.waveform_stitch_delays],
+            awg_config.waveforms,
             awg_config.sample_rate
         )[0]
     else:

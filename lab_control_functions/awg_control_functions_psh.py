@@ -251,7 +251,7 @@ def write_channels(awg_chs, _rel_offsets, _wf_data, _awg:WX218x_awg):
         _awg.configure_arb_gain(channel, 2)
 
 
-def run_awg(awg_config: AwgConfiguration, photon_config: AWGSequenceConfiguration):
+def run_awg(awg_config: AwgConfiguration):
     """
     Main function to configure the AWG for the experiment.
     Input args:
@@ -262,7 +262,6 @@ def run_awg(awg_config: AwgConfiguration, photon_config: AWGSequenceConfiguratio
                                     - waveform output channel lags
                                     - marker channels
                                     - marker width
-                                    - waveform aom calibrations locations
     photon_production_config (PhotonProductionConfiguration): photon production configuration instance
     """
 
@@ -273,26 +272,31 @@ def run_awg(awg_config: AwgConfiguration, photon_config: AWGSequenceConfiguratio
     configure_trigger(awg, awg_config.waveform_output_channels, awg_config.burst_count)
 
     # Calculate channel offsets
-    abs_offsets, rel_offsets = calculate_offsets(awg_config.waveform_output_channel_lags, awg_config.sample_rate)
+    abs_offsets, rel_offsets = calculate_offsets(awg_config.waveform_output_channel_lags,\
+                                                  awg_config.sample_rate)
 
     # Process waveforms and markers
     marker_wid  = int(awg_config.marker_width*10**-6 * awg_config.sample_rate)
 
+    #extract data from awg_config
+    wfs = awg_config.waveforms
+    wf_seq = awg_config.waveform_sequence
+    wf_del = awg_config.waveform_stitch_delays
 
-    # Procesa las formas de onda y las secuencias definidas en la configuración, generando listas de formas de ondas, datos de formas de onda, retrasos de formas de onda, datos de marcadores y marcadores en cola.
-    wf_list, wf_data, wf_stitched_delays, seq_marker_data, queud_markers= create_waveform_lists(photon_config.waveforms,\
-                                    photon_config.waveform_sequence, awg_config.waveform_output_channels)
+
+    wf_list, wf_data, wf_stitched_delays, seq_marker_data, queud_markers= create_waveform_lists(wfs,\
+                                    wf_seq, awg_config.waveform_output_channels)
      
-    if photon_config.interleave_waveforms:   #  Si las formas de onda están intercaladas, ajusta los retrasos entre ellas.
+    if awg_config.interleave_waveforms:  
         wf_stitched_delays = stitch_waveforms(awg_config.waveform_output_channels,\
-                                        photon_config.waveform_stitch_delays, photon_config.waveforms, wf_stitched_delays)
+                                        wf_del, wfs, wf_stitched_delays)
     else:
         wf_stitched_delays=[0]*len(awg_config.waveform_output_channels)
 
 
 
     # main loop to do everything
-    j = 0                                               # loop itera per cada canal del awg
+    j = 0                                             
     for channel, waveform_data, waveforms, delay, channel_abs_offset in \
         zip(awg_config.waveform_output_channels, wf_data, wf_list, wf_stitched_delays, abs_offsets):
         """
