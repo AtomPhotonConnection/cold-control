@@ -325,9 +325,9 @@ class Experimental_UI(tk.LabelFrame):
 
         #if the flip mirror is up, warn the user
         dios:List[DAQ_dio] = list(self.daq_ui.daq_controller.getDIOs())
-        if dios[0].get_state() == 1:
-            tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
-            return
+        # if dios[0].get_state() == 1:
+        #     tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
+        #     return
                 
         fname = tkFileDialog.askopenfilename(master=self, title="Choose an MOT Fluoresce Sweep Configuration",
                                              initialdir=os.path.join(os.getcwd(),"/configs/pulse_shaping_expt/sweeps/"))

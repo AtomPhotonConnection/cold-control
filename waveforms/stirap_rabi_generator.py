@@ -20,7 +20,7 @@ import scipy.special as sc
 
 
 # ----------------- GLOBAL VARIABLES (edit these) -----------------
-PULSE_LENGTHS = [0.7]   # list of pulse durations (T) to generate files for, in us
+PULSE_LENGTHS = [0.5]   # list of pulse durations (T) to generate files for, in us
 OUTPUT_DIR = r"C:\Users\LabUser\Documents\cold-control\waveforms\pulse_shaping_exp\stirap"
 SAMPLE_RATE = 1000       # points per unit T
 PULSE_SHAPE = 'sin'     # "standard" 'gaussian', 'sech', 'sin_cos'
