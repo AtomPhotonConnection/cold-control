@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import csv
 
 from classes.Config import ConfigReader, DaqReader
-from ExperimentalConfigs import AbsorbtionImagingConfiguration,\
+from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration,\
     PhotonProductionConfiguration, AwgConfiguration, TdcConfiguration, Waveform,\
         ExperimentSessionConfig , SingleExperimentConfig
 from instruments.WX218x.WX218x_awg import WX218x_awg, Channel

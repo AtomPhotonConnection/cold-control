@@ -611,6 +611,10 @@ class Waveform:
                     data += list(map(float, row))
                 else:
                     data.append(float(row[0]))
+
+        if len(data) == 0:
+            raise ValueError(f"Waveform file {self.__fname} is empty or invalid.")
+        
         return data
 
     def get(self, sample_rate: float, calibration_function=lambda level: level,

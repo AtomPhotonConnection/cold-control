@@ -145,10 +145,9 @@ def create_waveform_lists(waveforms, waveform_sequence, awg_chs):
 
 def stitch_waveforms(awg_chs, stitch_delays, waveforms, seq_waveforms_stitched_delays):
     #perform stitching of different waveforms with delays to synchronise across channels  
-    print("\n🔍 DEBUG: Stitch delays antes de aplicar")
+    print("\n🔍 DEBUG: Stitch delays before applying")
     for i, delay in enumerate(stitch_delays):
-        print(f"  Canal {awg_chs[i]}: stitch_delay = {delay}")
-
+        print(f"  Channel {awg_chs[i]}: stitch_delay = {delay}")
 
     print('Interleaving waveforms')
     for i in range(len(awg_chs)):
@@ -242,7 +241,7 @@ def write_channels(awg_chs, _rel_offsets, _wf_data, _awg:WX218x_awg):
         data = np.roll(np.array(data), rel_offset).tolist()        
         # print('Writing {0} points to {1}'.format(len(data),channel))
         _awg.set_active_channel(channel)
-        if channel == Channel.CHANNEL_1 or channel==Channel.CHANNEL_2 or channel==Channel.CHANNEL_3:
+        if channel in [Channel.CHANNEL_1, Channel.CHANNEL_2, Channel.CHANNEL_3]:#, Channel.CHANNEL_4]: Why isn't CH4 working?
             _awg.create_arbitrary_waveform_custom(data)
 
             
@@ -317,15 +316,6 @@ def run_awg(awg_config: AwgConfiguration):
         
         constant_V=False    
 
-        # 2 Loading calibration files     Carga los archivos de calibración para los AOM y los almacena en un diccionario.
-        # waveform_aom_calibs = {}
-        # aom_calibration_loc = awg_config.waveform_aom_calibrations_locations[j]
-        # print('For {0} using aom calibrations in {1}'.format(channel, os.path.join(aom_calibration_loc, '*MHz.txt')))
-        # for filename in glob.glob(os.path.join(aom_calibration_loc, '*MHz.txt')):
-        #     try:
-        #         waveform_aom_calibs[float(re.match(r'\d+\.*\d*', os.path.split(filename)[1]).group(0))] = get_waveform_calib_fnc(filename)
-        #     except AttributeError:
-        #         print("Warning, waveform_aom_calibs is undefined.")
         
         # 3 Marker data and delays
         marker_data = []
@@ -337,10 +327,12 @@ def run_awg(awg_config: AwgConfiguration):
 
         # 4 Processing each waveform                               
         for ind, waveform in enumerate(waveforms):
-            waveform: Waveform                   # Aplica la calibración correspondiente a cada forma de onda, basándose en su frecuencia de modulación.
+            waveform: Waveform
+
+
             
             seg_length = waveform.get_n_samples() + abs(delay) + abs(channel_abs_offset)
-            marker_pos = []    # Calcula las posiciones de los marcadores en la secuencia de formas de onda.
+            marker_pos = []    
 
             i=0
             while i < len(queud_markers):
@@ -464,7 +456,7 @@ def run_awg(awg_config: AwgConfiguration):
                                                                             marker_width=marker_wid)
                             
                         if channel == "channel4":
-                            print(f"🔖 Marker data en CH4 (primeros 10 valores): {marker_data[:10]}")
+                            print(f"Marker data en CH4 (primeros 10 valores): {marker_data[:10]}")
        
                     marker_data[marker_index:marker_index+len(wrapped_marker_data)] = \
                                                 [MARKER_WF_LEVS[1] if (a==MARKER_WF_LEVS[1] or b==MARKER_WF_LEVS[1]) else MARKER_WF_LEVS[0] if (a==MARKER_WF_LEVS[0] and b==MARKER_WF_LEVS[0])  else a+b
@@ -498,21 +490,21 @@ def run_awg(awg_config: AwgConfiguration):
     print(f"Waveform length: {len(wf_data)}")
 
     # Ensure data length alignment
-    wf_data, marker_data = align_data_length(wf_data, seq_marker_data)  # assegurem q tenen la mateixa longitud, sino afegim zeros
+    wf_data, marker_data = align_data_length(wf_data, seq_marker_data)  
 
     # Plot marker data
     plot_marker_data(marker_data)
 
     # Add markers to channels
-    write_markers(seq_marker_data, awg, awg_config.waveform_output_channels, marker_wid)   # Grafica los datos de los marcadores y los escribe en el AWG.
+    write_markers(seq_marker_data, awg, awg_config.waveform_output_channels, marker_wid)  
 
-    awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)  # Configura el modo de traza de onda arbitraria en el AWG, traza unica
+    awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)
 
 
     # Configure channels and write data
-    write_channels(awg_config.waveform_output_channels, rel_offsets, wf_data, awg) # Configura los canales y escribe los datos de las formas de onda en el AWG.
+    write_channels(awg_config.waveform_output_channels, rel_offsets, wf_data, awg) 
 
 
     print("AWG configuration complete.")
     return awg, len(wf_data[0])/awg_config.sample_rate
- # Devuelve el objeto AWG configurado y la duración total de la secuencia en segundos.
+
