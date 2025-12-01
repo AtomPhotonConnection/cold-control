@@ -178,6 +178,11 @@ class WX218x_awg(object):
         Creates a arbitrary waveform from a list of data points with (-1,1).
         '''
         waveform_handle = c_int32()
+        if isinstance(data, np.ndarray):
+            c_array = data.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        elif isinstance(data, list):
+            DoubleArray = ctypes.c_double * len(data)
+            c_array = DoubleArray(*data)
         
 #         from bitstring import BitArray
 #         data14bin = ["{0:014b}".format(x) for x in [int(d*8191) for d in data]]
@@ -194,7 +199,7 @@ class WX218x_awg(object):
 
         self._validate_response(WX218x_DLL.create_arbitrary_waveform(self.vi_session,
                                                                      len(data),
-                                                                     data,
+                                                                     c_array,
                                                                      byref(waveform_handle)))
         return waveform_handle
         

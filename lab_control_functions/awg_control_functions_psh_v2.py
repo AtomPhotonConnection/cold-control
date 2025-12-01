@@ -10,7 +10,7 @@ with improved error handling, clearer logic, and better separation of concerns.
 """
 
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import Any, List, Tuple, Optional
 from time import sleep
 
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
@@ -139,7 +139,7 @@ def configure_triggers(awg: WX218x_awg, awg_config: AwgConfiguration) -> None:
             awg.configure_trigger_level(channel, 2.0)
             awg.configure_trigger_slope(channel, WX218x_TriggerSlope.POSITIVE)
     
-    print("\n✓ Trigger configuration complete")
+    print("\n Trigger configuration complete")
 
 
 # ============================================================================
@@ -192,7 +192,7 @@ def get_waveform_data(
     sample_rate: float,
     calibration_function=None,
     constant_voltage: bool = False,
-    double_pass: bool = True
+    double_pass: bool = False
 ) -> List[float]:
     """
     Get processed waveform data from a Waveform object.
@@ -221,7 +221,7 @@ def get_waveform_data(
 def stitch_waveforms_for_channel(
     channel_waveforms: List[Waveform],
     sample_rate: float,
-    stitch_delays: List[any],
+    stitch_delays: List[Any],
     calibration_function=None,
     pad_length: int = 0
 ) -> np.ndarray:
@@ -242,13 +242,17 @@ def stitch_waveforms_for_channel(
         calibration_function = lambda x: x
     
     stitched_data = []
+
+    # NOTE: STILL NEED TO ADD STITCH DELAY HANDLING
     
     for wf in channel_waveforms:
         wf_data = get_waveform_data(
             wf, 
             sample_rate, 
-            calibration_function
+            calibration_function,
+            constant_voltage=False
         )
+        print(f"  Waveform '{wf.fname}': {len(wf_data)} samples")
         stitched_data.extend(wf_data)
     
     # Add padding if requested
@@ -423,7 +427,8 @@ def write_markers_to_awg(
     awg: WX218x_awg,
     marked_channels: List[str],
     marker_data: List[float],
-    marker_width: float
+    marker_width: float,
+    sample_rate: float
 ) -> None:
     """
     Configure and write marker outputs to specified channels.
@@ -459,7 +464,7 @@ def write_markers_to_awg(
     print(f"  Marker width: {marker_width} µs")
     
     # Convert marker width from microseconds to AWG sample units
-    marker_width_samples = int(marker_width * US_TO_S * awg.configure_sample_rate)
+    marker_width_samples = int(marker_width * US_TO_S * sample_rate)
     
     # Assign markers to channels
     for marker_idx, (marker_pos, channel) in enumerate(
@@ -552,10 +557,12 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
         # Build waveform data for each channel
         waveform_data = []
         for channel_waveforms in awg_config.waveform_sequence:
+            print(f"Channel waveforms: {channel_waveforms}")
             channel_wfs = [awg_config.waveforms[i] for i in channel_waveforms]
             stitched = stitch_waveforms_for_channel(
                 channel_wfs,
-                awg_config.sample_rate
+                awg_config.sample_rate,
+                awg_config.waveform_stitch_delays
             )
             waveform_data.append(stitched)
             print(f"  Channel waveform: {len(stitched)} samples")
@@ -576,18 +583,21 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
         
         # Write to AWG (skip in development mode)
         if not dev_mode and awg:
+            print(waveform_data[0])
+            np.savetxt(r"C:\Users\LabUser\Documents\cold-control\waveforms\pulse_shaping_exp\stirap\test_output_waveform.csv", waveform_data[0], delimiter=",")
             write_waveforms_to_awg(
                 awg,
                 awg_config.waveform_output_channels,
                 waveform_data,
-                rel_offsets
+                rel_offsets,
             )
             
             write_markers_to_awg(
                 awg,
                 awg_config.marked_channels,
                 marker_waveform,
-                awg_config.marker_width
+                awg_config.marker_width,
+                awg_config.sample_rate
             )
             
             enable_awg_outputs(

@@ -618,7 +618,7 @@ class Waveform:
         return data
 
     def get(self, sample_rate: float, calibration_function=lambda level: level,
-            constant_voltage=False, double_pass=True) -> List[float]:
+            constant_voltage=False, double_pass=False) -> List[float]:
         """
         Returns the modulated waveform data.
 
@@ -626,14 +626,13 @@ class Waveform:
         - If constant_voltage is False, applies sinusoidal modulation.
         """
         mod_data = [calibration_function(x) for x in self.data]
-        if constant_voltage:
+        if constant_voltage or float(self.__mod_frequency) == 0.0:
             return mod_data
 
         t_step = 2 * np.pi / sample_rate
         phi = 0.0
-        if double_pass:
-            # Divided phases by two for double passed AOM.
-            phases = [(x[0] / 2 if double_pass else x[0], x[1]) for x in self.__phases]
+        # Divided phases by two for double passed AOM.
+        phases = [(x[0] / 2 if double_pass else x[0], x[1]) for x in self.__phases]
         next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
 
         for i in range(len(mod_data)):
