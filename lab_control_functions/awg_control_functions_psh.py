@@ -145,7 +145,7 @@ def create_waveform_lists(waveforms, waveform_sequence, awg_chs):
 
 def stitch_waveforms(awg_chs, stitch_delays, waveforms, seq_waveforms_stitched_delays):
     #perform stitching of different waveforms with delays to synchronise across channels  
-    print("\n🔍 DEBUG: Stitch delays before applying")
+    print("\nDEBUG: Stitch delays before applying")
     for i, delay in enumerate(stitch_delays):
         print(f"  Channel {awg_chs[i]}: stitch_delay = {delay}")
 

@@ -713,6 +713,7 @@ class AwgConfiguration:
     """
     def __init__(self,
                  waveform_sequence:List[List[int]],
+                 #This should be changed to Dict[int, Waveform] later
                  waveforms:List[Waveform],
                  interleave_waveforms: bool,
                  waveform_stitch_delays:List[List[Any]],
@@ -737,9 +738,9 @@ class AwgConfiguration:
         self.marker_width = marker_width
 
 
-    sample_rate = make_property('_sample_rate')
-    burst_count = make_property('_burst_count')
-    waveform_output_channels = make_property('_waveform_output_channels')
+    sample_rate:float = make_property('_sample_rate')
+    burst_count:int = make_property('_burst_count')
+    waveform_output_channels:List[int] = make_property('_waveform_output_channels')
 
     def set_burst_count(self, value: int):
         self._burst_count = value
