@@ -738,9 +738,9 @@ class AwgConfiguration:
         self.marker_width = marker_width
 
 
-    sample_rate:float = make_property('_sample_rate')
-    burst_count:int = make_property('_burst_count')
-    waveform_output_channels:List[int] = make_property('_waveform_output_channels')
+    sample_rate:property = make_property('_sample_rate')
+    burst_count:property = make_property('_burst_count')
+    waveform_output_channels:property = make_property('_waveform_output_channels')
 
     def set_burst_count(self, value: int):
         self._burst_count = value

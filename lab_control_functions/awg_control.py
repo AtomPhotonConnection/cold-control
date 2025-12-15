@@ -224,7 +224,7 @@ def align_data_length(seq_waveform_data:List[np.ndarray], seq_marker_data: np.nd
 
 def write_markers(marker_data, awg:WX218x_awg, awg_chs, marker_width):
     #finds start of marker pulse if it has been padded
-    marker_starts = np.where(np.diff(marker_data, prepend=0) > 0)#np.where((marker_data[:-1] == 0) & (marker_data[1:] > 0))[0]
+    marker_starts = np.where(np.diff(marker_data, prepend=0) > 0)[0]#np.where((marker_data[:-1] == 0) & (marker_data[1:] > 0))[0]
     print('Marker_starts:', marker_starts)
     
     if len(marker_starts) > 1:
@@ -251,12 +251,12 @@ def write_markers(marker_data, awg:WX218x_awg, awg_chs, marker_width):
 
 
 
-def write_channels(awg_chs:List[Any], _wf_data:List[np.ndarray], _awg:WX218x_awg, optimised=False):
+def write_channels(awg_chs:List[Any], _wf_data:List[np.ndarray], _awg:WX218x_awg, show_plots=False):
     '''Configure each channel for its output data.'''
     for channel, data in zip(awg_chs, _wf_data):
         # Roll channel data to account for relative offsets (e.g. AOM lags)
         # print(data)
-        if not optimised:
+        if show_plots:
             plt.plot(data)
             plt.title('Channel {0} data'.format(channel))
             plt.show(block=False)
@@ -266,7 +266,7 @@ def write_channels(awg_chs:List[Any], _wf_data:List[np.ndarray], _awg:WX218x_awg
 
         # print('Writing {0} points to {1}'.format(len(data),channel))
         _awg.set_active_channel(channel)
-        if channel in [Channel.CHANNEL_1, Channel.CHANNEL_2, Channel.CHANNEL_3]:#, Channel.CHANNEL_4]: Why isn't CH4 working?
+        if channel in [Channel.CHANNEL_1, Channel.CHANNEL_2, Channel.CHANNEL_3, Channel.CHANNEL_4]:
             _awg.create_arbitrary_waveform_custom(data.tolist())
 
             
@@ -275,7 +275,8 @@ def write_channels(awg_chs:List[Any], _wf_data:List[np.ndarray], _awg:WX218x_awg
         _awg.configure_arb_gain(channel, 2)
 
 
-def run_awg(awg_config: AwgConfiguration, marked_wfs = [0, 1], dev_mode:bool = False, optimised:bool = False):
+def run_awg(awg_config: AwgConfiguration, marked_wfs = [1], dev_mode:bool = False, 
+            optimised:bool = False, plot:bool = False):
     """
     Main function to configure the AWG for the experiment.
     Input args:
@@ -426,13 +427,13 @@ def run_awg(awg_config: AwgConfiguration, marked_wfs = [0, 1], dev_mode:bool = F
 
     
     # End of loop
-    print(f"Waveform length: {len(wf_data)}")
+    print(f"Waveforms written to {len(wf_data)} channels")
 
     # Ensure data length alignment
     wf_data, seq_marker_data = align_data_length(wf_data, seq_marker_data)  
 
     # Plot marker data
-    if not optimised: plot_marker_data(marker_data)
+    if plot and not optimised: plot_marker_data(marker_data)
 
     if not dev_mode:
         # Add markers to channels
@@ -442,7 +443,7 @@ def run_awg(awg_config: AwgConfiguration, marked_wfs = [0, 1], dev_mode:bool = F
 
 
         # Configure channels and write data
-        write_channels(awg_config.waveform_output_channels, wf_data, awg) 
+        write_channels(awg_config.waveform_output_channels, wf_data, awg, show_plots=plot) 
 
 
     print("AWG configuration complete.")

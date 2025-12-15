@@ -403,7 +403,7 @@ class WX218x_awg(object):
         self.configure_marker_width(channel_name, index, width)
 # #         self.set_marker_width(channel_name, index, width)
         self.configure_marker_enabled(channel_name, index, True)
-#         self.marker_refresh(channel_name)
+        self.marker_refresh(channel_name)
         
     def configure_marker_enabled(self, channel_name, index, enabled):
         self._validate_response(WX218x_DLL.configure_marker_enabled(self.vi_session,
