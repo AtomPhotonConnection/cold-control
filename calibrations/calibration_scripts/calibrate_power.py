@@ -25,23 +25,23 @@ from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 # general coefficients
 #gamma_d1 = 5.746*np.pi
 gamma_d2= 6*np.pi
-typical_waist_size=100 #mu m
+typical_waist_size=450 #mu m
 #d_d1 = 2.537 * 10**(-29)
 d_d2= 2.853 * 10**(-29) 
 
 # V-STIRAP re-preparation coefficients
-cg_d2_stokes = np.sqrt(1/30)
-cg_d2_pump = -np.sqrt(5/24)
+cg_d2_stokes = np.sqrt(1/8)
+cg_d2_pump = -np.sqrt(1/12)
 #rabi_stirap_d1 = 41
 rabi_stirap_d2 = 50*2*np.pi
 
 # OPT PUMPING coefficients
-cg_d2_p1 = np.sqrt(1/24)
-cg_d2_p2 = np.sqrt(1/8)
-rabi_p1_d1 = 34 
-rabi_p1_d2 = 57.5
-rabi_p2_d1 = 24
-rabi_p2_d2 = 25.5
+cg_d2_p1 = 0.32
+cg_d2_p2 = np.sqrt(1/8)# NOT USED FOR THIS SCHEME
+#rabi_p1_d1 = 34 
+rabi_p1_d2 = 50*2*np.pi
+#rabi_p2_d1 = 24
+rabi_p2_d2 = 25.5# NOT USED FOR THIS SCHEME
 
 # Calibration file for flip mirror compensation
 calib_csv = r"calibrations\miscellaneous\flip_mirror_calib.csv"
@@ -98,7 +98,7 @@ def default_calib(calib_tuples):
         
 
         cg_d2_map = {'stokes': cg_d2_stokes,'pump': cg_d2_pump, 'P1': cg_d2_p1,\
-                      'P2': cg_d2_p1}
+                      'P2': cg_d2_p2}
         rabi_d2_map = {'stokes': rabi_stirap_d2,'pump': rabi_stirap_d2, 'P1': rabi_p1_d2,\
                         'P2': rabi_p2_d2}
 
@@ -115,13 +115,13 @@ def default_calib(calib_tuples):
                                                             [freq],
                                                             target_power_d2,
                                                             awg_channels_dict[channel],
-                                                            n_steps = 30,
-                                                            repeats=5,
-                                                            delay=0.3,
-                                                            calibration_lims = (0.1,0.25),
+                                                            n_steps = 20,
+                                                            repeats=300,
+                                                            delay=0.5,
+                                                            calibration_lims = (0.1,0.3),
                                                             save_all=True,
                                                             results_dict=results_dict,
-                                                            flip_mirror=using_flip_mirror)
+                                                            flip_mirror=True,)
         
         if results_dict is None:
             raise ValueError("results_dict returned from finding_amplitude_from_power is None.")
@@ -169,12 +169,10 @@ def default_calib(calib_tuples):
 
 
 calib_tuples = [
-    #(1, "pump", 123),
-    (1, "pump", 123.8),
-    #(1, "pump", 125),
-    (2, "stokes", 80),
-    #(2, "stokes", 79),
-    #(2, "stokes", 81)
+    #(1, "pump", 60.8558),
+    #(2, "stokes", 80),
+    #(3, "P1", 54.8558)
+    (2, "stokes", 74)
 ]
 
 using_flip_mirror = True

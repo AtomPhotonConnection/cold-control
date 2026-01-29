@@ -488,6 +488,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
             y = df["power_target"].values.astype(float)
 
             a, b = np.polyfit(x, y, 1)
+            #print("Compensating for flip mirror: ", a, b)
 
             return a * power + b
         
