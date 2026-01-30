@@ -1390,7 +1390,7 @@ class DAQ_controller(object):
             card.load(sequenceArray[nChsLoaded:nChsLoaded+card.numChs])
             nChsLoaded += card.numChs
             
-    def play(self, t_step=1, clearCards=True, buffer_id=None):
+    def play(self, t_step=1.0, clearCards=True, buffer_id=None):
         '''
         Note t_step is in microseconds
         

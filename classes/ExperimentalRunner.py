@@ -24,10 +24,10 @@ from PIL import Image
 import csv
 import glob
 import re
-import collections
+import collections.abc
 import pandas as pd
 import _tkinter
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional, TypeVar, Generic
 import pyvisa
 from configobj import ConfigObj
 from numpy import trapz
@@ -71,18 +71,19 @@ def make_property(attr_name):
         fdel=lambda self: delattr(self, attr_name),
     )
 
+T = TypeVar("T", bound=GenericConfiguration)
 
-class GenericExperiment:
+class GenericExperiment(Generic[T]):
     '''
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     '''
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, configuration:GenericConfiguration):
+    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, configuration: T):
         '''
         Constructor
         '''        
         self.daq_controller = daq_controller
         self.sequence = sequence
-        self.config = configuration
+        self.config: T = configuration
         
 
     def configure(self):
@@ -144,6 +145,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         
         super().__init__(daq_controller, sequence, absorbtion_imaging_configuration)
         # the configuration object is called self.config
+        assert isinstance(self.config, AbsorbtionImagingConfiguration)
         c:AbsorbtionImagingConfiguration = self.config
         self.results_ready = False # A flag to determine if the experiment has finished running and the results exist yet
         
@@ -232,7 +234,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
         self.sequences: List[Sequence] = []
         self.bkg_sequences: List[Sequence] = []
-
+        assert isinstance(self.config, AbsorbtionImagingConfiguration)
         c:AbsorbtionImagingConfiguration = self.config
 
         t_lag = AbsorbtionImagingExperiment.shutter_lag
@@ -298,8 +300,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __configureCamera(self):
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam:IC_Camera = None
-        cam:IC_Camera = None
+        self.cam:IC_Camera
+        cam:IC_Camera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
 #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
@@ -359,7 +361,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 # Grab image and save as bmp
                 self.cam.wait_til_frame_ready(self.cam_frame_timeout)    
                 data = self.cam.get_image_data()
-                img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.FLIP_TOP_BOTTOM)
+                img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                 img_arrs.append(np.array(img))
                 if save_raw_images:
                     img.save("{0}/img{1}raw.bmp".format(img_dir, label), "bmp")
@@ -378,7 +380,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                     self.cam.wait_til_frame_ready(self.cam_frame_timeout) 
                     
                     data = self.cam.get_image_data()
-                    img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.FLIP_TOP_BOTTOM)
+                    img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                     bkgs.append(np.array(img))
                     if save_raw_images:
                         img.save("{0}/{1}.bmp".format(bkg_dir, i), "bmp")
@@ -741,8 +743,10 @@ class PhotonProductionExperiment(GenericExperiment):
             print('For {0} using aom calibrations in {1}'.format(channel, os.path.join(aom_calibration_loc, '*MHz.txt')))
             for filename in glob.glob(os.path.join(aom_calibration_loc, '*MHz.txt')):
                 try:
-                    waveform_aom_calibs[float(re.match(r'\d+\.*\d*', os.path.split(filename)[1]).group(0))] = get_waveform_calib_fnc(filename)
-                except AttributeError:
+                    match = re.match(r'\d+\.*\d*', os.path.split(filename)[1])
+                    if match:
+                        waveform_aom_calibs[float(match.group(0))] = get_waveform_calib_fnc(filename)
+                except (AttributeError, ValueError):
                     pass
            
             marker_data = []
@@ -896,9 +900,9 @@ class PhotonProductionExperiment(GenericExperiment):
         for marker_pos in marker_starts:
             awg.configure_marker(awg_chs[0], 
                                  index = marker_channel_index, 
-                                 position = marker_pos - marker_wid/4,
+                                 position = int(marker_pos - marker_wid/4),
                                  levels = marker_levs,
-                                 width = marker_wid/2)
+                                 width = int(marker_wid/2))
             marker_channel_index += 1
 
         return awg, len(seq_waveform_data[0])/self.awg_config.sample_rate
@@ -985,10 +989,12 @@ class MotFluoresceExperiment(GenericExperiment):
 
     def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, 
                 mot_fluoresce_configuration:MotFluoresceConfiguration,
-                ic_imaging_control:IC_ImagingControl = None, sweep=True):
+                ic_imaging_control:Optional[IC_ImagingControl] = None, sweep=True):
         
         super().__init__(daq_controller, sequence, mot_fluoresce_configuration)
         # the configuration object is a MotFluoresceConfiguration object and called self.config
+        assert isinstance(self.config, MotFluoresceConfiguration), \
+            "mot_fluoresce_configuration must be a MotFluoresceConfiguration object."
         self.mot_fluoresce_config:MotFluoresceConfiguration = self.config
         self.save_location = self.mot_fluoresce_config.save_location
         self.iterations = self.mot_fluoresce_config.iterations
@@ -1046,8 +1052,8 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam:IC_Camera = None
-        cam:IC_Camera = None
+        self.cam:IC_Camera
+        cam:IC_Camera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
 #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         #is this in milliseconds? and does it match the MOT reload time? I think so
@@ -1110,7 +1116,7 @@ class MotFluoresceExperiment(GenericExperiment):
         Configures the AWG for the experiment, loads data for all channels"""
         rm = pyvisa.ResourceManager()
         awg = rm.open_resource("USB0::0x168C::0x1284::0000215582::0::INSTR")   
-        awg.write(":SYSTem:REBoot") 
+        awg.write(":SYSTem:REBoot") # type: ignore
         awg.close()
         if self.awg_config_single is not None:
             print("Configuring single AWG")
@@ -1170,11 +1176,14 @@ class MotFluoresceExperiment(GenericExperiment):
             if success:
                 print("collecting data")
                 data = self.scope.read_slow_return_data(self.data_chs)
-                filename=f"iteration_{i}_data.csv"
-                full_name = os.path.join(full_directory, filename)
-                data.to_csv(full_name, index=False)# Saves the data
-                print(f"Data saved to {full_name}")
-                i += 1
+                if data is not None:
+                    filename=f"iteration_{i}_data.csv"
+                    full_name = os.path.join(full_directory, filename)
+                    data.to_csv(full_name, index=False)# Saves the data
+                    print(f"Data saved to {full_name}")
+                    i += 1
+                else:
+                    print("Warning: No data returned from scope")
             else:
                 self.scope.set_to_stop()
                 fails += 1
@@ -1205,7 +1214,7 @@ class MotFluoresceExperiment(GenericExperiment):
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)    
             data = self.cam.get_image_data()
             img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',\
-                                    0,1).convert('L').transpose(Image.FLIP_TOP_BOTTOM)
+                                    0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             img_arrs.append(np.array(img))
 
             # Save the images
@@ -1448,7 +1457,7 @@ class PhotonProductionDataSaver(object):
             if type(log_input) in [list, tuple]:
                 def flatten(l):
                     for el in l:
-                        if isinstance(el, collections.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
+                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
                             # https://stackoverflow.com/questions/60743762/basestring-equivalent-in-python3-str-and-string-types-from-future-and-six-not
                             for sub in flatten(el):
                                 yield sub
@@ -1625,7 +1634,7 @@ class MOTFluorescenceDataSaver(object):
             if type(log_input) in [list, tuple]:
                 def flatten(l):
                     for el in l:
-                        if isinstance(el, collections.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
+                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
                             # https://stackoverflow.com/questions/60743762/basestring-equivalent-in-python3-str-and-string-types-from-future-and-six-not
                             for sub in flatten(el):
                                 yield sub

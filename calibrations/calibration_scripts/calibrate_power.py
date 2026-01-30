@@ -144,7 +144,7 @@ def default_calib(calib_tuples):
         #today = datetime.datetime.now().strftime("%d-%m")
 
         #config_path_date = os.path.join(config_save_path, today)
-        full_folder_path = os.path.join(config_save_path, f"{freq}MHz")
+        full_folder_path = os.path.join(config_save_path, f"{freq:.0f}MHz")
         if not os.path.exists(full_folder_path):
             os.makedirs(full_folder_path)
 
@@ -169,9 +169,9 @@ def default_calib(calib_tuples):
 
 
 calib_tuples = [
-    #(1, "pump", 60.8558),
-    #(2, "stokes", 80),
-    #(3, "P1", 54.8558)
+    (1, "pump", 60.8558),
+    (2, "stokes", 80),
+    (3, "P1", 54.8558),
     (2, "stokes", 74)
 ]
 
