@@ -52,7 +52,7 @@ def calculate_integrals_single_trace(data, i=0):
 
         processed_df = pd.DataFrame()
         # imaging beam on
-        ch4 = data['Channel 4 Voltage (V)']
+        ch4 = data['Channel 3 Voltage (V)']
         ch2 = data["Channel 2 Voltage (V)"]
         time = data['Time (s)']
 
@@ -91,16 +91,16 @@ def calculate_integrals_single_trace(data, i=0):
         t_drop = T_RISE + IMG_WIDTH
 
         mask_fl = (time >= T_RISE) & (time <= t_drop)
-        ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 4 Voltage (V)']].copy()
+        ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
 
         t_start_ref = t_drop + 50e-6  # after imaging stops
         t_end_ref = data['Time (s)'].iloc[-1] 
         mask_ref = (data['Time (s)'] >= t_start_ref) & (data['Time (s)'] <= t_end_ref)
-        ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 4 Voltage (V)']].copy()
-        average = ch4_segment_ref['Channel 4 Voltage (V)'].mean(axis=0)
+        ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
+        average = ch4_segment_ref['Channel 3 Voltage (V)'].mean(axis=0)
 
         # integration area below curve, taking average as a zero reference
-        area = trapz(ch4_segment_fl['Channel 4 Voltage (V)'] - [average]*len(ch4_segment_fl['Channel 4 Voltage (V)']), ch4_segment_fl['Time (s)'])
+        area = trapz(ch4_segment_fl['Channel 3 Voltage (V)'] - [average]*len(ch4_segment_fl['Channel 3 Voltage (V)']), ch4_segment_fl['Time (s)'])
 
 
         # only consider the result if the timing of the awg marker is correct
@@ -111,7 +111,7 @@ def calculate_integrals_single_trace(data, i=0):
                 if area is not None and not np.isnan(area):
                     processed_df[f'Time (s) {i}'] = data['Time (s)']
                     processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
-                    processed_df[f'Channel 4 Voltage (V) {i}'] = data['Channel 4 Voltage (V)']
+                    processed_df[f'Channel 3 Voltage (V) {i}'] = data['Channel 3 Voltage (V)']
                     processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
 
                 print(f"Average background: {average}, Integrated area: {area}\n")
@@ -131,7 +131,7 @@ def single_trace_int_based_on_marker(data, i=0):
 
         processed_df = pd.DataFrame()
         # imaging beam on
-        ch4 = data['Channel 4 Voltage (V)']
+        ch4 = data['Channel 3 Voltage (V)']
         ch2 = data["Channel 2 Voltage (V)"]
         time = data['Time (s)']
 
@@ -161,16 +161,16 @@ def single_trace_int_based_on_marker(data, i=0):
         t_drop = t_rise + IMG_WIDTH
 
         mask_fl = (time >= t_rise) & (time <= t_drop)
-        ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 4 Voltage (V)']].copy()
+        ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
 
         t_start_ref = t_drop + 50e-6  # after imaging stops
         t_end_ref = data['Time (s)'].iloc[-1] 
         mask_ref = (data['Time (s)'] >= t_start_ref) & (data['Time (s)'] <= t_end_ref)
-        ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 4 Voltage (V)']].copy()
-        average = ch4_segment_ref['Channel 4 Voltage (V)'].mean(axis=0)
+        ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
+        average = ch4_segment_ref['Channel 3 Voltage (V)'].mean(axis=0)
 
         # integration area below curve, taking average as a zero reference
-        area = trapz(ch4_segment_fl['Channel 4 Voltage (V)'] - [average]*len(ch4_segment_fl['Channel 4 Voltage (V)']), ch4_segment_fl['Time (s)'])
+        area = trapz(ch4_segment_fl['Channel 3 Voltage (V)'] - [average]*len(ch4_segment_fl['Channel 3 Voltage (V)']), ch4_segment_fl['Time (s)'])
 
 
         # only consider the result if the timing of the awg marker is correct
@@ -180,7 +180,7 @@ def single_trace_int_based_on_marker(data, i=0):
             if area is not None and not np.isnan(area):
                 processed_df[f'Time (s) {i}'] = data['Time (s)']
                 processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
-                processed_df[f'Channel 4 Voltage (V) {i}'] = data['Channel 4 Voltage (V)']
+                processed_df[f'Channel 3 Voltage (V) {i}'] = data['Channel 3 Voltage (V)']
                 processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
 
             print(f"Average background: {average}, Integrated area: {area}\n")
@@ -201,7 +201,7 @@ def plot_shot_results(folder_path):
     for file_path in files:
         data = pd.read_csv(file_path)
         data['Channel 1 Voltage (V)'] = data['Channel 1 Voltage (V)']
-        data['Channel 4 Voltage (V)'] = data['Channel 4 Voltage (V)'].rolling(window=window_size, center=True, min_periods=1).mean()
+        data['Channel 3 Voltage (V)'] = data['Channel 3 Voltage (V)'].rolling(window=window_size, center=True, min_periods=1).mean()
         data["Channel 2 Voltage (V)"] = data['Channel 2 Voltage (V)']
 
         all_measurements.append(data)
@@ -217,12 +217,12 @@ def plot_shot_results(folder_path):
         time = data["Time (s)"]
         ch1 = data['Channel 1 Voltage (V)']
         ch2 = data["Channel 2 Voltage (V)"]
-        ch4 = data["Channel 4 Voltage (V)"]
+        ch4 = data["Channel 3 Voltage (V)"]
 
         measurements[f'Time (s) {i}'] = time
         measurements[f'Channel 1 Voltage (V) {i}'] = ch1
         measurements[f'Channel 2 Voltage (V) {i}'] = ch2
-        measurements[f"Channel 4 Voltage (V) {i}"] = ch4
+        measurements[f"Channel 3 Voltage (V) {i}"] = ch4
 
 
 
@@ -246,13 +246,13 @@ def plot_shot_results(folder_path):
         ax1.axvline(TARGET_TIME, color = "black", linestyle="--", label="target marker time")
         ax1.axhline(average, color='purple', linestyle='--', label='average ref')
         ax1.set_xlabel('Time (s)')
-        ax1.set_ylabel('Channel 4 Voltage (V)', color='tab:blue')
+        ax1.set_ylabel('Channel 3 Voltage (V)', color='tab:blue')
         ax1.tick_params(axis='y', labelcolor='tab:blue')
 
-        # ax2 = ax1.twinx()
-        # ax2.plot(time, ch2, label='CH2 (marker)', color='tab:orange')
-        # ax2.set_ylabel('Channel 2 Voltage (V)', color='tab:orange')
-        # ax2.tick_params(axis='y', labelcolor='tab:orange')
+        ax2 = ax1.twinx()
+        ax2.plot(time, ch1, label='CH1 (DAQ card)', color='tab:orange')
+        ax2.set_ylabel('Channel 1 Voltage (V)', color='tab:orange')
+        ax2.tick_params(axis='y', labelcolor='tab:orange')
 
         # Combinar leyendas de ambos ejes
         lines1, labels1 = ax1.get_legend_handles_labels()
@@ -281,7 +281,7 @@ def plot_shot_results(folder_path):
     # mean signal
     mean_time = measurements.filter(like='Time (s)').mean(axis=1)
     mean_ch1 = measurements.filter(like='Channel 1 Voltage (V)').mean(axis=1)
-    mean_ch4 = measurements.filter(like='Channel 4 Voltage (V)').mean(axis=1)
+    mean_ch4 = measurements.filter(like='Channel 3 Voltage (V)').mean(axis=1)
     mean_ch2 = measurements.filter(like="Channel 2 Voltage (V)").mean(axis=1)
 
     fig1, ax1 = plt.subplots(figsize=(11, 5))
@@ -308,7 +308,7 @@ def plot_shot_results(folder_path):
     time_val = valid_meas.filter(like='Time (s)').mean(axis=1)
     ch1_val = valid_meas.filter(like='Channel 1 Voltage (V)').mean(axis=1)
     ch2_val = valid_meas.filter(like="Channel 2 Voltage (V)").mean(axis=1)
-    ch4_val = valid_meas.filter(like='Channel 4 Voltage (V)').mean(axis=1)
+    ch4_val = valid_meas.filter(like='Channel 3 Voltage (V)').mean(axis=1)
 
     fig2, ax1 = plt.subplots(figsize=(11, 5))
     ax1.plot(time_val, ch1_val, linewidth=1.5, color='tab:blue', label='Mean CH 1')
@@ -387,7 +387,7 @@ def calculate_integrals(root_directory, shots_to_include=[], window_size=32,
 
             data = pd.read_csv(file_path)
             data['Channel 1 Voltage (V)'] = data['Channel 1 Voltage (V)'].rolling(window=window_size, center=True, min_periods=1).mean()
-            data['Channel 4 Voltage (V)'] = data['Channel 4 Voltage (V)'].rolling(window=window_size, center=True, min_periods=1).mean()
+            data['Channel 3 Voltage (V)'] = data['Channel 3 Voltage (V)'].rolling(window=window_size, center=True, min_periods=1).mean()
 
             ch1 = data['Channel 1 Voltage (V)']
             idx_sorted = (ch1 - 1).abs().sort_values().index

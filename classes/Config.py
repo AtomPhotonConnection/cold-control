@@ -365,9 +365,9 @@ class ExperimentConfigReader():
                 "trigger_channel": int(scope['trigger_channel']),
                 "trigger_level": float(scope['trigger_level']),
                 "sample_rate": float(scope['sample_rate']),
-                "time_range": float(scope['time_range']),
-                "centered_0": toBool(scope['centered_0']),
-                "data_channels": toIntList(scope['data_channels'])
+                "time_range": ast.literal_eval(scope['time_range']),
+                # Use ast.literal_eval to safely convert the dictionary string
+                "data_channels": ast.literal_eval(scope['data_channels'])
                 }
         else:
             scope_settings_dict = None

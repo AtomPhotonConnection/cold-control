@@ -152,7 +152,6 @@ class MotFluoresceConfiguration(GenericConfiguration):
             self.scope_trigger_level = scope_dict["trigger_level"]
             self.scope_sample_rate = scope_dict["sample_rate"]
             self.scope_time_range = scope_dict["time_range"]
-            self.scope_centered_0 = scope_dict["centered_0"]
             self.scope_data_channels = scope_dict["data_channels"]
 
         if self.use_awg:

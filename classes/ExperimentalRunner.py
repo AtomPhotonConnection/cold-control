@@ -56,7 +56,7 @@ from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingC
     MotFluoresceConfigurationSweep
 from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
 from classes.Sequence import IntervalStyle, Sequence
-import classes.oscilloscope_manager as osc
+import instruments.oscilloscope_manager as osc
 
 
 
@@ -1040,7 +1040,6 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_scope:
             self.samp_rate = self.mot_fluoresce_config.scope_sample_rate
             self.time_range = self.mot_fluoresce_config.scope_time_range
-            self.centred_0 = self.mot_fluoresce_config.scope_centered_0
             self.trig_ch = self.mot_fluoresce_config.scope_trigger_channel
             self.trig_lvl = self.mot_fluoresce_config.scope_trigger_level
             self.data_chs = self.mot_fluoresce_config.scope_data_channels
@@ -1101,7 +1100,7 @@ class MotFluoresceExperiment(GenericExperiment):
             self.scope = osc.OscilloscopeManager()
             #self.scope.reset_scope()
             self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
-                                       timebase_range=self.time_range, centered_0=self.centred_0)
+                                       timebase_range=self.time_range)
             
             self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
             #self.scope.set_to_run()
