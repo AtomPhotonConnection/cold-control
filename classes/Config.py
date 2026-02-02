@@ -27,6 +27,41 @@ GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
 def toBool(string):
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
 
+def toIntList(arg):
+    if arg is None:
+        return None
+    else:
+        return list(map(int,arg))
+    
+def toFloatTuple(arg):
+    return tuple(toFloatList(arg))
+
+def toIntTuple(arg):
+    return tuple(map(int,arg))
+
+def toFloatList(arg):
+    if isinstance(arg, str):
+        Warning("toFloatList received a string input. This may lead to unexpected behavior.")
+        return [float(arg)]
+    return list(map(float,arg))
+
+
+        # def toFloatList(arg):
+        #     if arg is None:
+        #         return None
+        #     if isinstance(arg, list):
+        #         return list(map(float, arg))
+        #     elif isinstance(arg, (int, float)):
+        #         return [float(arg)]
+        #     elif isinstance(arg, str):
+        #         items = [x.strip() for x in arg.replace(',', '\n').split('\n') if x.strip()]
+        #         try:
+        #             return list(map(float, items))
+        #         except ValueError as e:
+        #             raise ValueError(f"Could not convert one of the entries to float: {items}") from e
+        #     else:
+        #         raise TypeError(f"Unsupported input type for toFloatList: {type(arg)}")
+
 class ConfigReader(object):
     
     def __init__(self, fname):
@@ -47,7 +82,7 @@ class ConfigReader(object):
     
     def is_development_mode(self):
         print("Config keys:", self.config.keys())
-        return toBool(self.config['development_mode'])
+        return self.config.as_bool('development_mode')
     
 class ConfigWriter(object):
     
@@ -302,7 +337,7 @@ class ExperimentConfigReader():
                                       waveform_output_channels = list(self.config['AWG']['waveform output channels']),
                                       waveform_output_channel_lags = list(map(float, self.config['AWG']['waveform output channel lags'])),
                                       marked_channels = list(self.config['AWG']['marked channels']),
-                                      marker_width = eval(self.config['AWG']['marker width']))
+                                      marker_width = eval(self.config['AWG']['marker width'])) # type: ignore
 
         tdc_config = TdcConfiguration(counter_channels = list(map(eval, self.config['TDC']['counter channels'])),
                                       marker_channel = int(self.config['TDC']['marker channel']),
@@ -334,11 +369,7 @@ class ExperimentConfigReader():
         Method to extract the mot fluorescence configuration from the config file.
         """
 
-        def toFloatTuple(arg):
-            return tuple(map(float,arg))
-        
-        def toIntList(arg):
-            return list(map(int,arg))
+
         
         use_camera = toBool(self.config["use_cam"])
         use_scope = toBool(self.config["use_scope"])
@@ -361,13 +392,16 @@ class ExperimentConfigReader():
 
         if use_scope:
             scope = self.config['scope_settings']
+            data_chs = {}
+            for ch_idx, limits in scope['data_channels'].items():
+                data_chs[int(ch_idx)] = (float(limits[0]), float(limits[1]))
+            
             scope_settings_dict = {\
                 "trigger_channel": int(scope['trigger_channel']),
                 "trigger_level": float(scope['trigger_level']),
                 "sample_rate": float(scope['sample_rate']),
-                "time_range": ast.literal_eval(scope['time_range']),
-                # Use ast.literal_eval to safely convert the dictionary string
-                "data_channels": ast.literal_eval(scope['data_channels'])
+                "time_range": toFloatTuple(scope['time_range']),
+                "data_channels": data_chs
                 }
         else:
             scope_settings_dict = None
@@ -513,27 +547,8 @@ class ExperimentConfigReader():
             array = np.linspace(start, stop, num_points)
             return array.tolist()
         
-        def toIntList(arg):
-            if arg is None:
-                return None
-            else:
-                return list(map(int,arg))
         
-        def toFloatList(arg):
-            if arg is None:
-                return None
-            if isinstance(arg, list):
-                return list(map(float, arg))
-            elif isinstance(arg, (int, float)):
-                return [float(arg)]
-            elif isinstance(arg, str):
-                items = [x.strip() for x in arg.replace(',', '\n').split('\n') if x.strip()]
-                try:
-                    return list(map(float, items))
-                except ValueError as e:
-                    raise ValueError(f"Could not convert one of the entries to float: {items}") from e
-            else:
-                raise TypeError(f"Unsupported input type for toFloatList: {type(arg)}")
+
 
         
         def ensure_list(value):
@@ -605,18 +620,6 @@ class ExperimentConfigReader():
 
     
     def get_absorbtion_imaging_configuration(self):
-        
-        def toFloatTuple(arg):
-            return tuple(map(float,arg))
-        
-        def toFloatList(arg):
-            return list(map(float,arg))
-        
-        def toIntTuple(arg):
-            return tuple(map(int,arg))
-        
-        def toIntList(arg):
-            return list(map(int,arg))
                 
         return AbsorbtionImagingConfiguration(
                  scan_abs_img_freq = eval(self.config['scan_abs_img_freq']),
