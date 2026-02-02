@@ -77,9 +77,7 @@ class OscilloscopeManager:
             return full_name
 
 
-    @staticmethod   # Se comporta como una función independiente, pero está encapsulada
-    #dentro de la clase por razones de organización.
-    # no tiene acceso a los atributos de la clase (self o cls)
+    @staticmethod
     def csv_analysis(filename):
         """
         Static method to plot data from a csv
