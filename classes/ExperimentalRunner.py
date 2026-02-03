@@ -1097,12 +1097,16 @@ class MotFluoresceExperiment(GenericExperiment):
 
         if self.with_scope:
             print("connecting to scope")
+            start_time = time.time()
             self.scope = osc.OscilloscopeManager()
             #self.scope.reset_scope()
-            self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
-                                       timebase_range=self.time_range)
-            
-            self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
+            if not self.sweep:
+                self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
+                                        timebase_range=self.time_range)
+                
+                self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
+            print("scope configured")
+            print("configuring scope took {}s".format(time.time()-start_time))
             #self.scope.set_to_run()
 
         if self.with_awg:
@@ -1173,6 +1177,7 @@ class MotFluoresceExperiment(GenericExperiment):
             success = self.scope.wait_for_acquisition()
 
             if success:
+                start_data_time = time.time()
                 print("collecting data")
                 data = self.scope.read_slow_return_data(self.data_chs)
                 if data is not None:
@@ -1180,6 +1185,7 @@ class MotFluoresceExperiment(GenericExperiment):
                     full_name = os.path.join(full_directory, filename)
                     data.to_csv(full_name, index=False)# Saves the data
                     print(f"Data saved to {full_name}")
+                    print("data collection took {}s".format(time.time()-start_data_time))
                     i += 1
                 else:
                     print("Warning: No data returned from scope")
@@ -1282,6 +1288,23 @@ class MotFluoresceSweepExperiment():
         """
 
         print(f"This will run a series of {len(self.sweep_config)} experiments.")
+        base_config:MotFluoresceConfiguration = self.sweep_config.base_config
+
+        if base_config.use_scope:
+            print("Connecting to scope...")
+            scope = osc.OscilloscopeManager()
+            scope.reset_scope()
+            _data_chs = base_config.scope_data_channels
+            _samp_rate = base_config.scope_sample_rate
+            _time_range = base_config.scope_time_range
+            _trig_ch = base_config.scope_trigger_channel
+            _trig_lvl = base_config.scope_trigger_level
+
+            scope.configure_scope(_data_chs, samp_rate=_samp_rate,
+                                    timebase_range=_time_range)
+        
+            scope.configure_trigger(_trig_ch, _trig_lvl)
+            print("scope configured")
 
         for i, (config, sequence) in enumerate(self.sweep_config):
             print(f"Running experiment with configuration: {i}")

@@ -1440,7 +1440,7 @@ class DAQ_controller(object):
         for card in self.slaves + [self.master]:
             card.release() 
                 
-    def getChannels(self, onlyVisable = False):
+    def getChannels(self, onlyVisable = False) -> list[DAQ_channel]:
         '''Returns a list of all the DAQ_channel objects registered with the controller.'''
         channels = sum([card.channels for card in [self.master] + self.slaves],[])
         if onlyVisable: 
