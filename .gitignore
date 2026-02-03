@@ -19,3 +19,5 @@ temp/**
 calibrations/pulse_shaping_expt/STIRAP_DL_PRO/**
 calibrations/pulse_shaping_expt/OPT_PUMP_ELYSA/**
 calibrations/pulse_shaping_expt/STIRAP_ELYSA/**
+
+test_script.py
