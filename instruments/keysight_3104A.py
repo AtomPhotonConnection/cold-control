@@ -207,8 +207,12 @@ class OscilloscopeManager:
         """
         Function to configure the general scope settings.
         Inputs:
+         - data_chs: Dict mapping channel number to either (lower, upper) voltage range
+           or a dict with 'range' (tuple), 'impedance' ('high'|'low'), 'coupling' ('AC'|'DC').
+           If a tuple is given, impedance and coupling default to high and DC.
          - samp_rate (float): Rate at which samples are collected
          - timebase_range (tuple): Start and stop time for the timebase
+         - high_impedance (bool): Used only when data_chs values are plain (lower, upper) tuples.
         """
         print("configuring the scope settings")
         self.clear_error_queue()
@@ -222,9 +226,26 @@ class OscilloscopeManager:
         self._write_with_retry(f"TIMEBASE:RANGE {time_span}")
         self._write_with_retry(f"TIMEBASE:POSITION {time_center}")
 
-        for channel, (lower, upper) in data_chs.items():
-            if high_impedance:
+        for channel, ch_cfg in data_chs.items():
+            if isinstance(ch_cfg, dict):
+                lower, upper = ch_cfg['range']
+                impedance = ch_cfg.get('impedance', 'high').lower()
+                coupling = ch_cfg.get('coupling', 'DC').upper()
+            else:
+                lower, upper = ch_cfg[0], ch_cfg[1]
+                impedance = 'high' if high_impedance else 'low'
+                coupling = 'DC'
+
+            if impedance in ('high', '1meg', '1m'):
                 self._write_with_retry(f":CHANnel{channel}:IMPedance ONEMeg")
+            elif impedance in ('low', '50', '50ohm'):
+                self._write_with_retry(f":CHANnel{channel}:IMPedance FIFty")
+            else:
+                raise ValueError(f"Invalid impedance for channel {channel}: {impedance!r}. Use 'high' or 'low'.")
+
+            if coupling not in ('AC', 'DC'):
+                raise ValueError(f"Invalid coupling for channel {channel}: {coupling!r}. Use 'AC' or 'DC'.")
+            self._write_with_retry(f":CHANnel{channel}:COUPling {coupling}")
 
             v_range = upper - lower
             self._write_with_retry(f":CHANnel{channel}:RANGe {v_range}")

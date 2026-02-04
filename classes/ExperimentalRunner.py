@@ -1178,7 +1178,7 @@ class MotFluoresceExperiment(GenericExperiment):
             if success:
                 start_data_time = time.time()
                 print("collecting data")
-                data = self.scope.read_slow_return_data(self.data_chs)
+                data = self.scope.read_slow_return_data(list(self.data_chs.keys()))
                 if data is not None:
                     filename=f"iteration_{i}_data.csv"
                     full_name = os.path.join(full_directory, filename)

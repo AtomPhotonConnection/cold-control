@@ -393,9 +393,27 @@ class ExperimentConfigReader():
         if use_scope:
             scope = self.config['scope_settings']
             data_chs = {}
+            impedance_section = scope.get('data_channel_impedance', {})
+            coupling_section = scope.get('data_channel_coupling', {})
             for ch_idx, limits in scope['data_channels'].items():
-                data_chs[int(ch_idx)] = (float(limits[0]), float(limits[1]))
-            
+                if isinstance(limits, (list, tuple)):
+                    low, high = float(limits[0]), float(limits[1])
+                else:
+                    parts = [x.strip() for x in str(limits).split(',')]
+                    low, high = float(parts[0]), float(parts[1])
+                impedance = impedance_section.get(ch_idx, 'high')
+                if isinstance(impedance, list):
+                    impedance = impedance[0] if impedance else 'high'
+                impedance = str(impedance).strip().lower()
+                coupling = coupling_section.get(ch_idx, 'DC')
+                if isinstance(coupling, list):
+                    coupling = coupling[0] if coupling else 'DC'
+                coupling = str(coupling).strip().upper()
+                data_chs[int(ch_idx)] = {
+                    'range': (low, high),
+                    'impedance': impedance,
+                    'coupling': coupling
+                }
             scope_settings_dict = {\
                 "trigger_channel": int(scope['trigger_channel']),
                 "trigger_level": float(scope['trigger_level']),
