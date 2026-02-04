@@ -46,7 +46,7 @@ from instruments.pyicic.IC_Exception import IC_Exception
 from instruments.pyicic.IC_Camera import IC_Camera
 from instruments.TF930 import TF930
 
-from lab_control_functions.awg_control import run_awg # updated version
+from instruments.WX218x.awg_control import run_awg # updated version
 #from lab_control_functions.awg_control_functions_psh import run_awg # old version
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 
