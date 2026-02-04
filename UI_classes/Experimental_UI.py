@@ -19,7 +19,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backends._backend_tk import NavigationToolbar2Tk as NavigationToolbar2TkAgg
 import matplotlib.pyplot as plt
 
-from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader
+from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader, get_config_root
 from UI_classes.ToolTip_UI import ToolTip
 from UI_classes.Sequence_UI import Sequence_UI
 from UI_classes.DAQ_UI import DAQ_UI
@@ -329,8 +329,15 @@ class Experimental_UI(tk.LabelFrame):
         #     tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
         #     return
                 
+        initialdir = os.path.join(get_config_root(), "configs", "pulse_shaping_expt", "sweeps")
+        initialfile = ""
+        if isinstance(self.photon_production_config, MotFluoresceConfiguration) and getattr(self.photon_production_config, 'default_sweep_config_path', None):
+            default_path = self.photon_production_config.default_sweep_config_path
+            if default_path and os.path.isfile(default_path):
+                initialdir = os.path.dirname(default_path)
+                initialfile = os.path.basename(default_path)
         fname = tkFileDialog.askopenfilename(master=self, title="Choose an MOT Fluoresce Sweep Configuration",
-                                             initialdir=os.path.join(os.getcwd(),"/configs/pulse_shaping_expt/sweeps/"))
+                                             initialdir=initialdir, initialfile=initialfile or None)
         if fname!= '':
             parameter_list = ExperimentConfigReader(fname).get_mot_flourescence_configuration_sweep()
             #print(parameter_list[2])

@@ -7,11 +7,12 @@ from copy import deepcopy
 from configobj import ConfigObj
 import time
 import os
+import warnings
 from mock import patch
 import numpy as np
 import glob
 import re, ast
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 
 from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
       INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
@@ -23,6 +24,25 @@ from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonPr
       MotFluoresceConfiguration, MotFluoresceConfigurationSweep
 
 GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
+
+
+def get_config_root() -> str:
+    """Return the directory used as the base for resolving relative config paths.
+    Uses environment variable COLD_CONTROL_CONFIG_ROOT if set, otherwise os.getcwd()."""
+    return os.environ.get('COLD_CONTROL_CONFIG_ROOT', os.getcwd())
+
+
+def resolve_config_path(path: str, base: Optional[str] = None) -> str:
+    """Resolve a config path. If path is relative, join with base (default get_config_root())."""
+    if path is None or path == '':
+        return path
+    path = str(path).strip()
+    if base is None:
+        base = get_config_root()
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    return os.path.normpath(os.path.join(base, path))
+
 
 def toBool(string):
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
@@ -67,18 +87,38 @@ class ConfigReader(object):
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
+        self._config_dir = os.path.dirname(os.path.abspath(fname))
+        
+    def _resolve(self, path):
+        if path is None or path == '':
+            return path
+        return resolve_config_path(path.strip(), get_config_root())
         
     def get_sequence_fname(self):
-        return self.config['sequence_filename']
+        return self._resolve(self.config['sequence_filename'])
     
     def get_daq_config_fname(self):
-        return self.config['daq_config_filename']
+        return self._resolve(self.config['daq_config_filename'])
     
     def get_absorbtion_imaging_config_fname(self):
-        return self.config['absorbtion_images_config_filename']
+        return self._resolve(self.config['absorbtion_images_config_filename'])
+    
+    def get_experiment_config_fname(self):
+        """Preferred: returns experiment config path (experiment_config_filename with fallback to photon_production_config_filename)."""
+        path = self.config.get('experiment_config_filename') or self.config.get('photon_production_config_filename')
+        if path is None:
+            raise KeyError("Neither 'experiment_config_filename' nor 'photon_production_config_filename' found in root config.")
+        if 'photon_production_config_filename' in self.config and 'experiment_config_filename' not in self.config:
+            warnings.warn(
+                "photon_production_config_filename is deprecated; use experiment_config_filename in root config.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self._resolve(path)
     
     def get_photon_production_config_fname(self):
-        return self.config['photon_production_config_filename']
+        """Returns experiment config path. Prefer get_experiment_config_fname(). Backward compatible: reads experiment_config_filename or photon_production_config_filename."""
+        return self.get_experiment_config_fname()
     
     def is_development_mode(self):
         print("Config keys:", self.config.keys())
@@ -99,6 +139,7 @@ class ConfigWriter(object):
         self.config['daq_config_filename'] = daq_config_fname
         self.config['absorbtion_images_config_filename'] = absorbtion_imaging_config_fname
         self.config['photon_production_config_filename'] = photon_production_config_fname
+        self.config['experiment_config_filename'] = photon_production_config_fname
 
         self.config.write()
 
@@ -315,6 +356,34 @@ class ExperimentConfigReader():
         self.fname = fname
         print(f"Reading config file: {fname}")
         self.config = MyConfig(fname)
+        metadata = self.config.get('metadata', {})
+        config_type = metadata.get('config_type') if isinstance(metadata, dict) else None
+        if config_type is not None and str(config_type).strip().lower() != 'experiment':
+            warnings.warn(
+                f"Experiment config has config_type={config_type!r}; expected 'experiment' or leave unset.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _validate_experiment_config_structure(self):
+        """Check required keys for MOT fluorescence experiment config. Only runs when metadata.config_type == 'experiment'."""
+        required_top = ['save location', 'mot reload', 'iterations', 'use_cam', 'use_scope', 'use_awg', 'metadata']
+        missing = [k for k in required_top if k not in self.config]
+        if missing:
+            raise ValueError(f"Experiment config missing required keys: {missing}")
+        if 'metadata' not in self.config or 'experiment_type' not in self.config['metadata']:
+            raise ValueError("Experiment config [metadata] must contain experiment_type")
+        if self.config.get('use_scope'):
+            scope = self.config.get('scope_settings')
+            if not scope:
+                raise ValueError("use_scope is True but [scope_settings] is missing")
+            for k in ['trigger_channel', 'trigger_level', 'sample_rate', 'time_range', 'data_channels']:
+                if k not in scope:
+                    raise ValueError(f"[scope_settings] missing required key: {k}")
+        if self.config.get('use_awg'):
+            awg = self.config.get('awg_settings')
+            if not awg or 'config_path' not in awg:
+                raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
 
     
     def get_expt_type(self):
@@ -500,6 +569,14 @@ class ExperimentConfigReader():
             else:
                 awg_settings_dict["config_path_single"] = None
 
+            default_sweep_path = self.config.get('default_sweep_config_path', None)
+            if default_sweep_path:
+                default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
+            metadata = self.config.get('metadata') or {}
+            ct = getattr(metadata, 'get', lambda k, d='': d)('config_type', '').strip().lower()
+            if ct == 'experiment':
+                self._validate_experiment_config_structure()
+
             mot_fluoresce_config = MotFluoresceConfiguration(save_location=self.config['save location'],
                                                             mot_reload=eval(self.config['mot reload']),
                                                             iterations=int(self.config['iterations']),
@@ -508,13 +585,21 @@ class ExperimentConfigReader():
                                                             use_awg=use_awg,
                                                             cam_dict=camera_settings_dict,
                                                             scope_dict=scope_settings_dict,
-                                                            awg_dict=awg_settings_dict)
+                                                            awg_dict=awg_settings_dict,
+                                                            default_sweep_config_path=default_sweep_path)
 
             return mot_fluoresce_config
             
         else:
             awg_settings_dict = None
 
+        default_sweep_path = self.config.get('default_sweep_config_path', None)
+        if default_sweep_path:
+            default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
+        metadata = self.config.get('metadata') or {}
+        ct = getattr(metadata, 'get', lambda k, d='': d)('config_type', '').strip().lower()
+        if ct == 'experiment':
+            self._validate_experiment_config_structure()
 
         
         mot_fluoresce_config = \
@@ -527,6 +612,7 @@ class ExperimentConfigReader():
                                 cam_dict=camera_settings_dict,
                                 scope_dict=scope_settings_dict,
                                 awg_dict=awg_settings_dict,
+                                default_sweep_config_path=default_sweep_path,
                                 )
         
         
