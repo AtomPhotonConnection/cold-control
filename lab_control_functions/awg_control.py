@@ -58,7 +58,7 @@ def configure_trigger(awg:WX218x_awg, awg_chs:List[int], burst_count):
         awg.configure_burst_count(ch, burst_count)
         awg.configure_operation_mode(ch, WX218x_OperationMode.TRIGGER)
         awg.configure_trigger_source(ch, WX218x_TriggerMode.EXTERNAL)
-        awg.configure_trigger_level(ch, 2)
+        awg.configure_trigger_level(ch, 1.6)
         awg.configure_trigger_slope(ch, WX218x_TriggerSlope.POSITIVE)
 
 

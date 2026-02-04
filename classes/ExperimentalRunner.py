@@ -1100,11 +1100,10 @@ class MotFluoresceExperiment(GenericExperiment):
             start_time = time.time()
             self.scope = osc.OscilloscopeManager()
             #self.scope.reset_scope()
-            if not self.sweep:
-                self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
-                                        timebase_range=self.time_range)
-                
-                self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
+            self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
+                                    timebase_range=self.time_range)
+            
+            self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
             print("scope configured")
             print("configuring scope took {}s".format(time.time()-start_time))
             #self.scope.set_to_run()
@@ -1196,6 +1195,34 @@ class MotFluoresceExperiment(GenericExperiment):
                     break
                 print("Failed to trigger, running again")
 
+    def __run_no_save(self):
+        """
+        Private method to run the experiment without a scope or camera.
+        """
+        self.daq_controller.load(self.sequence.getArray())
+        self.daq_controller.writeChannelValues()
+        print("DAQ controller loaded and channel values written.")
+
+        print(f"Data will not be saved as no scope or camera is used.")
+        # work out the experiment name from the subfolder
+        experiment_name = self.save_location.split(os.sep)[-2]
+        print(f"Experiment name is {experiment_name}")
+
+        i = 1
+        while i <= self.config.iterations:
+            print(f"Iteration {i} of experiment {experiment_name}")
+            print(f"loading mot for {self.config.mot_reload}ms")
+            sleep(self.config.mot_reload*10**-3) # convert from ms to s
+
+            print("playing sequence")
+            self.daq_controller.play(float(self.sequence.t_step), clearCards=False)
+        
+            print("writing channel values")
+            self.daq_controller.writeChannelValues()
+
+            print(f"Iteration {i} complete.")
+            i += 1
+
 
     def __run_with_cam(self):
         # needs to be in a try except. If the camera isn't closed the computer will crash
@@ -1250,6 +1277,11 @@ class MotFluoresceExperiment(GenericExperiment):
                 self.__run_with_scope()
             elif self.with_cam and not self.with_scope:
                 self.__run_with_cam()
+            elif not self.with_cam and not self.with_scope:
+                self.__run_no_save()
+            else:
+                print("Error: Cannot run experiment with both camera and scope.")
+                
         except Exception as e:
             print(f"An error occurred during the experiment: {e}")
         finally:
@@ -1271,7 +1303,9 @@ class MotFluoresceExperiment(GenericExperiment):
             print('...closed')
 
         self.daq_controller.clearCards()
-        self.scope.quit()
+        if self.with_scope:
+            print("closing scope...")
+            self.scope.quit()
         super().daq_cards_off()
 
 
@@ -1288,29 +1322,14 @@ class MotFluoresceSweepExperiment():
         """
 
         print(f"This will run a series of {len(self.sweep_config)} experiments.")
-        base_config:MotFluoresceConfiguration = self.sweep_config.base_config
 
-        if base_config.use_scope:
-            print("Connecting to scope...")
-            scope = osc.OscilloscopeManager()
-            scope.reset_scope()
-            _data_chs = base_config.scope_data_channels
-            _samp_rate = base_config.scope_sample_rate
-            _time_range = base_config.scope_time_range
-            _trig_ch = base_config.scope_trigger_channel
-            _trig_lvl = base_config.scope_trigger_level
-
-            scope.configure_scope(_data_chs, samp_rate=_samp_rate,
-                                    timebase_range=_time_range)
-        
-            scope.configure_trigger(_trig_ch, _trig_lvl)
-            print("scope configured")
 
         for i, (config, sequence) in enumerate(self.sweep_config):
             print(f"Running experiment with configuration: {i}")
             # Create a new MotFluoresceExperiment with the current configuration
             experiment = MotFluoresceExperiment(self.daq_controller, sequence, config,
                                                 sweep=True)
+
             experiment.run()
             print(f"Experiment {i} completed and closed.")
 

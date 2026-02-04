@@ -254,6 +254,11 @@ def plot_shot_results(folder_path):
         ax2.set_ylabel('Channel 1 Voltage (V)', color='tab:orange')
         ax2.tick_params(axis='y', labelcolor='tab:orange')
 
+        ax3 = ax1.twinx()
+        ax3.plot(time, ch2, label='CH2 (photodiode)', color='green', alpha=0.5)
+        ax3.set_ylabel('Channel 2 Voltage (V)', color='green')
+        ax3.tick_params(axis='y', labelcolor='green')
+
         # Combinar leyendas de ambos ejes
         lines1, labels1 = ax1.get_legend_handles_labels()
         #lines2, labels2 = ax2.get_legend_handles_labels()

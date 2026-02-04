@@ -20,9 +20,9 @@ import matplotlib.pyplot as plt
 
 class OscilloscopeManager:
 
-    def __init__(self, scope_id="USB0::0x0957::0x17A0::MY54280441::0::INSTR"):#'USB0::0x2A8D::0x900E::MY53450121::0::INSTR'):
+    def __init__(self, scope_id="USB0::0x0957::0x17A0::MY54280441::0::INSTR", read_speed=False):#'USB0::0x2A8D::0x900E::MY53450121::0::INSTR'):
         self.scope_id = scope_id
-        self.read_speed = None
+        self.read_speed = read_speed
 
         try:
             self.rm = visa.ResourceManager()
@@ -130,16 +130,13 @@ class OscilloscopeManager:
 
 
     def configure_scope(self, data_chs, samp_rate=1e10, timebase_range=(-2.5e-3, 2.5e-3),\
-                        high_speed = False, high_impedance=True):
+                        high_impedance=True):
         """
         Function to configure the general scope settings.
         Inputs:
          - samp_rate (float): Rate at which samples are collected
          - timebase_range (tuple): Start and stop time for the timebase
-         - high_speed (bool): TODO if True, the scope will be set to read data at high speed.
         """
-
-        self.read_speed = high_speed
         
         print("configuring the scope settings")
         self.scope.write('ACQUIRE:TYPE HRESOLUTION')
@@ -149,7 +146,7 @@ class OscilloscopeManager:
         time_span = t_stop - t_start
         time_center = (t_start + t_stop) / 2
         self.scope.write(f'TIMEBASE:REFERENCE CENTER')
-        self.scope.write(f"TIMbebase:RANGeE {time_span}")
+        self.scope.write(f"TIMEBASE:RANGE {time_span}")
         self.scope.write(f"TIMEBASE:POSITION {time_center}")
         
         
