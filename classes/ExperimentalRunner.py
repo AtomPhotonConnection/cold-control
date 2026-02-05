@@ -46,7 +46,7 @@ from instruments.pyicic.IC_Exception import IC_Exception
 from instruments.pyicic.IC_Camera import IC_Camera
 from instruments.TF930 import TF930
 
-from instruments.WX218x.awg_control import run_awg # updated version
+from instruments.WX218x.awg_control2 import configure_awg # updated version
 #from lab_control_functions.awg_control_functions_psh import run_awg # old version
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 
@@ -216,7 +216,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images\
                       = self.__analyseImages(img_arrs, bkg_arrs, save_processed_images=self.config.save_processed_images)
             else:
-                self.corr_img_arrs, self.ave_bkg_arrs = None, None, None
+                self.corr_img_arrs, self.ave_bkg_arrs = None, None
             self.results_ready = True
                 
         # It is important to properly close the camera before exiting, otherwise the computer can be crashed.
@@ -282,6 +282,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 calib_units,_,fromVFunc = self.daq_controller.getChannelCalibrationDict()[c.abs_img_freq_ch]
             except KeyError:
                 calib_units,_,fromVFunc = 'V', None, lambda x: x
+
+            assert fromVFunc is not None, f"Calibration function for channel {c.abs_img_freq_ch} is None. Cannot scan absorption imaging frequency without a valid calibration function."
             
             for freq in c.abs_img_freqs:
                 seqs_copy = [copy.deepcopy(seq) for seq in self.sequences]
@@ -1115,7 +1117,9 @@ class MotFluoresceExperiment(GenericExperiment):
     
     def _configure_awg(self):
         """
-        Configures the AWG for the experiment, loads data for all channels"""
+        Configures the AWG for the experiment, loads data for all channels
+        """
+        start_time = time.time()
         rm = pyvisa.ResourceManager()
         awg = rm.open_resource("USB0::0x168C::0x1284::0000215582::0::INSTR")   
         awg.write(":SYSTem:REBoot") # type: ignore
@@ -1124,7 +1128,8 @@ class MotFluoresceExperiment(GenericExperiment):
             print("Configuring single AWG")
             run_awg_single(self.awg_config_single)
 
-        run_awg(self.awg_config) 
+        configure_awg(self.awg_config)
+        print("AWG configured in {}s".format(time.time()-start_time))
 
 
     def __run_with_scope(self):

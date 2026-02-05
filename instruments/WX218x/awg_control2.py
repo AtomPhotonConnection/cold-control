@@ -240,6 +240,7 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
         awg.configure_sample_rate(awg_config.sample_rate)
         awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
         awg.configure_couple_enabled(True)
+    
 
     # 2. Timing Calculations
     abs_offsets = calculate_offsets(awg_config.waveform_output_channel_lags,
@@ -321,6 +322,7 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
         plt.close()
 
     if not dev_mode:
+        assert awg is not None, "AWG instance should not be None in non-dev mode."
         # Configure markers and clear waveform memory first (same order as original)
         write_markers(final_marker, awg, awg_config.waveform_output_channels, marker_wid)
         awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)

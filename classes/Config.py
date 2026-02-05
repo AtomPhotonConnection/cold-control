@@ -8,6 +8,7 @@ from configobj import ConfigObj
 import time
 import os
 import warnings
+from importlib_metadata import metadata
 from mock import patch
 import numpy as np
 import glob
@@ -156,6 +157,12 @@ class MyConfig:
     def __setitem__(self, key: str, value: Any) -> None:
         self._cfg[key] = value
 
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._cfg.get(key, default)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._cfg
+    
     @property
     def filename(self) -> str:
         if self._cfg.filename is None:
@@ -391,8 +398,9 @@ class ExperimentConfigReader():
         Method to extract the experiment type from the config file
         """
 
-        try: expt_type = self.config['metadata']['experiment_type']
-        except KeyError:
+        metadata = self.config.get('metadata', {})
+        expt_type = metadata.get('experiment_type')
+        if expt_type is None:
             print(r"To fix this error you probably need to add a 'metadata' section to the config file. See configs\sequence\pulse_shaping_expt\photon_prod_config.ini")
             raise KeyError("No experiment type specified in the config file.")
         
@@ -573,7 +581,7 @@ class ExperimentConfigReader():
             if default_sweep_path:
                 default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
             metadata = self.config.get('metadata') or {}
-            ct = getattr(metadata, 'get', lambda k, d='': d)('config_type', '').strip().lower()
+            ct = metadata.get('config_type', '').strip().lower()
             if ct == 'experiment':
                 self._validate_experiment_config_structure()
 
@@ -585,8 +593,7 @@ class ExperimentConfigReader():
                                                             use_awg=use_awg,
                                                             cam_dict=camera_settings_dict,
                                                             scope_dict=scope_settings_dict,
-                                                            awg_dict=awg_settings_dict,
-                                                            default_sweep_config_path=default_sweep_path)
+                                                            awg_dict=awg_settings_dict)
 
             return mot_fluoresce_config
             

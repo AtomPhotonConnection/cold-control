@@ -985,7 +985,6 @@ class DAQ_channel(object):
         self.isUIVisable = isUIVisable
         
         self.isCalibrated = False
-        self.calibrationToVFunc, self.calibrationFromVFunc = None, None
         self.calibrationUnits = ''
         if calibrationFname.strip() != '':
             self.calibrate(calibrationFname, from_csv=False)
@@ -1049,7 +1048,7 @@ class DAQ_channel(object):
         try:
             voltage_col = df.columns[0]  # Get the voltage column name (e.g., "Voltage (V)")
             data_col = df.columns[1] # get the column containing the calibration data
-            units = data_col.split(' ')[-1].strip('()')  # Extract units
+            units = str(data_col).split(' ')[-1].strip('()')  # Extract units
         except IndexError:
             print(f"Invalid calibration file format: {calibrationFname}")
             return

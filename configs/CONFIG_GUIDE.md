@@ -86,7 +86,7 @@ Used only if `use_scope` is True.
 | `sample_rate` | Scope sample rate (Hz). |
 | `time_range` | Timebase range as `start, stop` (e.g. `-100e-6, 4.1e-3`). |
 | `[[data_channels]]` | Subsection: channel number → voltage range as `lower, upper` (e.g. `1 = -1.0, 5.0`). |
-| `[[data_channel_impedance]]` | Optional. Channel number → `high` or `low` (1 MΩ or 50 Ω). Default per channel: `high`. |
+| `[[data_channel_impedance]]` | Optional. Channel number → `high` or `low` (1 MΩ or 50 Ω). Default per channel: `high`. If the impedance is `low`, then the coupling cannot be `AC` and the voltage range must be <5 V. |
 | `[[data_channel_coupling]]` | Optional. Channel number → `AC` or `DC`. Default per channel: `DC`. |
 
 ### Section: `[awg_settings]`

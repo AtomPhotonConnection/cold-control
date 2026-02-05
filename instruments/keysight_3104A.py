@@ -236,6 +236,11 @@ class OscilloscopeManager:
                 impedance = 'high' if high_impedance else 'low'
                 coupling = 'DC'
 
+            if impedance in ("low", "50", "50ohm") and coupling == "AC":
+                raise ValueError(f"Invalid configuration for channel {channel}: 50 ohm impedance cannot be used with AC coupling.")
+            if impedance in ("low", "50", "50ohm") and (upper - lower) > 5:
+                raise ValueError(f"Invalid voltage range for channel {channel}: 50 ohm impedance is limited to 5V range.")
+
             if impedance in ('high', '1meg', '1m'):
                 self._write_with_retry(f":CHANnel{channel}:IMPedance ONEMeg")
             elif impedance in ('low', '50', '50ohm'):
@@ -483,11 +488,13 @@ class OscilloscopeManager:
                     acq_pct = 0
                 acq_complete_bool = acq_pct >= 100
                 run_state_bool = "STOP" in run_state
+                #print(f"Acquisition complete: {acq_complete_bool}, {acq_pct}% complete.\nRun state bool: {run_state_bool}")
 
                 # Only read :TER? when acquisition appears done (TER is cleared on read)
                 if acq_complete_bool and run_state_bool and triggered is False:
                     ter_str = self._query_with_retry(":TER?").strip()
-                    triggered = ter_str in ("1", "TRUE", "True", "true") or ter_str.startswith("1")
+                    triggered = ter_str == "+1"
+                    #print(f"Triggered status from :TER?: {ter_str} -> {triggered}")
 
                 success = acq_complete_bool and run_state_bool and triggered
                 if success:
@@ -499,9 +506,9 @@ class OscilloscopeManager:
         if not success:
             print("Acquisition did not complete within the maximum wait time.")
 
-        print(f"Acquisition complete: {acq_complete_bool}")
-        print(f"Triggered: {triggered}")
-        print(f"Run state: {run_state}")
+        print(f"Acquisition complete: {acq_complete_bool}, {acq_pct}% complete.")
+        print(f"Triggered: {triggered}, result from :TER? is {ter_str}")
+        print(f"Stopped: {run_state_bool}, run state is {run_state}")
 
         print("Acquisition complete. Ready to retrieve data.\n")
         return success
