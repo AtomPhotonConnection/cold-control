@@ -6,14 +6,14 @@ Created on 22/05/2025.
 @description: This script contains the OscilloscopeManager class, which is used to manage
 the connection to and data acquisition from an oscilloscope (Keysight 3104A / InfiniiVision 3000T).
 """
+from datetime import datetime
+import os
+import time
+import logging
 
 import numpy as np
 import pyvisa as visa
 import pandas as pd
-import os
-from datetime import datetime
-import time
-import logging
 import matplotlib.pyplot as plt
 
 # Robustness: retries and delays for flaky USB/SCPI
@@ -126,32 +126,32 @@ class OscilloscopeManager:
 
     @staticmethod
     def save_data(dataframe, filename, window):
-            """
-            Static method to save a dataframe to a file. 
-            Inputs:
-             - dataframe (pd.Dataframe): The dataframe to be stored as a csv
-             - filename (str): desired name of the file
-             
-            Returns:
-             - full_name (str): full name of the file including file path
-            """
+        """
+        Static method to save a dataframe to a file. 
+        Inputs:
+            - dataframe (pd.Dataframe): The dataframe to be stored as a csv
+            - filename (str): desired name of the file
+            
+        Returns:
+            - full_name (str): full name of the file including file path
+        """
 
-            # Get current date and time
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            current_time = datetime.now().strftime("%H-%M-%S")
+        # Get current date and time
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_time = datetime.now().strftime("%H-%M-%S")
 
-            # Ensure the new directory exists
-            directory = os.path.join("data", current_date)
-            os.makedirs(directory, exist_ok=True) 
+        # Ensure the new directory exists
+        directory = os.path.join("data", current_date)
+        os.makedirs(directory, exist_ok=True) 
 
-            # Creates full file name including time and parent folders
-            full_name = f"{window}_{current_time}_{filename}"
-            full_name = os.path.join(directory, full_name)
+        # Creates full file name including time and parent folders
+        full_name = f"{window}_{current_time}_{filename}"
+        full_name = os.path.join(directory, full_name)
 
-            # Saves the dataframe
-            dataframe.to_csv(full_name, index=False)
-            print(f"Data saved to {full_name}")
-            return full_name
+        # Saves the dataframe
+        dataframe.to_csv(full_name, index=False)
+        print(f"Data saved to {full_name}")
+        return full_name
 
 
     @staticmethod
