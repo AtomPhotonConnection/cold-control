@@ -27,7 +27,7 @@ python optimize_awg_pulse_forward.py
 # 1. CHECK HARDWARE CONNECTION
 # ─────────────────────────────────────────────────────────────────────────
 
-from instruments.keysight_3104A import OscilloscopeManager
+from instruments.agilent_9000 import OscilloscopeManager
 import visa
 
 # Get scope ID
@@ -35,7 +35,7 @@ rm = visa.ResourceManager()
 scope_ids = rm.list_resources()
 print("Available instruments:", scope_ids)
 
-# Connect to scope
+# Connect to Agilent 9000 scope
 scope = OscilloscopeManager(scope_ids[0])  # Use first device
 assert scope.is_connected(), "Scope not connected!"
 print("✓ Scope connected")
@@ -48,7 +48,7 @@ scope.quit()
 # Edit config_forward.ini:
 
 # [Hardware]
-# scope_id = USB0::0x0957::0x17A0::MY54280441::0::INSTR    # Your ID here
+# scope_id = USB0::0x2A8D::0x900E::MY53450121::0::INSTR    # Your Agilent 9000 ID here
 # awg_id = USB0::0x168C::0x1284::0000215582::0::INSTR      # Your ID here
 
 # [Channel]
@@ -235,7 +235,7 @@ original, theoretical, time = load_theoretical_signal(
 )
 
 # 2. Connect scope
-scope = OscilloscopeManager("USB0::0x0957::0x17A0::MY54280441::0::INSTR")
+scope = OscilloscopeManager("USB0::0x2A8D::0x900E::MY53450121::0::INSTR")
 
 # 3. Configure and measure
 acq = ScopeDataAcquisition(scope, {

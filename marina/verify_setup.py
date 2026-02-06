@@ -108,7 +108,7 @@ def check_workspace_structure():
     
     required_dirs = [
         'classes',
-        'instruments/keysight_3104A',
+        'instruments/agilent_9000',
         'instruments/WX218x',
         'marina',
         'calibrations',
@@ -117,7 +117,7 @@ def check_workspace_structure():
     
     required_files = [
         'classes/ExperimentalConfigs.py',
-        'instruments/keysight_3104A.py',
+        'instruments/agilent_9000.py',
         'instruments/WX218x/awg_control2.py',
     ]
     
@@ -238,7 +238,7 @@ def check_visa_devices():
 
 
 def check_oscilloscope_connection(config_path):
-    """Try to connect to oscilloscope."""
+    """Try to connect to Agilent 9000 series oscilloscope."""
     print_header("Oscilloscope Connection")
     
     try:
@@ -250,9 +250,9 @@ def check_oscilloscope_connection(config_path):
             return False
         
         try:
-            from instruments.keysight_3104A import OscilloscopeManager
+            from instruments.agilent_9000 import OscilloscopeManager
             
-            print(f"  Attempting to connect to: {scope_id}")
+            print(f"  Attempting to connect to Agilent 9000: {scope_id}")
             scope = OscilloscopeManager(scope_id)
             
             connected = scope.is_connected()

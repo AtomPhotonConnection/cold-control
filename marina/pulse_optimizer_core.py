@@ -30,6 +30,9 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Note: Oscilloscope manager imported dynamically for flexibility
+# Uses agilent_9000.OscilloscopeManager for Agilent Infiniium 9000 series
+
 
 # =========================================================================
 # Physical Constants & Conversion Functions
@@ -171,7 +174,7 @@ class ScopeDataAcquisition:
         Initialize scope acquisition manager.
         
         Args:
-            osc_manager: Instance of OscilloscopeManager from keysight_3104A
+            osc_manager: Instance of OscilloscopeManager from agilent_9000
             scope_config: Dict with keys:
                 - 'channel_map': Dict of channel number to voltage range tuples
                 - 'samp_rate': Sampling rate (Hz)

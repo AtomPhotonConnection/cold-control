@@ -67,7 +67,7 @@ This document provides a comprehensive listing of all files created in the refac
 
 **Dependencies:**
 - pulse_optimizer_core.py
-- instruments.keysight_3104A
+- instruments.agilent_9000
 - instruments.WX218x.awg_control2
 - classes.ExperimentalConfigs
 
@@ -276,7 +276,7 @@ python verify_setup.py config_forward.ini
 | Configuration | ✗ Hardcoded | ✓ .ini files |
 | Error handling | ✗ Basic | ✓ Comprehensive |
 | Logging | ✗ Print statements | ✓ Proper logging |
-| API usage | ✗ Deprecated | ✓ Current (keysight_3104A, awg_control2) |
+| **API usage** | ✗ Deprecated | ✓ Current (agilent_9000, awg_control2) |
 | Testing support | ✗ Monolithic | ✓ Modular for unit tests |
 | Setup verification | ✗ Manual | ✓ Automated script |
 
@@ -312,7 +312,7 @@ verify_setup.py
 
 optimize_awg_pulse_forward.py
 ├─ pulse_optimizer_core.py
-├─ instruments.keysight_3104A
+├─ instruments.agilent_9000
 ├─ instruments.WX218x.awg_control2
 ├─ classes.ExperimentalConfigs
 ├─ classes.Config

@@ -16,7 +16,7 @@ This document summarizes the refactoring of the AWG pulse optimization system fr
 
 ### New System
 - Modular architecture with clear separation of concerns
-- Uses current APIs: `keysight_3104A.OscilloscopeManager`, `awg_control2.configure_awg()`
+- Uses current APIs: `agilent_9000.OscilloscopeManager`, `awg_control2.configure_awg()`
 - Configuration-driven via `.ini` files
 - Reusable core components
 - Comprehensive error handling and logging
@@ -124,7 +124,7 @@ Comprehensive user manual:
 | Configuration | ❌ Hardcoded paths | ✅ `.ini` files with validation |
 | Testing | ❌ Manual ad-hoc | ✅ Modular for easier unit tests |
 | Logging | ❌ Print statements | ✅ Proper `logging` module |
-| Imports | ❌ Deprecated packages | ✅ Current API (keysight_3104A, awg_control2) |
+| Imports | ❌ Deprecated packages | ✅ Current API (agilent_9000, awg_control2) |
 
 ### Lines of Code
 
@@ -174,7 +174,7 @@ If you were using `finding_amplitude_st.py` or `finding_amplitude_inv.py`:
    awg = rm.open_resource("USB0::0x168C::0x1284::...")
    
    # New
-   from instruments.keysight_3104A import OscilloscopeManager
+   from instruments.agilent_9000 import OscilloscopeManager
    osc_manager = OscilloscopeManager(scope_id="...USB...")
    # AWG usually handled automatically via awg_control2
    ```
@@ -213,9 +213,9 @@ To verify the new system works with your hardware:
 
 ```python
 # Test 1: Scope connection
-from instruments.keysight_3104A import OscilloscopeManager
+from instruments.agilent_9000 import OscilloscopeManager
 
-scope = OscilloscopeManager("USB0::0x0957::...")
+scope = OscilloscopeManager("USB0::0x0957::0x9009::...")
 assert scope.is_connected()
 scope.quit()
 

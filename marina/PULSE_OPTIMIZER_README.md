@@ -6,6 +6,8 @@ A refactored and improved system for optimizing AWG (Arbitrary Waveform Generato
 
 This system allows you to optimize the input signal sent to an AWG such that the output signal matches a theoretical/desired target. It uses adaptive filtering techniques to find the optimal waveform and iteratively improves it.
 
+The system supports **Agilent Infiniium 9000 series** oscilloscopes for signal measurement and Keysight WX218x AWG for waveform generation.
+
 ### Two Optimization Approaches
 
 1. **Forward Optimization** (`optimize_awg_pulse_forward.py`)
@@ -28,7 +30,7 @@ pip install numpy scipy pandas matplotlib scikit-learn configobj python-visa
 
 ### Hardware Requirements
 
-- **Oscilloscope**: Keysight 3104A (InfiniiVision 3000T) with VISA/USB connection
+- **Oscilloscope**: Agilent Infiniium 9000 Series with VISA/USB connection
 - **AWG**: Keysight WX218x series with VISA/USB connection  
 - **MATLAB/Octave**: For real-time waveform visualization (optional)
 

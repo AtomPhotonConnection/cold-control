@@ -29,7 +29,7 @@ from datetime import datetime
 from configobj import ConfigObj
 import csv
 
-from instruments.keysight_3104A import OscilloscopeManager
+from instruments.agilent_9000 import OscilloscopeManager
 from instruments.WX218x.awg_control2 import configure_awg
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 from classes.Config import ConfigReader
@@ -106,9 +106,9 @@ class InvertedOptimizer:
         logger.info(f"Initialized InvertedOptimizer for channel {self.channel}, pulse {self.pulse_type}")
     
     def connect_scope(self) -> OscilloscopeManager:
-        """Connect to oscilloscope."""
+        """Connect to Agilent 9000 series oscilloscope."""
         scope_id = self.config['Hardware']['scope_id']
-        logger.info(f"Connecting to scope: {scope_id}")
+        logger.info(f"Connecting to Agilent 9000 scope: {scope_id}")
         self.scope = OscilloscopeManager(scope_id)
         return self.scope
     

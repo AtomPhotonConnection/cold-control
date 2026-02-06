@@ -30,11 +30,11 @@ from marina.pulse_optimizer_core import (
     normalize_signals_to_max,
     SignalPlotter,
 )
-from instruments.keysight_3104A import OscilloscopeManager
+from instruments.agilent_9000 import OscilloscopeManager
 import numpy as np
 
-# Connect to oscilloscope
-scope_manager = OscilloscopeManager(scope_id="USB0::0x0957::0x17A0::MY54280441::0::INSTR")
+# Connect to oscilloscope (Agilent 9000 series)
+scope_manager = OscilloscopeManager(scope_id="USB0::0x2A8D::0x900E::MY53450121::0::INSTR")
 
 # Load theoretical signal
 signal_path = get_theoretical_signal_path('stokes')  # Returns path to CSV
