@@ -9,16 +9,10 @@ CSV files. It:
 4. Calculates normalized fluorescence during imaging pulse
 5. Generates comprehensive plots
 
-Usage:
-    processor = UnifiedFluorescenceProcessor(root_folder)
-    processor.process_all_experiments(
-        fluor_drop_voltage=19.7e-3,
-        mot_drop_time=600e-6,
-        img_window=(1.6e-3, 2.1e-3),  # Imaging pulse time window
-        background_window=(-0.5e-3, 0),  # Before MOT drop
-        final_window=(4e-3, 5e-3)  # After sequence
-    )
-    processor.plot_results()
+Normalized fluorescence formula:
+    F_normalized = (F(t) - F_low) / (F_high - F_low)
+    where F_high = fluorescence when MOT is on (before drop)
+          F_low = fluorescence when MOT is off (after sequence)
 """
 
 import pandas as pd
@@ -33,26 +27,50 @@ from typing import List, Tuple, Optional, Dict
 from scipy import interpolate
 
 
+# ============================================================================
+# CONFIGURATION PARAMETERS - Modify these for your experiment
+# ============================================================================
+
+# Data channel configuration
+FLUORESCENCE_CHANNEL = 4  # Channel containing fluorescence signal
+MARKER_CHANNEL = 2  # Channel containing timing marker
+ROLLING_WINDOW = None  # Window size for rolling average smoothing (None = no smoothing)
+
+# Voltage thresholds
+FLUOR_DROP_VOLTAGE = 19.7e-3  # Voltage threshold for MOT drop detection (V)
+
+# Time windows (relative to MOT drop time, in seconds)
+# These define which regions of the trace to use for normalization and analysis
+TIME_BEFORE_DROP = 1.1e-3  # How far back from MOT drop to include in alignment (s)
+TIME_AFTER_DROP = 5e-3     # How far forward from MOT drop to include in alignment (s)
+
+BACKGROUND_WINDOW = (-0.5e-3, 0)      # MOT on (high fluorescence) - before drop
+FINAL_WINDOW = (4e-3, 5e-3)           # MOT off (low fluorescence) - after sequence
+IMAGING_WINDOW = (1.6e-3, 2.1e-3)     # Imaging pulse time window
+
+# Interpolation settings
+NUM_INTERPOLATION_POINTS = 50000  # Number of points for aligned/averaged traces
+
+# ============================================================================
+
+
 class UnifiedFluorescenceProcessor:
     """
     Unified processor for fluorescence data with alignment and normalization.
+    Uses configuration parameters defined at the top of the module.
     """
     
-    def __init__(self, root_folder: str, fluorescence_channel: int = 4, 
-                 marker_channel: int = 2, rolling_window: Optional[int] = None):
+    def __init__(self, root_folder: str):
         """
-        Initialize the processor.
+        Initialize the processor with configuration parameters.
         
         Args:
             root_folder: Root directory containing shot folders
-            fluorescence_channel: Channel number containing fluorescence data (default 4)
-            marker_channel: Channel number containing timing marker (default 2)
-            rolling_window: Optional window size for rolling average smoothing
         """
         self.root_folder = Path(root_folder)
-        self.fluorescence_channel = fluorescence_channel
-        self.marker_channel = marker_channel
-        self.rolling_window = rolling_window
+        self.fluorescence_channel = FLUORESCENCE_CHANNEL
+        self.marker_channel = MARKER_CHANNEL
+        self.rolling_window = ROLLING_WINDOW
         
         self.time_col = "Time (s)"
         self.channel_cols = {
@@ -62,7 +80,7 @@ class UnifiedFluorescenceProcessor:
             4: "Channel 4 Voltage (V)"
         }
         
-        self.fluorescence_col = self.channel_cols[fluorescence_channel]
+        self.fluorescence_col = self.channel_cols[self.fluorescence_channel]
         self.results = []
         self.aligned_data_cache = {}
         
@@ -106,23 +124,29 @@ class UnifiedFluorescenceProcessor:
         return df_smooth
     
     def align_and_average(self, dataframes: List[pd.DataFrame],
-                         fluor_drop_voltage: float,
-                         time_before_drop: float = 1.1e-3,
-                         time_after_drop: float = 5e-3,
-                         num_points: int = 50000) -> Tuple[pd.DataFrame, List[float]]:
+                         fluor_drop_voltage: Optional[float] = None,
+                         time_before_drop: Optional[float] = None,
+                         time_after_drop: Optional[float] = None,
+                         num_points: Optional[int] = None) -> Tuple[pd.DataFrame, List[float]]:
         """
         Align multiple traces based on fluorescence drop timing and average them.
         
         Args:
             dataframes: List of DataFrames to align
-            fluor_drop_voltage: Voltage threshold for MOT drop detection
-            time_before_drop: Time window before drop to include (seconds)
-            time_after_drop: Time window after drop to include (seconds)
-            num_points: Number of points in interpolated traces
+            fluor_drop_voltage: Voltage threshold for MOT drop detection (uses config if None)
+            time_before_drop: Time window before drop to include (uses config if None)
+            time_after_drop: Time window after drop to include (uses config if None)
+            num_points: Number of points in interpolated traces (uses config if None)
             
         Returns:
             Tuple of (averaged_dataframe, list_of_drop_times)
         """
+        # Use configuration values as defaults
+        fluor_drop_voltage = fluor_drop_voltage or FLUOR_DROP_VOLTAGE
+        time_before_drop = time_before_drop or TIME_BEFORE_DROP
+        time_after_drop = time_after_drop or TIME_AFTER_DROP
+        num_points = num_points or NUM_INTERPOLATION_POINTS
+        
         valid_dfs = []
         drop_times = []
         
@@ -186,38 +210,47 @@ class UnifiedFluorescenceProcessor:
         return averaged_df, drop_times
     
     def calculate_normalized_fluorescence(self, averaged_df: pd.DataFrame,
-                                         background_window: Tuple[float, float],
-                                         final_window: Tuple[float, float],
-                                         img_window: Tuple[float, float]) -> Dict:
+                                         background_window: Optional[Tuple[float, float]] = None,
+                                         final_window: Optional[Tuple[float, float]] = None,
+                                         img_window: Optional[Tuple[float, float]] = None) -> Dict:
         """
         Calculate normalized fluorescence with scaling.
         
         Normalization follows the formula:
-        F_norm = mean((F(t) - F_background) / (F_final - F_background)) for t in img_window
+        F_norm = (F(t) - F_low) / (F_high - F_low) for t in imaging window
+        
+        where:
+            F_high = fluorescence when MOT is on (before drop, in background_window)
+            F_low = fluorescence when MOT is off (after sequence, in final_window)
         
         Args:
             averaged_df: Aligned and averaged DataFrame
-            background_window: (t_start, t_end) for background (MOT on, before drop)
-            final_window: (t_start, t_end) for final reference (after sequence)
-            img_window: (t_start, t_end) for imaging pulse region
+            background_window: (t_start, t_end) for MOT on (high fluorescence) - uses config if None
+            final_window: (t_start, t_end) for MOT off (low fluorescence) - uses config if None
+            img_window: (t_start, t_end) for imaging pulse region - uses config if None
             
         Returns:
             Dictionary with normalization metrics
         """
+        # Use configuration values as defaults
+        background_window = background_window or BACKGROUND_WINDOW
+        final_window = final_window or FINAL_WINDOW
+        img_window = img_window or IMAGING_WINDOW
+        
         time_data = averaged_df[self.time_col].values
         fluor_data = averaged_df[self.fluorescence_col].values
         
-        # Extract background (MOT on)
+        # Extract high fluorescence (MOT on)
         bg_mask = (time_data >= background_window[0]) & (time_data <= background_window[1])
         bg_values = fluor_data[bg_mask]
-        F_background = np.mean(bg_values)
-        F_bg_std = np.std(bg_values)
+        F_high = np.mean(bg_values)
+        F_high_std = np.std(bg_values)
         
-        # Extract final reference (after sequence)
+        # Extract low fluorescence (MOT off)
         final_mask = (time_data >= final_window[0]) & (time_data <= final_window[1])
         final_values = fluor_data[final_mask]
-        F_final = np.mean(final_values)
-        F_final_std = np.std(final_values)
+        F_low = np.mean(final_values)
+        F_low_std = np.std(final_values)
         
         # Extract imaging region
         img_mask = (time_data >= img_window[0]) & (time_data <= img_window[1])
@@ -228,37 +261,36 @@ class UnifiedFluorescenceProcessor:
             raise ValueError(f"No data in imaging window {img_window}")
         
         # Calculate normalization scale
-        scale_factor = F_final - F_background
+        scale_factor = F_high - F_low
         if abs(scale_factor) < 1e-6:
             warnings.warn("Scale factor is very small, normalization may be unreliable")
             scale_factor = 1.0
         
-        # Normalize fluorescence
-        normalized_values = (img_values - F_background) / scale_factor
+        # Normalize fluorescence: (F(t) - F_low) / (F_high - F_low)
+        normalized_values = (img_values - F_low) / scale_factor
         
         # Calculate metrics
         F_normalized = np.mean(normalized_values)
         F_normalized_std = np.std(normalized_values)
         
         # Propagate uncertainty
-        # For F_norm = (F - F_bg) / (F_final - F_bg)
-        # Uncertainty ≈ F_norm * sqrt((std_F/F)^2 + (std_final/F_final)^2 + (std_bg/F_bg)^2)
-        if abs(F_background) > 1e-6 and abs(F_final) > 1e-6:
-            rel_unc = np.sqrt((F_bg_std/F_background)**2 + (F_final_std/F_final)**2)
+        # For F_norm = (F - F_low) / (F_high - F_low)
+        # Uncertainty ≈ F_norm * sqrt((std_F/F)^2 + (std_high/F_high)^2 + (std_low/F_low)^2)
+        if abs(F_high) > 1e-6 and abs(F_low) > 1e-6:
+            rel_unc = np.sqrt((F_high_std/F_high)**2 + (F_low_std/F_low)**2)
             F_normalized_unc = F_normalized * rel_unc
         else:
             F_normalized_unc = F_normalized_std / np.sqrt(len(normalized_values))
         
         # Also calculate raw integral for reference
-        img_times_expanded = img_times if len(img_times) > 1 else img_values
         raw_integral = np.trapz(img_values, img_times)
         normalized_integral = np.trapz(normalized_values, img_times)
         
         return {
-            'F_background': F_background,
-            'F_background_std': F_bg_std,
-            'F_final': F_final,
-            'F_final_std': F_final_std,
+            'F_high': F_high,
+            'F_high_std': F_high_std,
+            'F_low': F_low,
+            'F_low_std': F_low_std,
             'scale_factor': scale_factor,
             'F_normalized': F_normalized,
             'F_normalized_std': F_normalized_std,
@@ -270,38 +302,36 @@ class UnifiedFluorescenceProcessor:
         }
     
     def process_single_shot(self, shot_folder: Path,
-                           fluor_drop_voltage: float,
-                           background_window: Tuple[float, float],
-                           final_window: Tuple[float, float],
-                           img_window: Tuple[float, float],
-                           alignment_params: Optional[Dict] = None) -> Dict:
+                           fluor_drop_voltage: Optional[float] = None,
+                           background_window: Optional[Tuple[float, float]] = None,
+                           final_window: Optional[Tuple[float, float]] = None,
+                           img_window: Optional[Tuple[float, float]] = None) -> Dict:
         """
         Process a single shot folder.
         
         Args:
             shot_folder: Path to shot folder
-            fluor_drop_voltage: Voltage threshold for MOT drop
-            background_window: Time window for background (MOT on)
-            final_window: Time window for final reference
-            img_window: Time window for imaging pulse
-            alignment_params: Optional dict with alignment parameters
+            fluor_drop_voltage: Voltage threshold for MOT drop (uses config if None)
+            background_window: Time window for background/MOT on (uses config if None)
+            final_window: Time window for final/MOT off (uses config if None)
+            img_window: Time window for imaging pulse (uses config if None)
             
         Returns:
             Dictionary with processing results
         """
-        if alignment_params is None:
-            alignment_params = {
-                'time_before_drop': 1.1e-3,
-                'time_after_drop': 5e-3,
-                'num_points': 50000
-            }
+        # Use configuration values as defaults
+        fluor_drop_voltage = fluor_drop_voltage or FLUOR_DROP_VOLTAGE
+        background_window = background_window or BACKGROUND_WINDOW
+        final_window = final_window or FINAL_WINDOW
+        img_window = img_window or IMAGING_WINDOW
         
         # Load CSV files
         dataframes = self.load_csv_files(shot_folder)
         
         # Align and average
         averaged_df, drop_times = self.align_and_average(
-            dataframes, fluor_drop_voltage, **alignment_params
+            dataframes, fluor_drop_voltage, 
+            TIME_BEFORE_DROP, TIME_AFTER_DROP, NUM_INTERPOLATION_POINTS
         )
         
         # Calculate normalized fluorescence
@@ -335,26 +365,29 @@ class UnifiedFluorescenceProcessor:
         return result
     
     def process_all_experiments(self,
-                               fluor_drop_voltage: float,
-                               background_window: Tuple[float, float] = (-0.5e-3, 0),
-                               final_window: Tuple[float, float] = (4e-3, 5e-3),
-                               img_window: Tuple[float, float] = (1.6e-3, 2.1e-3),
-                               alignment_params: Optional[Dict] = None,
+                               fluor_drop_voltage: Optional[float] = None,
+                               background_window: Optional[Tuple[float, float]] = None,
+                               final_window: Optional[Tuple[float, float]] = None,
+                               img_window: Optional[Tuple[float, float]] = None,
                                save_summary: bool = True) -> pd.DataFrame:
         """
-        Process all experiments in the root folder.
+        Process all experiments in the root folder using configuration parameters.
         
         Args:
-            fluor_drop_voltage: Voltage threshold for MOT drop detection
-            background_window: Time window for background normalization
-            final_window: Time window for final reference
-            img_window: Time window for imaging pulse
-            alignment_params: Optional alignment parameters
+            fluor_drop_voltage: Voltage threshold for MOT drop (uses config if None)
+            background_window: Time window for background/MOT on (uses config if None)
+            final_window: Time window for final/MOT off (uses config if None)
+            img_window: Time window for imaging pulse (uses config if None)
             save_summary: Whether to save summary CSV
             
         Returns:
             DataFrame with summary results
         """
+        # Use configuration values as defaults
+        fluor_drop_voltage = fluor_drop_voltage or FLUOR_DROP_VOLTAGE
+        background_window = background_window or BACKGROUND_WINDOW
+        final_window = final_window or FINAL_WINDOW
+        img_window = img_window or IMAGING_WINDOW
         self.results = []
         
         # Process shot folders
@@ -369,8 +402,7 @@ class UnifiedFluorescenceProcessor:
                     fluor_drop_voltage,
                     background_window,
                     final_window,
-                    img_window,
-                    alignment_params
+                    img_window
                 )
                 self.results.append(result)
                 print("✓")
@@ -437,15 +469,15 @@ class UnifiedFluorescenceProcessor:
         
         # Plot 3: Normalization factors
         ax = axes[1, 0]
-        ax.plot(x_data, summary_df['F_background'], 'o-', label='Background (MOT on)', alpha=0.7)
-        ax.plot(x_data, summary_df['F_final'], 's-', label='Final (After sequence)', alpha=0.7)
+        ax.plot(x_data, summary_df['F_high'], 'o-', label='F_high (MOT on)', alpha=0.7)
+        ax.plot(x_data, summary_df['F_low'], 's-', label='F_low (MOT off)', alpha=0.7)
         ax.fill_between(x_data, 
-                        summary_df['F_background'] - summary_df['F_background_std'],
-                        summary_df['F_background'] + summary_df['F_background_std'],
+                        summary_df['F_high'] - summary_df['F_high_std'],
+                        summary_df['F_high'] + summary_df['F_high_std'],
                         alpha=0.2)
         ax.fill_between(x_data,
-                        summary_df['F_final'] - summary_df['F_final_std'],
-                        summary_df['F_final'] + summary_df['F_final_std'],
+                        summary_df['F_low'] - summary_df['F_low_std'],
+                        summary_df['F_low'] + summary_df['F_low_std'],
                         alpha=0.2)
         ax.set_xlabel('Shot Number')
         ax.set_ylabel('Fluorescence (V)')
@@ -522,24 +554,11 @@ def example_usage():
     root_folder = r"d:\pulse_shaping_data\2025-06-12\16-04-01\sweeped_pump_optimised_stokes_optimised_126_80"
     
     # Initialize processor
-    processor = UnifiedFluorescenceProcessor(
-        root_folder,
-        fluorescence_channel=4,
-        marker_channel=2,
-        rolling_window=None  # Set to e.g. 64 for smoothing
-    )
+    processor = UnifiedFluorescenceProcessor(root_folder)
     
-    # Process all experiments
+    # Process all experiments using configuration parameters defined at the top of the file
+    # Override any parameters if needed (optional - uses config defaults if not provided)
     summary_df = processor.process_all_experiments(
-        fluor_drop_voltage=19.7e-3,  # Voltage threshold for MOT drop
-        background_window=(-0.5e-3, 0),  # Before MOT drop
-        final_window=(4e-3, 5e-3),  # After sequence
-        img_window=(1.6e-3, 2.1e-3),  # Imaging pulse
-        alignment_params={
-            'time_before_drop': 1.1e-3,
-            'time_after_drop': 5e-3,
-            'num_points': 50000
-        },
         save_summary=True
     )
     
