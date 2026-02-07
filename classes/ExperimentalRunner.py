@@ -989,9 +989,17 @@ class MotFluoresceExperiment(GenericExperiment):
     - close(): Closes the DAQ cards and the oscilloscope.
     """
 
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, 
+    def __init__(self, daq_controller:DAQ_controller, 
                 mot_fluoresce_configuration:MotFluoresceConfiguration,
+                sequence:Sequence = None,
                 ic_imaging_control:Optional[IC_ImagingControl] = None, sweep=True):
+        
+        # Use sequence from config if not provided separately (for backward compatibility)
+        if sequence is None:
+            sequence = mot_fluoresce_configuration.sequence
+            
+        if sequence is not None:
+            Warning('The sequence should be provided as part of the mot_fluoresce_configuration object. Providing it separately is deprecated and may be removed in future versions.')
         
         super().__init__(daq_controller, sequence, mot_fluoresce_configuration)
         # the configuration object is a MotFluoresceConfiguration object and called self.config
@@ -1332,7 +1340,9 @@ class MotFluoresceSweepExperiment():
         for i, (config, sequence) in enumerate(self.sweep_config):
             print(f"Running experiment with configuration: {i}")
             # Create a new MotFluoresceExperiment with the current configuration
-            experiment = MotFluoresceExperiment(self.daq_controller, sequence, config,
+            experiment = MotFluoresceExperiment(daq_controller=self.daq_controller,
+                                                mot_fluoresce_configuration=config,
+                                                sequence=sequence,
                                                 sweep=True)
 
             experiment.run()

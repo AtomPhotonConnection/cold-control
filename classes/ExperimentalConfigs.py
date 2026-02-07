@@ -183,6 +183,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
         - use_cam: Whether to use camera for imaging
         - use_scope: Whether to use oscilloscope for data acquisition
         - use_awg: Whether to use AWG
+        - sequence: Sequence object defining DAQ timing and channels
         - cam_config: CameraConfiguration object (if use_cam is True)
         - scope_config: ScopeConfiguration object (if use_scope is True)
         - awg_config: AwgConfiguration object (if use_awg is True)
@@ -196,6 +197,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
                  use_cam: bool,
                  use_scope: bool,
                  use_awg: bool,
+                 sequence: Sequence,
                  cam_config: 'CameraConfiguration' | None = None,
                  scope_config: ScopeConfiguration | None = None,
                  awg_config: AwgConfiguration | None = None,
@@ -210,6 +212,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
             use_cam: Enable camera
             use_scope: Enable oscilloscope
             use_awg: Enable AWG
+            sequence: Sequence object for DAQ timing and channel configuration
             cam_config: Camera configuration (required if use_cam=True)
             scope_config: Scope configuration (required if use_scope=True)
             awg_config: AWG configuration (required if use_awg=True)
@@ -220,6 +223,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_cam = use_cam
         self.use_scope = use_scope
         self.use_awg = use_awg
+        self.sequence = sequence
 
         # Validate camera configuration
         if use_cam:
@@ -249,66 +253,10 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
         # Optional sweep configuration
         self.sweep_config = sweep_config
-        # Backward compatibility for old property name
-        self._default_sweep_config_path = None
 
-    @property
-    def default_sweep_config_path(self):
-        """Backward compatibility property."""
-        return self._default_sweep_config_path
-    
-    @default_sweep_config_path.setter
-    def default_sweep_config_path(self, value):
-        self._default_sweep_config_path = value
 
-    # Backward compatibility properties for accessing camera settings
-    @property
-    def cam_exposure(self):
-        """Backward compatibility: retrieve cam exposure from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.cam_exposure
 
-    @property
-    def cam_gain(self):
-        """Backward compatibility: retrieve cam gain from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.cam_gain
 
-    @property
-    def camera_trigger_channel(self):
-        """Backward compatibility: retrieve camera trigger channel from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.camera_trigger_channel
-
-    @property
-    def camera_trigger_level(self):
-        """Backward compatibility: retrieve camera trigger level from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.camera_trigger_level
-
-    @property
-    def camera_pulse_width(self):
-        """Backward compatibility: retrieve camera pulse width from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.camera_pulse_width
-
-    @property
-    def save_images(self):
-        """Backward compatibility: retrieve save_images setting from config."""
-        if self.cam_config is None:
-            raise AttributeError("Camera not configured for this experiment")
-        return self.cam_config.save_images
-
-    # Backward compatibility properties for accessing AWG settings
-    @property
-    def awg_config_single(self):
-        """Backward compatibility: returns None (feature deprecated in new config system)."""
-        return None
 
     @property
     def scope_trigger_channel(self):

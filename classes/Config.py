@@ -1,7 +1,7 @@
 '''
 Created on 22 Apr 2016
 
-@author: Tom Barrett, Jan Ole Ernst
+@author: Tom Barrett, Jan Ole Ernst, Matt King, and others
 '''
 from copy import deepcopy
 from configobj import ConfigObj
@@ -446,12 +446,22 @@ class ExperimentConfigReader():
         """
         Extract MOT fluorescence configuration from the config file.
         
-        Reads camera, scope, and AWG settings, converts them to configuration objects,
+        Reads camera, scope, sequence, and AWG settings, converts them to configuration objects,
         and returns a MotFluoresceConfiguration.
         """
         use_camera = toBool(self.config.get("use_cam", False))
         use_scope = toBool(self.config.get("use_scope", False))
         use_awg = toBool(self.config.get("use_awg", False))
+
+        # Load sequence configuration
+        configs_section = self.config.get('configs', {})
+        sequence_path = configs_section.get('sequence_path')
+        
+        if sequence_path is None:
+            raise ValueError("[configs] section must contain 'sequence_path'")
+        
+        sequence_path = resolve_config_path(str(sequence_path).strip(), get_config_root())
+        sequence = SequenceReader(sequence_path).loadSequence()
 
         # Create camera configuration if needed
         cam_config = None
@@ -564,6 +574,7 @@ class ExperimentConfigReader():
             use_cam=use_camera,
             use_scope=use_scope,
             use_awg=use_awg,
+            sequence=sequence,
             cam_config=cam_config,
             scope_config=scope_config,
             awg_config=awg_config
