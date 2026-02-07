@@ -28,7 +28,7 @@ from PIL import Image, ImageTk
 from classes.DAQ import DaqPlayException, DAQ_dio
 from classes.ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
      AwgConfiguration, TdcConfiguration, Waveform, MotFluoresceConfiguration,\
-     MotFluoresceConfigurationSweep
+     MotFluoresceConfigurationSweep, SweepConfiguration
 from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment,\
     ExperimentalAutomationRunner,  MotFluoresceExperiment, GenericExperiment,\
     MotFluoresceSweepExperiment
@@ -339,14 +339,15 @@ class Experimental_UI(tk.LabelFrame):
         fname = tkFileDialog.askopenfilename(master=self, title="Choose an MOT Fluoresce Sweep Configuration",
                                              initialdir=initialdir, initialfile=initialfile or None)
         if fname!= '':
-            parameter_list = ExperimentConfigReader(fname).get_mot_flourescence_configuration_sweep()
-            #print(parameter_list[2])
-            #Number of iterations needs to be pased from config
+            sweep_config_obj = ExperimentConfigReader(fname).get_mot_flourescence_configuration_sweep()
+            
+            # sweep_config_obj is now a SweepConfiguration object with properties:
+            # sweep_type, num_shots, sweep_parameters
             sweep_config = MotFluoresceConfigurationSweep(self.photon_production_config,
                                                           self.sequence_ui.sequence,
-                                                          parameter_list[0],
-                                                          parameter_list[1],
-                                                          parameter_list[2])
+                                                          sweep_config_obj.sweep_type,
+                                                          sweep_config_obj.num_shots,
+                                                          sweep_config_obj.sweep_parameters)
             sweep_experiment = MotFluoresceSweepExperiment(sweep_config,
                                                            self.daq_ui.daq_controller)
             

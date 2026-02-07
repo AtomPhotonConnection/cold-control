@@ -99,91 +99,336 @@ class GenericConfiguration:
         self._iterations = value
 
 
+class ScopeConfiguration:
+    """
+    Configuration for an oscilloscope used in experiments.
+    
+    Defines:
+    - Trigger channel and level
+    - Sample rate
+    - Time range (start, stop) for acquisition
+    - Data channels with their voltage ranges, impedances, and couplings
+    """
+    
+    def __init__(self,
+                 trigger_channel: int,
+                 trigger_level: float,
+                 sample_rate: float,
+                 time_range: Tuple[float, float],
+                 data_channels: Dict[int, Dict[str, Any]]):
+        """
+        Args:
+            trigger_channel: Oscilloscope trigger channel number
+            trigger_level: Trigger threshold voltage
+            sample_rate: Sampling rate in Hz
+            time_range: Tuple of (start_time, stop_time) in seconds
+            data_channels: Dict mapping channel number to config dict with 'range', 'impedance', 'coupling'
+        """
+        self._trigger_channel = trigger_channel
+        self._trigger_level = trigger_level
+        self._sample_rate = sample_rate
+        self._time_range = time_range
+        self._data_channels = data_channels
+    
+    trigger_channel = make_property('_trigger_channel')
+    trigger_level = make_property('_trigger_level')
+    sample_rate = make_property('_sample_rate')
+    time_range = make_property('_time_range')
+    data_channels = make_property('_data_channels')
+
+
+class SweepConfiguration:
+    """
+    Configuration for parameter sweeps in MOT fluorescence experiments.
+    
+    Supports two sweep types:
+    - "awg_sequence": sweeps over AWG waveform parameters (Rabi frequencies, modulation frequencies)
+    - "mot_imaging": sweeps over imaging parameters (beam powers, frequencies, pulse lengths/times)
+    """
+    
+    def __init__(self,
+                 sweep_type: str,
+                 num_shots: int,
+                 sweep_parameters: Dict[str, Any]):
+        """
+        Args:
+            sweep_type: Either "awg_sequence" or "mot_imaging"
+            num_shots: Number of repetitions per sweep point
+            sweep_parameters: Dict with sweep-type-specific parameters
+        """
+        self._sweep_type = sweep_type
+        self._num_shots = num_shots
+        self._sweep_parameters = sweep_parameters
+    
+    sweep_type = make_property('_sweep_type')
+    num_shots = make_property('_num_shots')
+    sweep_parameters = make_property('_sweep_parameters')
+
+
 class MotFluoresceConfiguration(GenericConfiguration):
     """
-    Configuration for a MOT fluorescence experiment. More details can be found in the MotFluoresceExperiment class.
+    Configuration for a MOT fluorescence experiment. 
     
-    The data used to configure the experiment should be loaded from a configuration file with (currently) the 
-    "ExperimentConfigReader" class and the get_mot_fluoresce_config method. This class must be passed to the 
-    MotFluoresceExperiment class to run the experiment.
+    Loads configuration from an experiment config file and manages sub-configurations
+    for camera, scope, AWG, and optional sweep parameters.
+    
+    The data used to configure the experiment should be loaded from a configuration file
+    using the "ExperimentConfigReader" class and the get_mot_fluoresce_configuration method.
+    This class must be passed to the MotFluoresceExperiment class to run the experiment.
 
-    inputs:
-     - save_location: The location to save the data collected in the experiment
-     - mot_reload: The time in milliseconds to wait for the MOT to reload
-     - iterations: The number of times to repeat the experiment
-     - use_cam: Boolean to determine whether to use the camera for imaging
-     - use_scope: Boolean to determine whether to use the scope for data acquisition
-     - cam_dict: Dictionary containing camera configuration parameters (if use_cam is True)
-     - scope_dict: Dictionary containing scope configuration parameters (if use_scope is True)
+    Attributes:
+        - save_location: Directory where experiment data is saved
+        - mot_reload: Time in milliseconds to wait for MOT to reload
+        - iterations: Number of experiment repetitions
+        - use_cam: Whether to use camera for imaging
+        - use_scope: Whether to use oscilloscope for data acquisition
+        - use_awg: Whether to use AWG
+        - cam_config: CameraConfiguration object (if use_cam is True)
+        - scope_config: ScopeConfiguration object (if use_scope is True)
+        - awg_config: AwgConfiguration object (if use_awg is True)
+        - sweep_config: SweepConfiguration object (if sweep is enabled)
     """
 
     def __init__(self,
-                 save_location,
-                 mot_reload,
-                 iterations,
-                 use_cam,
-                 use_scope,
-                 use_awg,
-                 awg_dict: Dict|None = None,
-                 cam_dict: Dict|None = None,
-                 scope_dict: Dict|None = None):
+                 save_location: str,
+                 mot_reload: float,
+                 iterations: int,
+                 use_cam: bool,
+                 use_scope: bool,
+                 use_awg: bool,
+                 cam_config: 'CameraConfiguration' | None = None,
+                 scope_config: ScopeConfiguration | None = None,
+                 awg_config: AwgConfiguration | None = None,
+                 sweep_config: SweepConfiguration | None = None):
+        """
+        Initialize MOT fluorescence configuration with optional sub-configurations.
+        
+        Args:
+            save_location: Directory for data storage
+            mot_reload: MOT reload time in ms
+            iterations: Number of experimental repetitions
+            use_cam: Enable camera
+            use_scope: Enable oscilloscope
+            use_awg: Enable AWG
+            cam_config: Camera configuration (required if use_cam=True)
+            scope_config: Scope configuration (required if use_scope=True)
+            awg_config: AWG configuration (required if use_awg=True)
+            sweep_config: Sweep configuration (optional)
+        """
         super().__init__(save_location, mot_reload, iterations)
 
-        self.use_scope = use_scope
         self.use_cam = use_cam
+        self.use_scope = use_scope
         self.use_awg = use_awg
 
-        if use_cam == True:
-            if cam_dict is None:
-                raise ValueError("cam_dict must be provided if use_cam is True")
-            self.cam_exposure = cam_dict["cam_exposure"]
-            self.cam_gain = cam_dict["cam_gain"]
-            self.camera_trigger_channel = cam_dict["camera_trig_ch"]
-            self.camera_trigger_level = cam_dict["camera_trig_levs"]
-            self.camera_pulse_width = cam_dict["camera_pulse_width"]
-            self.save_images = cam_dict["save_images"]
+        # Validate camera configuration
+        if use_cam:
+            if cam_config is None:
+                raise ValueError("cam_config must be provided if use_cam is True")
+            self.cam_config = cam_config
         else:
+            self.cam_config = None
             print("No camera will be used.")
 
-        if self.use_scope:
-            if scope_dict is None:
-                raise ValueError("scope_dict must be provided if use_scope is True")
-            self.scope_trigger_channel = scope_dict["trigger_channel"]
-            self.scope_trigger_level = scope_dict["trigger_level"]
-            self.scope_sample_rate = scope_dict["sample_rate"]
-            self.scope_time_range = scope_dict["time_range"]
-            self.scope_data_channels = scope_dict["data_channels"]
-
-        if self.use_awg:
-            if awg_dict is None:
-                raise ValueError("awg_dict must be provided if use_awg is True")
-            self.awg_config_path = awg_dict["config_path_full"]
-            self.awg_config = awg_dict["awg_config"]
-            self.awg_config_path_single = awg_dict["config_path_single"]
-            self.awg_config_single = awg_dict["awg_config_single"]
+        # Validate scope configuration
+        if use_scope:
+            if scope_config is None:
+                raise ValueError("scope_config must be provided if use_scope is True")
+            self.scope_config = scope_config
         else:
+            self.scope_config = None
+
+        # Validate AWG configuration
+        if use_awg:
+            if awg_config is None:
+                raise ValueError("awg_config must be provided if use_awg is True")
+            self.awg_config = awg_config
+        else:
+            self.awg_config = None
             print("No AWG will be used.")
+
+        # Optional sweep configuration
+        self.sweep_config = sweep_config
+        # Backward compatibility for old property name
+        self._default_sweep_config_path = None
+
+    @property
+    def default_sweep_config_path(self):
+        """Backward compatibility property."""
+        return self._default_sweep_config_path
+    
+    @default_sweep_config_path.setter
+    def default_sweep_config_path(self, value):
+        self._default_sweep_config_path = value
+
+    # Backward compatibility properties for accessing camera settings
+    @property
+    def cam_exposure(self):
+        """Backward compatibility: retrieve cam exposure from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.cam_exposure
+
+    @property
+    def cam_gain(self):
+        """Backward compatibility: retrieve cam gain from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.cam_gain
+
+    @property
+    def camera_trigger_channel(self):
+        """Backward compatibility: retrieve camera trigger channel from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.camera_trigger_channel
+
+    @property
+    def camera_trigger_level(self):
+        """Backward compatibility: retrieve camera trigger level from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.camera_trigger_level
+
+    @property
+    def camera_pulse_width(self):
+        """Backward compatibility: retrieve camera pulse width from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.camera_pulse_width
+
+    @property
+    def save_images(self):
+        """Backward compatibility: retrieve save_images setting from config."""
+        if self.cam_config is None:
+            raise AttributeError("Camera not configured for this experiment")
+        return self.cam_config.save_images
+
+    # Backward compatibility properties for accessing AWG settings
+    @property
+    def awg_config_single(self):
+        """Backward compatibility: returns None (feature deprecated in new config system)."""
+        return None
+
+    @property
+    def scope_trigger_channel(self):
+        """Backward compatibility: retrieve scope trigger channel from config."""
+        if self.scope_config is None:
+            raise AttributeError("Scope not configured for this experiment")
+        return self.scope_config.trigger_channel
+
+    @property
+    def scope_trigger_level(self):
+        """Backward compatibility: retrieve scope trigger level from config."""
+        if self.scope_config is None:
+            raise AttributeError("Scope not configured for this experiment")
+        return self.scope_config.trigger_level
+
+    @property
+    def scope_sample_rate(self):
+        """Backward compatibility: retrieve scope sample rate from config."""
+        if self.scope_config is None:
+            raise AttributeError("Scope not configured for this experiment")
+        return self.scope_config.sample_rate
+
+    @property
+    def scope_time_range(self):
+        """Backward compatibility: retrieve scope time range from config."""
+        if self.scope_config is None:
+            raise AttributeError("Scope not configured for this experiment")
+        return self.scope_config.time_range
+
+    @property
+    def scope_data_channels(self):
+        """Backward compatibility: retrieve scope data channels from config."""
+        if self.scope_config is None:
+            raise AttributeError("Scope not configured for this experiment")
+        return self.scope_config.data_channels
+
+
+class CameraConfiguration:
+    """
+    Configuration for a camera used in MOT fluorescence experiments.
+    
+    Defines:
+    - Camera exposure and gain settings
+    - Trigger channel and pulse width
+    - Whether to save images
+    """
+    
+    def __init__(self,
+                 cam_exposure: int,
+                 cam_gain: int,
+                 camera_trigger_channel: int,
+                 camera_trigger_level: float,
+                 camera_pulse_width: float,
+                 save_images: bool = True):
+        """
+        Args:
+            cam_exposure: Camera exposure setting
+            cam_gain: Camera gain setting  
+            camera_trigger_channel: DAQ channel for camera trigger
+            camera_trigger_level: Trigger voltage level
+            camera_pulse_width: Trigger pulse width in microseconds
+            save_images: Whether to save acquired images
+        """
+        self._cam_exposure = cam_exposure
+        self._cam_gain = cam_gain
+        self._camera_trigger_channel = camera_trigger_channel
+        self._camera_trigger_level = camera_trigger_level
+        self._camera_pulse_width = camera_pulse_width
+        self._save_images = save_images
+    
+    cam_exposure = make_property('_cam_exposure')
+    cam_gain = make_property('_cam_gain')
+    camera_trigger_channel = make_property('_camera_trigger_channel')
+    camera_trigger_level = make_property('_camera_trigger_level')
+    camera_pulse_width = make_property('_camera_pulse_width')
+    save_images = make_property('_save_images')
 
 
 class MotFluoresceConfigurationSweep:
+    """
+    Manages sweep configurations for MOT fluorescence experiments.
+    
+    Given a base configuration, sweep type, and sweep parameters, generates
+    multiple experiment configurations (one per sweep point) with corresponding
+    sequence modifications.
+    
+    Supports two sweep types:
+    - "awg_sequence": modifies AWG waveforms and frequencies
+    - "mot_imaging": modifies imaging parameters (beam power, frequency, pulse timing)
+    """
 
-    def __init__(self, base_config: 'MotFluoresceConfiguration', base_sequence: Sequence,
-                 sweep_type: str, num_shots:int, sweep_params: Dict[Any, Any]):
-
+    def __init__(self, 
+                 base_config: 'MotFluoresceConfiguration', 
+                 base_sequence: Sequence,
+                 sweep_type: str, 
+                 num_shots: int,
+                 sweep_params: Dict[Any, Any]):
+        """
+        Initialize sweep configuration.
+        
+        Args:
+            base_config: Base MOT fluorescence configuration
+            base_sequence: Base sequence to be modified for each sweep point
+            sweep_type: Either "awg_sequence" or "mot_imaging"
+            num_shots: Number of repetitions per sweep point
+            sweep_params: Dictionary with sweep-type-specific parameters
+        """
         self.base_config = base_config
         self.base_sequence = base_sequence
         self.sweep_type = sweep_type
         self.sweep_params = sweep_params
-        #print(self.sweep_params)
         self.num_shots = num_shots
+        
         now = datetime.now()
         self.current_date = now.strftime("%Y-%m-%d")
         self.current_time = now.strftime("%H-%M-%S")
-        print(f"[DEBUG] date: {self.current_date}")
-        print(f"[DEBUG] time: {self.current_time}")
+        print(f"[DEBUG] Sweep date: {self.current_date}, time: {self.current_time}")
         
-        self.configs:List[MotFluoresceConfiguration] = []
-        self.sequences:List[Sequence] = []
+        self.configs: List[MotFluoresceConfiguration] = []
+        self.sequences: List[Sequence] = []
         print("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
@@ -197,7 +442,6 @@ class MotFluoresceConfigurationSweep:
                                        calib_paths, all_sweeps)
         
         elif sweep_type == "mot_imaging":
-            # all these parameters need to be extracted from the config file
             _beam_powers: List[float] = self.sweep_params["beam_powers"]
             _beam_frequencies: List[float] = self.sweep_params["beam_frequencies"]
             _pulse_lengths: List[int] = self.sweep_params["pulse_lengths"]
@@ -206,21 +450,21 @@ class MotFluoresceConfigurationSweep:
                                             _pulse_times)
 
         else:
-            raise ValueError("Sweep type not supported")
+            raise ValueError(f"Sweep type '{sweep_type}' not supported. Use 'awg_sequence' or 'mot_imaging'.")
         
         assert len(self.configs) == len(self.sequences), \
-        "configs and sequences must have the same length"
-
+            "configs and sequences must have the same length"
 
     def __iter__(self):
         """
-        When iterating over the object it returns a tuple containing a MOTFluoresceConfiguration
+        When iterating over the object it returns a tuple containing a MotFluoresceConfiguration
         object and the associated Sequence object. These can then be used to run a single shot
         of the sweep.
         """
         return iter(zip(self.configs, self.sequences))
 
     def __len__(self):
+        """Return the number of sweep configurations."""
         return len(self.configs)
     
 
@@ -395,17 +639,11 @@ class MotFluoresceConfigurationSweep:
     # for config in sweep:
 
 
-class AWGSequenceConfiguration():
+class AWGSequenceConfiguration:
     """
-    AWGSequenceConfiguration stores all configuration parameters
-    required for a photon production experiment.
-
-    This includes:
-    - Save location and MOT reload time
-    - Number of iterations
-    - A waveform sequence and its associated waveforms
-    - Interleaving and stitching behavior for waveforms
-    - Configuration objects for the AWG and TDC systems
+    [DEPRECATED] Use AwgConfiguration instead.
+    
+    This class is kept for backward compatibility but should not be used for new code.
     """
 
     def __init__(self,
@@ -415,16 +653,13 @@ class AWGSequenceConfiguration():
                  waveform_stitch_delays,
                  awg_configuration,
                  ):
-
-
+        print("WARNING: AWGSequenceConfiguration is deprecated. Use AwgConfiguration instead.")
         self._waveform_sequence = waveform_sequence
         self.waveforms: List[Waveform] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
-
         self._awg_configuration: AwgConfiguration = awg_configuration
 
-    # --- waveform_sequence ---
     @property
     def waveform_sequence(self):
         return self._waveform_sequence
@@ -555,17 +790,9 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
 
 class SingleExperimentConfig(GenericConfiguration):
     """
-    SingleExperimentConfig defines the configuration for a single automated experiment run.
-    Previously called AutomatedExperimentConfiguration.
-
-    This includes:
-    - Static DAQ channel values
-    - The filename and contents of the experiment sequence
-    - The number of times to repeat the experiment
-    - The MOT (Magneto-Optical Trap) reload time
-    - Frequencies used for modulation during the experiment
-
-    Intended to be used as part of a larger experiment session, or independently for individual runs.
+    [DEPRECATED] Use MotFluoresceConfiguration instead.
+    
+    Kept for backward compatibility but should not be used for new code.
     """
     def __init__(self,
                  daq_channel_static_values,
@@ -575,7 +802,7 @@ class SingleExperimentConfig(GenericConfiguration):
                  mot_reload,
                  modulation_frequencies,
                  save_location=None):
-
+        print("WARNING: SingleExperimentConfig is deprecated. Use MotFluoresceConfiguration instead.")
         self._daq_channel_static_values = daq_channel_static_values
         self._sequence_fname = sequence_fname
         self._sequence = sequence

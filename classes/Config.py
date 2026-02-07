@@ -21,8 +21,9 @@ from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_L
 from instruments.WX218x.WX218x_awg import Channel
 from classes.Sequence import Sequence
 from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
-      AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig , SingleExperimentConfig,\
-      MotFluoresceConfiguration, MotFluoresceConfigurationSweep
+      AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig, SingleExperimentConfig,\
+      MotFluoresceConfiguration, MotFluoresceConfigurationSweep, ScopeConfiguration, SweepConfiguration,\
+      CameraConfiguration
 
 GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
 
@@ -443,74 +444,89 @@ class ExperimentConfigReader():
     
     def get_mot_flourescence_configuration(self):
         """
-        Method to extract the mot fluorescence configuration from the config file.
-        """
-
-
+        Extract MOT fluorescence configuration from the config file.
         
-        use_camera = toBool(self.config["use_cam"])
-        use_scope = toBool(self.config["use_scope"])
-        use_awg = toBool(self.config["use_awg"])
+        Reads camera, scope, and AWG settings, converts them to configuration objects,
+        and returns a MotFluoresceConfiguration.
+        """
+        use_camera = toBool(self.config.get("use_cam", False))
+        use_scope = toBool(self.config.get("use_scope", False))
+        use_awg = toBool(self.config.get("use_awg", False))
 
+        # Create camera configuration if needed
+        cam_config = None
         if use_camera:
-            camera = self.config['camera_settings']
-            camera_settings_dict = {\
-                "cam_exposure" : int(camera['cam_exposure']),
-                "cam_gain" : int(camera['cam_gain']),
-                "camera_trig_ch" : int(camera['camera_trig_ch']),
-                "camera_trig_levs" : toFloatTuple(camera['camera_trig_levs']),
-                "camera_pulse_width" : float(camera['camera_pulse_width']),
-                "save_images" : toBool(camera['save_images'])
-                }
+            camera_section = self.config.get('camera_settings')
+            if camera_section is None:
+                raise ValueError("use_cam is True but [camera_settings] section is missing")
             
+            cam_config = CameraConfiguration(
+                cam_exposure=int(camera_section.get('cam_exposure', 0)),
+                cam_gain=int(camera_section.get('cam_gain', 0)),
+                camera_trigger_channel=int(camera_section.get('camera_trig_ch', 0)),
+                camera_trigger_level=float(camera_section.get('camera_trig_levs', 0)),
+                camera_pulse_width=float(camera_section.get('camera_pulse_width', 0)),
+                save_images=toBool(camera_section.get('save_images', True))
+            )
 
-        else:
-            camera_settings_dict = None
-
+        # Create scope configuration if needed
+        scope_config = None
         if use_scope:
-            scope = self.config['scope_settings']
+            scope_section = self.config.get('scope_settings')
+            if scope_section is None:
+                raise ValueError("use_scope is True but [scope_settings] section is missing")
+            
+            # Parse data channel configurations
             data_chs = {}
-            impedance_section = scope.get('data_channel_impedance', {})
-            coupling_section = scope.get('data_channel_coupling', {})
-            for ch_idx, limits in scope['data_channels'].items():
+            impedance_section = scope_section.get('data_channel_impedance', {})
+            coupling_section = scope_section.get('data_channel_coupling', {})
+            
+            for ch_idx, limits in scope_section['data_channels'].items():
                 if isinstance(limits, (list, tuple)):
                     low, high = float(limits[0]), float(limits[1])
                 else:
                     parts = [x.strip() for x in str(limits).split(',')]
                     low, high = float(parts[0]), float(parts[1])
+                
                 impedance = impedance_section.get(ch_idx, 'high')
                 if isinstance(impedance, list):
                     impedance = impedance[0] if impedance else 'high'
                 impedance = str(impedance).strip().lower()
+                
                 coupling = coupling_section.get(ch_idx, 'DC')
                 if isinstance(coupling, list):
                     coupling = coupling[0] if coupling else 'DC'
                 coupling = str(coupling).strip().upper()
+                
                 data_chs[int(ch_idx)] = {
                     'range': (low, high),
                     'impedance': impedance,
                     'coupling': coupling
                 }
-            scope_settings_dict = {\
-                "trigger_channel": int(scope['trigger_channel']),
-                "trigger_level": float(scope['trigger_level']),
-                "sample_rate": float(scope['sample_rate']),
-                "time_range": toFloatTuple(scope['time_range']),
-                "data_channels": data_chs
-                }
-        else:
-            scope_settings_dict = None
+            
+            scope_config = ScopeConfiguration(
+                trigger_channel=int(scope_section['trigger_channel']),
+                trigger_level=float(scope_section['trigger_level']),
+                sample_rate=float(scope_section['sample_rate']),
+                time_range=toFloatTuple(scope_section['time_range']),
+                data_channels=data_chs
+            )
 
+        # Create AWG configuration if needed
+        awg_config = None
         if use_awg:
-            awg = self.config['awg_settings']
-            config_path = awg["config_path"]
-            config_path_single = awg["config_path_single"]
-
+            awg_section = self.config.get('awg_settings')
+            if awg_section is None:
+                raise ValueError("use_awg is True but [awg_settings] section is missing")
+            
+            config_path = awg_section.get("config_path")
+            if not config_path:
+                raise ValueError("[awg_settings] config_path is missing or empty")
+            
+            config_path = resolve_config_path(str(config_path).strip(), get_config_root())
             config = MyConfig(config_path)
-            config_single = MyConfig(config_path_single) if config_path_single else None
 
-            # Reads the waveforms from the config object, and creates a list of Waveforms 
-            # with those properties
+            # Load waveforms from AWG config file
             waveforms = []
             for x, v in config['waveforms'].items():
                 if v['phases']:
@@ -520,13 +536,14 @@ class ExperimentConfigReader():
                     phases = ast.literal_eval(phases_str)
                 else:
                     phases = []
-                waveforms.append(Waveform(fname=v['filename'],
-                                        mod_frequency=float(v['modulation frequency']),
-                                        phases=phases))
+                waveforms.append(Waveform(
+                    fname=v['filename'],
+                    mod_frequency=float(v['modulation frequency']),
+                    phases=phases
+                ))
 
-
-            # Reads the awg properties from the config object, and creates a new awg configuration with those settings        
-            awg_config = AwgConfiguration(\
+            # Create AWG configuration
+            awg_config = AwgConfiguration(
                 waveform_sequence=list(eval(config['waveform sequence'])),
                 waveforms=waveforms,
                 interleave_waveforms=toBool(config['interleave waveforms']),
@@ -536,92 +553,21 @@ class ExperimentConfigReader():
                 waveform_output_channels=list(config['waveform output channels']),
                 waveform_output_channel_lags=list(map(float, config['waveform output channel lags'])),
                 marked_channels=list(config['marked channels']),
-                marker_width=eval(config['marker width']))
+                marker_width=eval(config['marker width'])
+            )
 
-
-
-            awg_settings_dict = {
-                "config_path_full": config_path,
-                "awg_config": awg_config,
-                "config_path_single": None,  # Default to None if not provided
-                "awg_config_single": None,  # Default to None if not provided
-                "sequence_config_single": None  # Default to None if not provided
-            }
-
-            # Only add single configuration if config_path_single is not an empty string
-            if config_single is not None and config_path_single != "":
-                waveforms_single = []
-                for x, v in config_single['waveforms'].items():
-                    _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
-                    waveforms_single.append(Waveform(fname=v['filename'],
-                                                    mod_frequency=float(v['modulation frequency']),
-                                                    phases=_phases))
-                    
-                
-                awg_config_single = AwgConfiguration(\
-                    waveform_sequence=list(eval(config_single['waveform sequence'])),
-                    waveforms=waveforms_single,
-                    interleave_waveforms=toBool(config_single['interleave waveforms']),
-                    waveform_stitch_delays=list(eval(config_single['waveform stitch delays'])),
-                    sample_rate=float(config_single['sample rate']),
-                    burst_count=int(config_single['burst count']),
-                    waveform_output_channels=list(config_single['waveform output channels']),
-                    waveform_output_channel_lags=list(map(float, config_single['waveform output channel lags'])),
-                    marked_channels=list(config_single['marked channels']),
-                    marker_width=eval(config_single['marker width']))
-
-                
-                awg_settings_dict["config_path_single"] = config_path_single
-                awg_settings_dict["awg_config_single"] = awg_config_single
-
-            else:
-                awg_settings_dict["config_path_single"] = None
-
-            default_sweep_path = self.config.get('default_sweep_config_path', None)
-            if default_sweep_path:
-                default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
-            metadata = self.config.get('metadata') or {}
-            ct = metadata.get('config_type', '').strip().lower()
-            if ct == 'experiment':
-                self._validate_experiment_config_structure()
-
-            mot_fluoresce_config = MotFluoresceConfiguration(save_location=self.config['save location'],
-                                                            mot_reload=eval(self.config['mot reload']),
-                                                            iterations=int(self.config['iterations']),
-                                                            use_cam=use_camera,
-                                                            use_scope=use_scope,
-                                                            use_awg=use_awg,
-                                                            cam_dict=camera_settings_dict,
-                                                            scope_dict=scope_settings_dict,
-                                                            awg_dict=awg_settings_dict)
-
-            return mot_fluoresce_config
-            
-        else:
-            awg_settings_dict = None
-
-        default_sweep_path = self.config.get('default_sweep_config_path', None)
-        if default_sweep_path:
-            default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
-        metadata = self.config.get('metadata') or {}
-        ct = getattr(metadata, 'get', lambda k, d='': d)('config_type', '').strip().lower()
-        if ct == 'experiment':
-            self._validate_experiment_config_structure()
-
-        
-        mot_fluoresce_config = \
-        MotFluoresceConfiguration(save_location= self.config['save location'],
-                                mot_reload= eval(self.config['mot reload']),
-                                iterations= int(self.config['iterations']),
-                                use_cam=use_camera,
-                                use_scope=use_scope,
-                                use_awg=use_awg,
-                                cam_dict=camera_settings_dict,
-                                scope_dict=scope_settings_dict,
-                                awg_dict=awg_settings_dict,
-                                default_sweep_config_path=default_sweep_path,
-                                )
-        
+        # Create and return MOT fluorescence configuration
+        mot_fluoresce_config = MotFluoresceConfiguration(
+            save_location=self.config['save location'],
+            mot_reload=eval(self.config['mot reload']),
+            iterations=int(self.config['iterations']),
+            use_cam=use_camera,
+            use_scope=use_scope,
+            use_awg=use_awg,
+            cam_config=cam_config,
+            scope_config=scope_config,
+            awg_config=awg_config
+        )
         
         return mot_fluoresce_config
 
@@ -629,12 +575,10 @@ class ExperimentConfigReader():
 
     def get_mot_flourescence_configuration_sweep(self):
         """
-        Method to extract the MOT fluorescence configuration for sweep experiments.
-        First determines the sweep type, and then does different things from there.
+        Extract MOT fluorescence sweep configuration from the config file.
+        
         Returns:
-         - sweep_type (str): The type of sweep being performed, e.g. "awg_sequence" or "mot_imaging".
-         - num_shots (int): The number of shots to take for the sweep.
-         - sweep_dict (dict): A dictionary containing the parameters for the sweep.
+            SweepConfiguration object containing sweep type, num_shots, and sweep parameters
         """
 
         def generate_int_list(section):
@@ -658,10 +602,6 @@ class ExperimentConfigReader():
             array = np.linspace(start, stop, num_points)
             return array.tolist()
         
-        
-
-
-        
         def ensure_list(value):
             if isinstance(value, list):
                 return value
@@ -669,7 +609,6 @@ class ExperimentConfigReader():
                 return None
             else:
                 return [value]
-        
         
         sweep_type = self.config["sweep_type"]
         num_shots = int(self.config['num_shots'])
@@ -685,7 +624,7 @@ class ExperimentConfigReader():
             all_sweeps = []
             for sweep_idx in self.config["sweeps"]:
                 sweep = self.config["sweeps"][sweep_idx]
-                sweep_changes = {"title":sweep["title"]}
+                sweep_changes = {"title": sweep["title"]}
                 for key, value in sweep.items():
                     if key == "title":
                         continue
@@ -702,7 +641,7 @@ class ExperimentConfigReader():
 
                 all_sweeps.append(sweep_changes)
 
-            sweep_dict = {
+            sweep_params = {
                 "waveform_indices": wave_idxs,
                 "rabi_frequencies": rabi_freqs,
                 "modulation_frequencies": mod_freqs,
@@ -711,23 +650,25 @@ class ExperimentConfigReader():
                 "sweeps": all_sweeps,
             }
             
-            return sweep_type, num_shots, sweep_dict
-
-
-
+            return SweepConfiguration(sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params)
 
         elif sweep_type == "mot_imaging":
             beam_powers = generate_float_list("beam_powers")
             beam_frequencies = generate_float_list("beam_frequencies")
             pulse_lengths = generate_int_list("pulse_lengths")
             pulse_times = generate_int_list("pulse_times")
-            sweep_dict = {
+            
+            sweep_params = {
                 "beam_powers": beam_powers,
                 "beam_frequencies": beam_frequencies,
                 "pulse_lengths": pulse_lengths,
                 "pulse_times": pulse_times
             }
-            return sweep_type, num_shots, sweep_dict
+            
+            return SweepConfiguration(sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params)
+        
+        else:
+            raise ValueError(f"Unsupported sweep type: {sweep_type}")
 
     
     def get_absorbtion_imaging_configuration(self):
