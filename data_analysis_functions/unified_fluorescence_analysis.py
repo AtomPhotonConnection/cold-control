@@ -22,6 +22,7 @@ import seaborn as sns
 import os
 import re
 import warnings
+import pickle
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from scipy import interpolate
@@ -475,15 +476,48 @@ class UnifiedFluorescenceProcessor:
             summary_path = self.root_folder / "fluorescence_analysis_summary.csv"
             summary_df.to_csv(summary_path, index=False)
             print(f"\nSummary saved to {summary_path}")
+            
+            # Also save a human-readable text version
+            txt_path = self.root_folder / "fluorescence_analysis_summary.txt"
+            with open(txt_path, 'w') as f:
+                f.write("="*100 + "\n")
+                f.write("FLUORESCENCE ANALYSIS SUMMARY\n")
+                f.write("="*100 + "\n\n")
+                f.write(summary_df[['parameter_folder', 'shot_name', 'num_valid_traces',
+                                    'F_normalized', 'F_normalized_uncertainty',
+                                    'raw_integral', 'F_high', 'F_low', 'scale_factor']].to_string())
+                f.write("\n")
+            print(f"Summary text saved to {txt_path}")
         
         return summary_df
     
-    def plot_results(self, figsize: Tuple[int, int] = (14, 10)):
+    def _save_figure(self, fig, name: str):
+        """Save figure as PNG and as a pickle file for interactive re-opening.
+        
+        The pickle (.fig.pkl) can be reloaded and zoomed interactively via:
+            import pickle, matplotlib.pyplot as plt
+            fig = pickle.load(open('file.fig.pkl', 'rb'))
+            plt.show()
+        """
+        save_dir = self.root_folder
+        png_path = save_dir / f"{name}.png"
+        svg_path = save_dir / f"{name}.svg"
+        pkl_path = save_dir / f"{name}.fig.pkl"
+        
+        fig.savefig(png_path, dpi=200, bbox_inches='tight')
+        fig.savefig(svg_path, bbox_inches='tight')
+        with open(pkl_path, 'wb') as f:
+            pickle.dump(fig, f)
+        
+        print(f"  Saved: {png_path.name}, {svg_path.name}, {pkl_path.name}")
+
+    def plot_results(self, figsize: Tuple[int, int] = (14, 10), save: bool = True):
         """
         Plot processed results with multiple subplots.
         
         Args:
             figsize: Figure size (width, height)
+            save: Whether to save the figure to disk
         """
         if not self.results:
             raise ValueError("No results to plot. Run process_all_experiments first.")
@@ -498,6 +532,14 @@ class UnifiedFluorescenceProcessor:
             sort_cols.append('shot_number')
         if sort_cols:
             summary_df = summary_df.sort_values(sort_cols).reset_index(drop=True)
+        
+        # Build composite labels for per-shot plots: "folder / shotN"
+        shot_labels = [
+            f"{row['parameter_folder']}/s{row['shot_number']}"
+            if 'parameter_folder' in row and 'shot_number' in row
+            else str(i)
+            for i, row in summary_df.iterrows()
+        ]
         
         fig, axes = plt.subplots(2, 2, figsize=figsize)
         
@@ -522,54 +564,71 @@ class UnifiedFluorescenceProcessor:
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize='x-small')
         
-        # Plot 2: Raw integral vs shot
+        # Plot 2: Raw integral vs shot, one line per parameter folder
         ax = axes[0, 1]
-        x_data = range(len(summary_df))
-        ax.plot(x_data, summary_df['raw_integral'], 'o-', label='Raw Integral')
+        if 'parameter_folder' in summary_df.columns:
+            groups = summary_df.groupby('parameter_folder')
+            colors = plt.cm.tab10(np.linspace(0, 1, max(len(groups), 1)))
+            for (pf, group), color in zip(groups, colors):
+                x = group['shot_number'] if 'shot_number' in group.columns else range(len(group))
+                ax.plot(x, group['raw_integral'], 'o-', color=color, label=pf)
+        else:
+            x_data = summary_df['shot_number'] if 'shot_number' in summary_df.columns else range(len(summary_df))
+            ax.plot(x_data, summary_df['raw_integral'], 'o-', label='Raw Integral')
         ax.set_xlabel('Shot Number')
         ax.set_ylabel('Raw Integral (V·s)')
         ax.set_title('Raw Fluorescence Integral')
         ax.grid(True, alpha=0.3)
-        ax.legend()
+        ax.legend(fontsize='x-small')
         
-        # Plot 3: Normalization factors
+        # Plot 3: Normalization factors – all shots sequential with composite labels
         ax = axes[1, 0]
-        ax.plot(x_data, summary_df['F_high'], 'o-', label='F_high (MOT on)', alpha=0.7)
-        ax.plot(x_data, summary_df['F_low'], 's-', label='F_low (MOT off)', alpha=0.7)
-        ax.fill_between(x_data, 
+        x_all = np.arange(len(summary_df))
+        ax.plot(x_all, summary_df['F_high'], 'o-', label='F_high (MOT on)', alpha=0.7)
+        ax.plot(x_all, summary_df['F_low'], 's-', label='F_low (MOT off)', alpha=0.7)
+        ax.fill_between(x_all, 
                         summary_df['F_high'] - summary_df['F_high_std'],
                         summary_df['F_high'] + summary_df['F_high_std'],
                         alpha=0.2)
-        ax.fill_between(x_data,
+        ax.fill_between(x_all,
                         summary_df['F_low'] - summary_df['F_low_std'],
                         summary_df['F_low'] + summary_df['F_low_std'],
                         alpha=0.2)
-        ax.set_xlabel('Shot Number')
+        ax.set_xticks(x_all)
+        ax.set_xticklabels(shot_labels, rotation=90, fontsize=6)
+        ax.set_xlabel('Parameter Folder / Shot')
         ax.set_ylabel('Fluorescence (V)')
         ax.set_title('Normalization Reference Values')
         ax.grid(True, alpha=0.3)
         ax.legend()
         
-        # Plot 4: Number of valid traces
+        # Plot 4: Number of valid traces – all shots sequential with composite labels
         ax = axes[1, 1]
-        ax.bar(x_data, summary_df['num_valid_traces'], alpha=0.7, label='Valid Traces')
-        ax.bar(x_data, summary_df['num_traces'] - summary_df['num_valid_traces'], 
+        ax.bar(x_all, summary_df['num_valid_traces'], alpha=0.7, label='Valid Traces')
+        ax.bar(x_all, summary_df['num_traces'] - summary_df['num_valid_traces'], 
                bottom=summary_df['num_valid_traces'], alpha=0.3, label='Invalid Traces')
-        ax.set_xlabel('Shot Number')
+        ax.set_xticks(x_all)
+        ax.set_xticklabels(shot_labels, rotation=90, fontsize=6)
+        ax.set_xlabel('Parameter Folder / Shot')
         ax.set_ylabel('Number of Traces')
         ax.set_title('Trace Validity per Shot')
         ax.legend()
         
         fig.tight_layout()
+        if save:
+            self._save_figure(fig, "fluorescence_results")
         plt.show()
     
-    def plot_averaged_traces(self, shots: Optional[List[str]] = None, figsize: Tuple[int, int] = (14, 6)):
+    def plot_averaged_traces(self, shots: Optional[List[str]] = None,
+                            figsize: Tuple[int, int] = (14, 6),
+                            save: bool = True):
         """
         Plot aligned and averaged traces for selected shots.
         
         Args:
             shots: List of shot cache keys to plot (None = all)
             figsize: Figure size
+            save: Whether to save the figure to disk
         """
         if not self.aligned_data_cache:
             raise ValueError("No aligned data cached. Run process_all_experiments first.")
@@ -610,6 +669,8 @@ class UnifiedFluorescenceProcessor:
         ax.legend()
         
         fig.tight_layout()
+        if save:
+            self._save_figure(fig, "fluorescence_averaged_traces")
         plt.show()
 
 
