@@ -27,7 +27,7 @@ python optimize_awg_pulse_forward.py
 # 1. CHECK HARDWARE CONNECTION
 # ─────────────────────────────────────────────────────────────────────────
 
-from instruments.agilent_9000 import OscilloscopeManager
+from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 import visa
 
 # Get scope ID
@@ -225,7 +225,7 @@ from marina.pulse_optimizer_core import (
     find_optimal_mu,
     SignalPlotter,
 )
-from instruments.keysight_3104A import OscilloscopeManager
+from instruments.Oscilloscopes.keysight_3104A import OscilloscopeManager
 import numpy as np
 
 # 1. Load signal
