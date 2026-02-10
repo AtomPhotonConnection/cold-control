@@ -24,19 +24,18 @@ import pandas as pd
 import time
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional, cast
 from datetime import datetime
 from configobj import ConfigObj
 import csv
+import pyvisa as visa
 
-from instruments.agilent_9000 import OscilloscopeManager
+from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 from instruments.WX218x.awg_control2 import configure_awg
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
-from classes.Config import ConfigReader
 
 from pulse_optimizer_core import (
-    load_theoretical_signal,
-    get_theoretical_signal_path,
+    load_signal_from_path,
     ScopeDataAcquisition,
     PositiveNLMS,
     find_optimal_mu,
@@ -48,11 +47,20 @@ from pulse_optimizer_core import (
     logger
 )
 
-# Configure logging
+# Configure logging, save to a file with the current date in the filename
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=f"C:\\pulse_shaping_data\\logging\\{datetime.now().strftime('%Y-%m-%d')}.log",
+    filemode='a'
 )
+
+def _cfg_section(cfg: ConfigObj, key: str) -> Dict[str, str]:
+    """Extract a config section, with a runtime guard that survives -O."""
+    section = cfg[key]
+    if not isinstance(section, dict):
+        raise TypeError(f"Config key '{key}' must be a section, got scalar: {section!r}")
+    return section
 
 
 class InvertedOptimizer:
@@ -81,25 +89,36 @@ class InvertedOptimizer:
         - [Paths]: output_dir, config_awg_path
         """
         self.config = ConfigObj(config_path)
-        self.channel = int(self.config['Channel']['channel'])
-        self.pulse_type = self.config['Channel']['pulse_type']
-        self.amplitude = float(self.config['Optimization']['amplitude'])
+
+        channel_cfg = _cfg_section(self.config, 'Channel')
+        self.channel = int(channel_cfg['channel'])
+        self.pulse_type = str(channel_cfg['pulse_type'])
+
         
         # Parse optimization parameters
-        self.window_min = int(self.config['Optimization']['window_min'])
-        self.window_max = int(self.config['Optimization']['window_max'])
-        self.window_step = int(self.config['Optimization']['window_step'])
-        self.mu_min = float(self.config['Optimization']['mu_min'])
-        self.mu_max = float(self.config['Optimization']['mu_max'])
+        optimisation_cfg = _cfg_section(self.config, 'Optimization')
+        self.amplitude = float(optimisation_cfg['amplitude'])
+        self.window_min = int(optimisation_cfg['window_min'])
+        self.window_max = int(optimisation_cfg['window_max'])
+        self.window_step = int(optimisation_cfg['window_step'])
+        self.mu_min = float(optimisation_cfg['mu_min'])
+        self.mu_max = float(optimisation_cfg['mu_max'])
+        self.mu_pts = int(optimisation_cfg['mu_pts'])
         
         # Hardware paths
-        self.output_dir = Path(self.config['Paths']['output_dir'])
+        paths_cfg = _cfg_section(self.config, 'Paths')
+        self.output_dir = Path(paths_cfg['output_dir'])
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.awg_config_path = self.config['Paths']['config_awg_path']
+        self.awg_config_path = paths_cfg['config_awg_path']
+
+        # Parse pulse paths from config
+        self.pulse_paths = cast(Dict[str, str], self.config.get('Pulse_paths', {}))
         
         # Initialize hardware
         self.scope = None
+        self._owns_scope = False  # Track if this class is responsible for closing the scope
         self.awg = None
+        self.awg_config_obj = None
         self.plotter = SignalPlotter(str(self.output_dir))
         
         self.results = []
@@ -107,22 +126,116 @@ class InvertedOptimizer:
     
     def connect_scope(self) -> OscilloscopeManager:
         """Connect to Agilent 9000 series oscilloscope."""
-        scope_id = self.config['Hardware']['scope_id']
+        scope_id = str(self.config['Hardware']['scope_id']) # type: ignore
         logger.info(f"Connecting to Agilent 9000 scope: {scope_id}")
         self.scope = OscilloscopeManager(scope_id)
+        self._owns_scope = True
         return self.scope
-    
-    def setup_awg(self) -> Tuple[AwgConfiguration, object]:
+
+    def load_awg_config(self) -> AwgConfiguration:
         """
-        Setup and configure AWG from config file.
-        
+        Load the AWG configuration from the ini file into an AwgConfiguration object.
+
+        The AWG config ini has top-level keys (sample rate, burst count, etc.)
+        and a [waveforms] section — the same layout used by
+        ExperimentConfigReader.get_photon_production_configuration() but without
+        the outer [AWG] grouping.
+
         Returns:
-            Tuple of (AwgConfiguration, AWG instance)
+            AwgConfiguration ready to be passed to configure_awg().
         """
         logger.info(f"Loading AWG config from {self.awg_config_path}")
-        awg_config_obj = ConfigObj(self.awg_config_path)
+        cfg = ConfigObj(self.awg_config_path)
+        cfg_d = cast(Dict[str, Any], cfg)
+
+        waveforms_section = cast(Dict[str, Dict[str, Any]], cfg_d['waveforms'])
+
+        # --- Parse waveforms ---
+        waveforms = []
+        for _key, v in waveforms_section.items():
+            _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
+            waveforms.append(Waveform(
+                fname=v['filename'],
+                mod_frequency=float(v['modulation frequency']),
+                phases=_phases,
+            ))
+
+        awg_config = AwgConfiguration(
+            sample_rate=float(cfg_d['sample rate']),
+            burst_count=int(cfg_d['burst count']),
+            waveform_output_channels=list(cfg_d['waveform output channels']),
+            waveform_output_channel_lags=list(map(float, cfg_d['waveform output channel lags'])),
+            marked_channels=list(cfg_d['marked channels']),
+            marker_width=eval(cfg_d['marker width']),
+            waveform_sequence=list(eval(cfg_d['waveform sequence'])),
+            waveforms=waveforms,
+            waveform_stitch_delays=list(eval(cfg_d['waveform stitch delays'])),
+            interleave_waveforms=cfg_d.get('interleave waveforms', 'false').lower()
+                                 in ('true', 't', 'yes', 'y'),
+        )
+
+        self.awg_config_obj = awg_config
         logger.info("AWG configuration loaded")
-        return awg_config_obj, None
+        return self.awg_config_obj
+
+    def program_awg(self, signal: np.ndarray, label: str = "signal"):
+        """
+        program the AWG with the given waveform on the configured channel.
+
+        Replaces the waveform data for self.channel in the loaded AwgConfiguration,
+        then calls configure_awg() to upload and arm.
+
+        Args:
+            signal: Waveform array (normalised, will be written as-is).
+            label:  Human-readable label for logging.
+        """
+        if self.awg_config_obj is None:
+            self.load_awg_config()
+
+        self.awg_config_obj = cast(AwgConfiguration, self.awg_config_obj)  # For type checker
+
+        # Save waveform CSV for record-keeping
+        csv_path = self.send_signal_to_awg(signal, label)
+
+        # Find the waveform index used by our channel in the sequence.
+        # Channel index is 0-based in the sequence list.
+        ch_idx = self.channel - 1
+        if ch_idx >= len(self.awg_config_obj.waveform_sequence):
+            raise ValueError(f"Channel {self.channel} not found in AWG waveform_sequence "
+                             f"(only {len(self.awg_config_obj.waveform_sequence)} channels configured)")
+
+        # Get the waveform IDs for this channel and replace the first one
+        wf_ids = self.awg_config_obj.waveform_sequence[ch_idx]
+        if not wf_ids:
+            raise ValueError(f"No waveforms configured for channel {self.channel}")
+
+        target_wf_id = wf_ids[0]
+        target_wf = self.awg_config_obj.waveforms[target_wf_id]
+
+        # Replace the waveform data — store raw samples so get() returns them directly
+        target_wf.data = signal.tolist()
+
+        logger.info(f"Programming AWG channel {self.channel} with '{label}' waveform "
+                     f"({len(signal)} samples, wf_id={target_wf_id})")
+
+        # Close previous AWG session if open
+        if self.awg is not None:
+            try:
+                self.awg.abort_generation()
+                self.awg.close()
+            except Exception:
+                pass
+
+        assert self.awg_config_obj is not None, "AWG config must be loaded before programming"
+        self.awg, duration_s = configure_awg(
+            self.awg_config_obj,
+            marked_wfs=[1] if len(wf_ids) > 1 else [0],
+            dev_mode=False,
+            plot=False,
+            optimised=True
+        )
+        logger.info(f"AWG armed — waveform duration {duration_s * 1e6:.1f} µs")
+
     
     def send_signal_to_awg(self, signal: np.ndarray, signal_type: str = "theoretical") -> Path:
         """
@@ -146,43 +259,66 @@ class InvertedOptimizer:
         logger.info(f"Saved signal to AWG CSV: {csv_path}")
         return csv_path
     
-    def measure_theoretical_response(self, theoretical_signal: np.ndarray,
-                                    time_array: np.ndarray) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Send theoretical signal to AWG, measure scope response, and average.
-        
-        Args:
-            theoretical_signal: Theoretical waveform to send
-            time_array: Time points corresponding to signal
-        
-        Returns:
-            Tuple of (mean_response, std_response)
-        """
-        logger.info("Measuring theoretical signal response...")
-        
-        # Send to AWG
-        self.send_signal_to_awg(theoretical_signal, "theoretical")
-        
-        # Configure scope acquisition
-        trigger_channel = int(self.config['Oscilloscope']['trigger_channel'])
-        trigger_level = float(self.config['Oscilloscope']['trigger_level'])
-        
+    def _build_scope_acq(self) -> Tuple['ScopeDataAcquisition', int, float]:
+        """Build a ScopeDataAcquisition from config. Returns (acq, trigger_ch, trigger_level)."""
+        osc_cfg = _cfg_section(self.config, 'Oscilloscope')
+
+        trigger_channel = int(osc_cfg['trigger_channel'])
+        trigger_level = float(osc_cfg['trigger_level'])
+
+        channel_map = {}
+        for key in self.config['Oscilloscope']:
+            if key.startswith('channel_') and key.endswith('_lower'):
+                ch_num = int(key.split('_')[1])
+                lower = float(osc_cfg[f'channel_{ch_num}_lower'])
+                upper = float(osc_cfg[f'channel_{ch_num}_upper'])
+                channel_map[ch_num] = (lower, upper)
+        if not channel_map:
+            channel_map = {1: (-0.5, 0.5)}
+
         acq = ScopeDataAcquisition(self.scope, {
-            'channel_map': {1: (-0.5, 0.5)},  # TODO: read from config
-            'samp_rate': float(self.config['Oscilloscope']['samp_rate']),
+            'channel_map': channel_map,
+            'samp_rate': float(osc_cfg['samp_rate']),
             'timebase_range': (
-                float(self.config['Oscilloscope']['timebase_start']),
-                float(self.config['Oscilloscope']['timebase_stop'])
+                float(osc_cfg['timebase_start']),
+                float(osc_cfg['timebase_stop'])
             )
         })
-        
-        acq.configure_and_arm(trigger_channel, trigger_level)
-        
-        # Acquire multiple measurements
-        num_measurements = int(self.config['Measurement']['num_measurements'])
+        return acq, trigger_channel, trigger_level
+
+    def measure_scope_response(self, signal: np.ndarray, label: str = "signal") -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        program the AWG with the given waveform and measure the scope response.
+
+        Steps:
+            1. program the AWG (upload waveform, arm for trigger)
+            2. Configure scope channels / trigger
+            3. Hardware-average num_measurements triggers and read once
+
+        Args:
+            signal: Waveform array to send to the AWG.
+            label:  Human-readable label used in filenames / logs.
+
+        Returns:
+            Tuple of (mean_response_df, std_response_df)
+        """
+        logger.info(f"Measuring scope response for '{label}'...")
+
+        # 1. program AWG
+        self.program_awg(signal, label)
+
+        # Small delay to let the AWG settle
+        time.sleep(0.5)
+
+        # 2. Configure scope
+        acq, trigger_channel, trigger_level = self._build_scope_acq()
+        acq.configure(trigger_channel, trigger_level)
+
+        # 3. Hardware-averaged acquisition
+        meas_cfg = _cfg_section(self.config, 'Measurement')
+        num_measurements = int(meas_cfg['num_measurements'])
         mean_response, std_response = acq.acquire_data([1], num_measurements)
-        
-        logger.info(f"Acquired {num_measurements} measurements, averaged")
+        logger.info(f"Acquired hardware-averaged waveform ({num_measurements} averages) for '{label}'")
         return mean_response, std_response
     
     def optimize_window(self, measured_signal: np.ndarray, theoretical_signal: np.ndarray,
@@ -190,10 +326,14 @@ class InvertedOptimizer:
         """
         Optimize for a single window size using inverted NLMS filter.
         
-        Inverted mode: 
-        - Input X: windows from theoretical signal
-        - Desired d: measured response
-        - Output y: filter predicts what input would produce measured output
+        Inverted mode (matches original finding_amplitude_inv.py):
+        1. X = windows from MEASURED signal (system output)
+        2. desired = THEORETICAL signal (what we want)
+        3. Filter learns weights w: w · measured_windows ≈ theoretical
+           i.e. the inverse system mapping (measured → theoretical)
+        4. Apply those weights to THEORETICAL windows:
+           y_pred = w · theoretical_windows
+           This produces the pre-distorted AWG input.
         
         Args:
             measured_signal: Measured scope response (voltage)
@@ -205,41 +345,49 @@ class InvertedOptimizer:
         """
         logger.info(f"\nOptimizing for window size {window_size}...")
         
-        # Normalize signals
+        # Normalize both signals to the same scale (as in original)
         measured_norm, theoretical_norm = normalize_signals_to_max(measured_signal, theoretical_signal)
         
-        # Create window matrix: each row is a window of the theoretical signal
-        n_windows = len(theoretical_norm) - window_size
+        n_windows = len(measured_norm) - window_size
         if n_windows < 1:
-            logger.warning(f"Window {window_size} too large for signal length {len(theoretical_norm)}")
-            return {'window': window_size, 'error': float('inf')}
+            logger.warning(f"Window {window_size} too large for signal length {len(measured_norm)}")
+            return {'window': window_size, 'mse': float('inf')}
         
-        # In inverted mode:
-        # X = windows from theoretical (the target output)
-        # desired = measured response (what we got from the system)
-        X = np.array([theoretical_norm[i:i + window_size] for i in range(n_windows)])
-        desired = measured_norm[window_size:]
+        # Step 1-2: X = windows from MEASURED, desired = THEORETICAL
+        X = np.array([measured_norm[i:i + window_size] for i in range(n_windows)])
+        desired = np.array(theoretical_norm[window_size:])
+        #desired = np.array([theoretical_norm[i:i + window_size] for i in range(n_windows)])
         
+        
+        # Truncate to matching lengths
+        min_len = min(len(desired), len(X))
+        desired = desired[:min_len]
+        X = X[:min_len]
+
         # Find optimal learning rate
         best_mu, best_error = find_optimal_mu(
             window_size, desired, X,
             mu_range=(self.mu_min, self.mu_max),
-            n_points=15
+            n_points=20
         )
-        
-        # Run filter with optimal mu
+
+        # Step 3: Run filter — learns inverse system: measured → theoretical
         filt = PositiveNLMS(window_size, mu=best_mu)
         y_filtered, error, weights = filt.run(desired, X)
-        
-        # The filter output is the predicted input waveform
-        # Now apply it to theoretical windows to predict the response
-        X_optimized = np.array([theoretical_norm[i:i + window_size] for i in range(n_windows)])
-        y_predicted = np.array([np.dot(weights[i], X_optimized[i]) if i < len(weights) else 0 
-                               for i in range(len(X_optimized))])
-        
-        # Compute error metrics
+
+        # Step 4: Apply learned weights to THEORETICAL signal windows
+        # This produces the pre-distorted input to send to the AWG.
+        # Use w[i-1] (weights from previous step) as in the original code.
+        X_theoretical = np.array([theoretical_norm[i:i + window_size]
+                                  for i in range(n_windows)])[:min_len]
+        predicted_input = np.array([
+            np.dot(X_theoretical[i], weights[i - 1]) if i > 0 else 0.0
+            for i in range(min_len)
+        ])
+
+        # Compute error metrics (how well the filter fits measured → theoretical)
         metrics = compute_error_metrics(y_filtered, desired)
-        
+
         result = {
             'window': window_size,
             'mu': best_mu,
@@ -248,9 +396,9 @@ class InvertedOptimizer:
             'mae': metrics['mae'],
             'error_array': error,
             'output': y_filtered,
-            'predicted_input': y_filtered,  # In inverted mode, output IS the input
+            'predicted_input': predicted_input,
         }
-        
+
         return result
     
     def run(self):
@@ -263,38 +411,53 @@ class InvertedOptimizer:
             # 1. Connect hardware
             self.connect_scope()
             logger.info("Hardware connected")
+
+            self.load_awg_config()
             
             # 2. Load theoretical signal
-            signal_path = get_theoretical_signal_path(self.pulse_type)
-            len_awg = int(self.config['Optimization']['len_awg'])
-            
-            original_sig, theoretical_sig, time_array = load_theoretical_signal(
+            signal_path = self.pulse_paths[self.pulse_type] # type: ignore
+
+            assert type(signal_path) is str, f"Signal path for pulse '{self.pulse_type}' must be a string in config"
+
+            scaled_sig = load_signal_from_path(
                 signal_path,
-                amplitude=self.amplitude,
-                target_length=6000,
-                total_length_ns=float(len_awg)
+                amplitude=self.amplitude
             )
+
+            len_awg = len(scaled_sig)  # Assuming the loaded signal is already at the desired length for the AWG
+            assert self.awg_config_obj is not None, "AWG config must be loaded to determine sample rate"
+            total_length_s = 1/self.awg_config_obj.sample_rate *len_awg
+
+            time_array = np.linspace(0, total_length_s, len_awg, endpoint=True)
+            print(f"Loaded theoretical signal: {len(scaled_sig)} samples, duration {total_length_s*1e6:.1f} µs")
+            print(f"time array inital value: {time_array[0]*1e6:.6f} us, final value: {time_array[-1]*1e6:.6f} us")
+            print(f"time array num points: {len(time_array)}")
             
-            logger.info(f"Loaded theoretical signal: {len(original_sig)} → {len(theoretical_sig)} samples")
+            logger.info(f"Loaded theoretical signal: {len(scaled_sig)} samples")
             
             # 3. Measure theoretical response
-            measured_mean, measured_std = self.measure_theoretical_response(theoretical_sig, time_array)
-            measured_voltage = measured_mean['Voltage (V)'].values
+            measured_mean, measured_std = self.measure_scope_response(scaled_sig, label="theoretical")
+            
+            # Scope returns 'Channel N Voltage (V)' columns
+            voltage_col = [c for c in measured_mean.columns if 'Voltage' in c][0]
+            measured_voltage = measured_mean[voltage_col].values
             
             # Resample measured to match theoretical length if needed
-            if len(measured_voltage) != len(theoretical_sig):
-                measured_voltage = resample_signal(measured_voltage, len(measured_voltage), len(theoretical_sig))
+            if len(measured_voltage) != len(scaled_sig):
+                measured_voltage = resample_signal(measured_voltage, len(measured_voltage), len(scaled_sig))
             
             # Plot initial comparison
+            std_col = [c for c in measured_std.columns if 'Voltage' in c]
+            std_values = measured_std[std_col[0]].values[:len(scaled_sig)] if std_col and len(measured_std) > 0 else None
             self.plotter.plot_signal_comparison(
-                measured_voltage, time_array[:len(theoretical_sig)], theoretical_sig,
-                std=measured_std['Voltage (V)'].values[:len(theoretical_sig)] if len(measured_std) > 0 else None,
+                measured_voltage, time_array[:len(scaled_sig)], scaled_sig,
+                std=std_values,
                 title="Measured vs Theoretical Signal (Before Optimization)",
                 filename="01_initial_comparison.png"
             )
             
             # 4. Compute baseline error
-            baseline_metrics = compute_error_metrics(measured_voltage, theoretical_sig, time_array[:len(theoretical_sig)])
+            baseline_metrics = compute_error_metrics(measured_voltage, scaled_sig, time_array[:len(scaled_sig)])
             self.results.append({
                 'window': 'baseline',
                 'mse': baseline_metrics['mse'],
@@ -306,30 +469,100 @@ class InvertedOptimizer:
             # 5. Optimize over window sizes
             best_window = self.window_min
             best_error = float('inf')
+            sweep_windows = []
+            sweep_mses = []
             
             for window in range(self.window_min, self.window_max + 1, self.window_step):
-                result = self.optimize_window(measured_voltage, theoretical_sig, window)
+                result = self.optimize_window(measured_voltage, scaled_sig, window)
                 self.results.append(result)
                 
+                # Save per-window comparison plot
+                if 'output' in result and len(result['output']) > 0:
+                    self.plotter.plot_window_result(
+                        measured_voltage,
+                        scaled_sig,
+                        result['output'],
+                        predicted_input=result.get('predicted_input'),
+                        window_size=window,
+                        time_array=time_array,
+                        filename=f"window_{window:03d}_comparison.png"
+                    )
+                    sweep_windows.append(window)
+                    sweep_mses.append(result['mse'])
+                
+
                 if result['mse'] < best_error:
                     best_error = result['mse']
                     best_window = window
+
+            # Plot MSE vs window size summary
+            if sweep_windows:
+                self.plotter.plot_mse_vs_window(
+                    sweep_windows, sweep_mses,
+                    filename="02_mse_vs_window.png"
+                )
             
             # 6. Re-run optimization with best window
             logger.info(f"\nBest window: {best_window} (MSE: {best_error:.4f})")
-            best_result = self.optimize_window(measured_voltage, theoretical_sig, best_window)
+            best_result = self.optimize_window(measured_voltage, scaled_sig, best_window)
             
             # Resample optimized signal to AWG length
             optimized_input = resample_signal(best_result['predicted_input'], 
                                              len(best_result['predicted_input']), 
                                              len_awg)
-            
-            # 7. Send optimized signal and remeasure
-            logger.info("Sending optimized signal to AWG for validation...")
-            self.send_signal_to_awg(optimized_input, "optimized")
-            
-            # Would re-measure here if desired
-            # measured_optimized, _ = self.measure_theoretical_response(optimized_input, time_array)
+
+            # Renormalize to target amplitude (as in original finding_amplitude_inv.py)
+            if np.max(np.abs(optimized_input)) > 0:
+                optimized_input = optimized_input / np.max(np.abs(optimized_input)) * self.amplitude
+
+            # ============================================================
+            # 7. VALIDATION: send corrected input → measure → compare
+            # ============================================================
+            logger.info("=" * 60)
+            logger.info("VALIDATION — sending optimised waveform to AWG")
+            logger.info("=" * 60)
+
+            val_mean, val_std = self.measure_scope_response(optimized_input, label="optimized")
+
+            val_voltage_col = [c for c in val_mean.columns if 'Voltage' in c][0]
+            val_voltage = val_mean[val_voltage_col].values
+
+            # Resample to theoretical length for fair comparison
+            if len(val_voltage) != len(scaled_sig):
+                val_voltage = resample_signal(val_voltage, len(val_voltage), len(scaled_sig))
+
+            # Compute validation error
+            val_metrics = compute_error_metrics(
+                val_voltage, scaled_sig, time_array[:len(scaled_sig)]
+            )
+            self.results.append({
+                'window': f'validation_w{best_window}',
+                'mse': val_metrics['mse'],
+                'rmse': val_metrics['rmse'],
+                'mae': val_metrics['mae'],
+            })
+
+            logger.info(f"Validation MSE:  {val_metrics['mse']:.6f}  "
+                         f"(baseline was {baseline_metrics['mse']:.6f})")
+
+            # Plot validation comparison
+            val_std_col = [c for c in val_std.columns if 'Voltage' in c]
+            val_std_values = (val_std[val_std_col[0]].values[:len(scaled_sig)]
+                              if val_std_col and len(val_std) > 0 else None)
+            self.plotter.plot_signal_comparison(
+                val_voltage, time_array[:len(scaled_sig)], scaled_sig,
+                std=val_std_values,
+                title=(f"Optimised Response (window={best_window})  —  "
+                       f"MSE={val_metrics['mse']:.4f}  (baseline {baseline_metrics['mse']:.4f})"),
+                filename="03_validation_response.png"
+            )
+
+            # Save the optimised waveform CSV
+            save_path = self.config['Paths'].get('save_optimized_to') # type: ignore
+            if save_path:
+                np.savetxt(save_path, optimized_input, delimiter=',')
+                logger.info(f"Saved optimised waveform to {save_path}")
+
             
             # 8. Save results
             results_path = self.output_dir / "optimization_results.csv"
@@ -338,7 +571,8 @@ class InvertedOptimizer:
             logger.info("\n" + "=" * 60)
             logger.info("OPTIMIZATION COMPLETE")
             logger.info(f"Best window size: {best_window}")
-            logger.info(f"Best MSE: {best_error:.6f}")
+            logger.info(f"Baseline MSE:    {baseline_metrics['mse']:.6f}")
+            logger.info(f"Validation MSE:  {val_metrics['mse']:.6f}")
             logger.info(f"Results saved to: {results_path}")
             logger.info("=" * 60)
             
@@ -347,7 +581,15 @@ class InvertedOptimizer:
             raise
         
         finally:
-            if self.scope:
+            # Close AWG if we opened it
+            if self.awg is not None:
+                try:
+                    self.awg.abort_generation()
+                    self.awg.close()
+                except Exception:
+                    pass
+            # Only close the scope if we created it
+            if self.scope and self._owns_scope:
                 self.scope.quit()
 
 

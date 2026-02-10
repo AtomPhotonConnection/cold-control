@@ -210,9 +210,8 @@ class OscilloscopeManager:
         print("configuring the scope settings")
         self.clear_error_queue()
         
-        # 9000 Series: Use ACQuire:MODE RTIMe and HRESolution ON for high res equivalence
-        self._write_with_retry(':ACQuire:MODE RTIMe')
-        self._write_with_retry(':ACQuire:HRESolution ON') 
+        # 9000 Series: Use ACQuire:MODE RTIMe for real-time acquisition
+        self._write_with_retry(':ACQuire:MODE RTIMe') 
 
         # set timebase
         t_start, t_stop = timebase_range
@@ -231,6 +230,9 @@ class OscilloscopeManager:
                 lower, upper = ch_cfg[0], ch_cfg[1]
                 impedance = 'high' if high_impedance else 'low'
                 coupling = 'DC'
+
+            # Explicitly enable the channel on screen
+            self._write_with_retry(f":CHANnel{channel}:DISPlay ON")
 
             # Impedance logic for 9000 Series
             if impedance in ('high', '1meg', '1m'):
@@ -264,7 +266,7 @@ class OscilloscopeManager:
         """
         self._write_with_retry(":TRIGger:SWEep NORMal")
         self._write_with_retry(":TRIGger:MODE EDGE")
-        self._write_with_retry(f":TRIGger:EDGE:SOURce CHANnel{trigger_channel}")
+        self._write_with_retry(f":TRIGger:EDGE:SOURCe CHANnel{trigger_channel}")
         self._write_with_retry(f":TRIGger:LEVel CHANnel{trigger_channel}, {trigger_level}")
 
         if trigger_slope == "+":
@@ -298,6 +300,13 @@ class OscilloscopeManager:
         print("Oscilloscope set to stop mode.")
         return True
 
+    def set_to_run(self):
+        """Set the scope to free-running (continuous) acquisition mode."""
+        self.clear_error_queue()
+        self._write_with_retry(':RUN')
+        print("Oscilloscope set to run mode.")
+        return True
+
     def reset_scope(self):
         """Reset the oscilloscope."""
         try:
@@ -319,7 +328,10 @@ class OscilloscopeManager:
     def read_slow_return_data(self, channels):   
         """
         Function to read data from multiple channels after acquisition is complete.
-        Adapted for Agilent 9000 Series (supports full record streaming).
+        Adapted for Agilent/Keysight 9000 Series.
+
+        The scope must already be stopped with valid data in memory
+        (e.g. after :DIGitize or :SINGLE + trigger).
 
         Returns:
          - DataFrame with time and channel voltage columns, or None on failure.
@@ -327,59 +339,78 @@ class OscilloscopeManager:
         collected_data = None
         self.clear_error_queue()
         
-        # 9000 Series specific waveform setup
-        self._write_with_retry(':WAVeform:FORMat WORD')
+        # Waveform transfer setup for 9000 series
+        self._write_with_retry(':WAVeform:FORMat WORD')       # 16-bit integers
         self._write_with_retry(':WAVeform:BYTeorder LSBFirst')
-        self._write_with_retry(':WAVeform:STReaming ON')
+        self._write_with_retry(':WAVeform:STReaming OFF')      # Disable streaming for query_binary_values compatibility
 
         time_vector_created = False
         data_dict = {}
 
         for channel in channels:
-            self._write_with_retry(f':WAVeform:SOURce CHANnel{channel}')
+            self._write_with_retry(f':WAVeform:SOURCe CHANnel{channel}')
+
             print(f"Collecting data from channel {channel}...")
             
             errs = self.clear_error_queue()
             if errs:
                 for code, msg in errs:
-                    print(f"Scope errors: {code}, {msg}")
+                    print(f"  Scope error (pre-read): {code}, {msg}")
             
-            # Preamble format: [format, type, points, count, xinc, xorg, xref, yinc, yorg, yref]
+            # Preamble: format, type, points, count, xinc, xorg, xref, yinc, yorg, yref
             preamble = self._query_with_retry(':WAVeform:PREamble?')
             pre = preamble.split(',')
             
-            num_points = int(pre[2])    
+            num_points = int(pre[2])
             x_incr = float(pre[4])
             x_orig = float(pre[5])
             y_incr = float(pre[7])
             y_orig = float(pre[8])
             y_ref = float(pre[9])
 
-            # Binary read with retries
+            print(f"  Preamble: {num_points} points, x_incr={x_incr:.2e}, y_incr={y_incr:.2e}")
+
+            if num_points == 0:
+                errs = self.clear_error_queue()
+                for code, msg in errs:
+                    print(f"  Scope error: {code}, {msg}")
+                raise ValueError(f"Preamble reports 0 points for channel {channel}. "
+                                 "Check that acquisition completed and channel is enabled.")
+
+            # Binary read — WORD format on 9000 series is signed 16-bit ('h')
             raw_data = None
             for attempt in range(DEFAULT_WRITE_QUERY_RETRIES):
                 try:
                     raw_data = self.scope.query_binary_values(
-                        ':WAVeform:DATA?', datatype='H', container=np.array,
+                        ':WAVeform:DATA?', datatype='h', container=np.array,
                         is_big_endian=False, chunk_size=1024 * 1024
                     )
                     break
                 except Exception as e:
+                    self._log.warning("WAVEFORM:DATA? attempt %d failed: %s", attempt + 1, e)
+                    errs = self.clear_error_queue()
+                    for code, msg in errs:
+                        self._log.warning("  Scope error: %d, %s", code, msg)
                     if attempt == DEFAULT_WRITE_QUERY_RETRIES - 1:
                         raise
-                    self._log.warning("WAVEFORM:DATA? attempt %d failed: %s", attempt + 1, e)
                     time.sleep(RETRY_DELAY_SEC)
 
             if raw_data is None or len(raw_data) == 0:
-                raise ValueError(f"No data collected from channel {channel}.")
+                errs = self.clear_error_queue()
+                for code, msg in errs:
+                    print(f"  Scope error (post-read): {code}, {msg}")
+                raise ValueError(f"No data collected from channel {channel}. "
+                                 f"Expected {num_points} points.")
 
-            # Calculate voltage (use actual data length to avoid linspace mismatch)
+            print(f"  Received {len(raw_data)} samples")
+
+            # Convert to voltage
             y_data = (raw_data - y_ref) * y_incr + y_orig
             data_dict[f'Channel {channel} Voltage (V)'] = y_data
 
-            # Create time vector once
+            # Create time vector once (from first channel)
             if not time_vector_created:
-                time_data = np.linspace(x_orig, x_orig + x_incr * len(y_data), len(y_data))
+                time_data = x_orig + x_incr * np.arange(len(y_data))
                 data_dict['Time (s)'] = time_data
                 time_vector_created = True
 
@@ -393,32 +424,41 @@ class OscilloscopeManager:
 
     def read_slow_return_data_avgd(self, channels, averages=16):
         """
-        NEW FUNCTION for Agilent 9000 Series.
-        Configures the scope for hardware averaging, acquires the data, and returns the averaged waveforms.
-        
+        Configures the scope for hardware averaging, digitizes, and returns
+        the averaged waveforms.
+
+        Sequence:
+            1. Set acquire mode to AVERage with requested count
+            2. :DIGitize — clears old data, arms, waits for all averages, stops
+            3. Read waveform data (already averaged in hardware)
+
+        Note: :DIGitize internally runs the full acquire cycle (arm → trigger ×N → stop),
+        so there is no need to call :RUN beforehand.
+
         Inputs:
             - channels (list of int): Channels to acquire.
             - averages (int): Number of averages to compute.
-            
+
         Returns:
             - DataFrame with Time and Voltage columns.
         """
         print(f"Starting averaged acquisition ({averages} averages)...")
-        
-        # 1. Enable Averaging
-        self._write_with_retry(":ACQuire:MODE AVERage") # Set mode to Average
-        self._write_with_retry(":ACQuire:AVERage ON")   # Ensure global flag is ON
+        self.clear_error_queue()
+
+        # 1. Configure averaging
+        self._write_with_retry(":ACQuire:MODE AVERage")
         self._write_with_retry(f":ACQuire:AVERage:COUNt {averages}")
-        
-        # 2. Acquire (Digitize blocks until acquisition cycle complete)
-        # This will run until 'averages' triggers have occurred.
+
+        # 2. Digitize — handles arm/trigger/stop internally
+        #    This blocks until all 'averages' triggers have been collected.
         success = self.set_to_digitize(channels)
-        
         if not success:
+            errs = self.clear_error_queue()
+            for code, msg in errs:
+                print(f"  Scope error: {code}, {msg}")
             raise RuntimeError("Digitize command failed during averaged acquisition.")
-            
-        # 3. Read Data
-        # The data in memory is now the averaged result.
+
+        # 3. Read the (hardware-averaged) waveform
         return self.read_slow_return_data(channels)
 
 
@@ -463,35 +503,44 @@ class OscilloscopeManager:
     def wait_for_acquisition(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
         """
         Waits for acquisition to complete by polling status registers.
-        Polls :ACQuire:COMPlete? and :RSTATE? to avoid blocking indefinitely.
+        
+        For Keysight 9000 series:
+        - :PDER? returns 1 when processing is done (clears on read).
+        - :ADER? returns 1 when the acquisition is done (clears on read).
+        
+        We check both: PDER=1 OR ADER=1, since after a :SINGLE the scope
+        transitions to stopped once the trigger is received and acquisition completes.
         """
         print("Waiting for acquisition to complete...")
         start_time = time.perf_counter()
         success = False
-        acq_pct = 0
 
         while not success and (time.perf_counter() - start_time) <= max_acq_wait_sec:
             time.sleep(poll_interval_sec)
             try:
-                acq_complete_str = self._query_with_retry(":ACQuire:COMPlete?").strip()
-                run_state = self._query_with_retry(":RSTATE?").strip().upper()
-
+                # PDER? (Process Done Event Register) returns 1 when done
                 try:
-                    acq_pct = int(acq_complete_str.split()[0])
-                except (ValueError, IndexError):
-                    acq_pct = 0
-                
-                acq_complete_bool = acq_pct >= 100
-                run_state_bool = "STOP" in run_state
-                success = acq_complete_bool and run_state_bool
-                
-                if success:
+                    pder = self._query_with_retry(":PDER?", retries=2).strip()
+                    print(f"Polled :PDER? = {pder}")
+                    if pder == "1":
+                        success = True
+                        break
+                except Exception:
+                    pass
+
+                # Fallback: check Acquisition Done Event Register
+                ader = self._query_with_retry(":ADER?", retries=2).strip()
+                print(f"Polled :ADER? = {ader}")
+                if ader == "1":
+                    success = True
                     break
+
             except Exception as e:
                 print(f"Error during completion poll: {e}")
                 break
 
-        print(f"Acquisition complete: {acq_pct}% complete, Run state: {run_state}")
-        if not success:
-            print("Warning: Acquisition did not complete within timeout.")
+        if success:
+            print("Acquisition complete.")
+        else:
+            print(f"Warning: Acquisition did not complete within {max_acq_wait_sec}s timeout.")
         return success

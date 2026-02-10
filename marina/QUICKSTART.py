@@ -6,19 +6,6 @@ TL;DR - Get started in 5 minutes
 @author: Refactored system documentation
 """
 
-# ============================================================================
-# 30-SECOND SETUP
-# ============================================================================
-
-# 1. Find your hardware IDs
-python -c "import visa; print(visa.ResourceManager().list_resources())"
-
-# 2. Edit config_forward.ini (replace with your IDs)
-# 3. Run:
-python optimize_awg_pulse_forward.py
-
-# Output will be in ./optimization_results/
-
 
 # ============================================================================
 # STEP-BY-STEP (5 MINUTES)
@@ -28,7 +15,7 @@ python optimize_awg_pulse_forward.py
 # ─────────────────────────────────────────────────────────────────────────
 
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
-import visa
+import pyvisa as visa
 
 # Get scope ID
 rm = visa.ResourceManager()
@@ -36,7 +23,7 @@ scope_ids = rm.list_resources()
 print("Available instruments:", scope_ids)
 
 # Connect to Agilent 9000 scope
-scope = OscilloscopeManager(scope_ids[0])  # Use first device
+scope = OscilloscopeManager("USB0::0x2A8D::0x900E::MY53450121::0::INSTR")
 assert scope.is_connected(), "Scope not connected!"
 print("✓ Scope connected")
 scope.quit()

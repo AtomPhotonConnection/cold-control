@@ -22,7 +22,7 @@ from scipy.interpolate import interp1d
 from scipy.constants import c, epsilon_0, hbar
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple, Dict, List, Optional, Union
+from typing import Tuple, Dict, List, Optional, Union, cast
 import logging
 import time
 
@@ -34,92 +34,23 @@ logger = logging.getLogger(__name__)
 # Uses agilent_9000.OscilloscopeManager for Agilent Infiniium 9000 series
 
 
-# =========================================================================
-# Physical Constants & Conversion Functions
-# =========================================================================
 
-class PhysicalConstants:
-    """Container for atomic physics constants used in laser power calculations."""
-    
-    # D1 transition (787 nm)
-    GAMMA_D1 = 5.746 * np.pi  # rad/s
-    D_D1 = 2.537e-29  # C*m (dipole moment)
-    
-    # D2 transition (780 nm)
-    GAMMA_D2 = 6 * np.pi  # rad/s
-    D_D2 = 2.853e-29  # C*m
-    
-    # V-STIRAP coefficients
-    CG_D2_STOKES = np.sqrt(1/30)
-    CG_D2_PUMP = -np.sqrt(5/24)
-    RABI_STIRAP_D1 = 41 * 2 * np.pi
-    RABI_STIRAP_D2 = 49 * 2 * np.pi
-    
-    # Optical pumping coefficients
-    CG_D2_P1 = np.sqrt(1/24)
-    CG_D2_P2 = np.sqrt(1/8)
-    RABI_P1_D1 = 34 * 2 * np.pi
-    RABI_P1_D2 = 57.5 * 2 * np.pi
-    RABI_P2_D1 = 24 * 2 * np.pi
-    RABI_P2_D2 = 25.5 * 2 * np.pi
-
-
-def rabi_to_laserpower(omega_mhz: float, dipole_moment: float, 
-                       cg_coefficient: float, beam_waist_um: float) -> float:
-    """
-    Convert Rabi frequency to laser power.
-    
-    Args:
-        omega_mhz: Rabi frequency in MHz
-        dipole_moment: Dipole moment in C*m
-        cg_coefficient: Clebsch-Gordan coefficient
-        beam_waist_um: Beam waist in micrometers
-    
-    Returns:
-        Laser power in mW
-    """
-    efield = (hbar * (omega_mhz * 1e6)) / (dipole_moment * cg_coefficient)
-    intensity = (efield**2 * epsilon_0 * c) / 2
-    return (intensity * np.pi * (beam_waist_um * 1e-6)**2) * 1e3
-
-
-def laserpower_to_rabi(power_mw: float, dipole_moment: float,
-                       cg_coefficient: float, beam_waist_um: float) -> float:
-    """
-    Convert laser power to Rabi frequency.
-    
-    Args:
-        power_mw: Power in mW
-        dipole_moment: Dipole moment in C*m
-        cg_coefficient: Clebsch-Gordan coefficient
-        beam_waist_um: Beam waist in micrometers
-    
-    Returns:
-        Rabi frequency in MHz
-    """
-    intensity = power_mw / (np.pi * (beam_waist_um * 1e-6)**2 * 1e3)
-    efield = np.sqrt((2 * intensity) / (epsilon_0 * c))
-    omega = (dipole_moment * cg_coefficient * efield) / (hbar * 1e6)
-    return omega
 
 
 # =========================================================================
-# Signal Loading & Interpolation
+# Signal Loading & Scaling
 # =========================================================================
 
-def load_theoretical_signal(csv_path: str, amplitude: float, 
-                           target_length: int, total_length_ns: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_signal_from_path(csv_path: str, amplitude: float) -> np.ndarray:
     """
-    Load a theoretical waveform from CSV and interpolate to desired length.
+    Load a waveform from CSV and interpolate to desired length.
     
     Args:
         csv_path: Path to CSV file (no header, values in first row/column)
         amplitude: Normalization amplitude for the signal
-        target_length: Desired output length (samples)
-        total_length_ns: Total signal duration in nanoseconds
     
     Returns:
-        Tuple of (original_signal, interpolated_signal, time_array)
+        Normalized signal as a numpy array
     """
     data = pd.read_csv(csv_path, header=None)
     signal = data.T.to_numpy().flatten()
@@ -127,39 +58,9 @@ def load_theoretical_signal(csv_path: str, amplitude: float,
     # Normalize to requested amplitude
     signal = (signal / signal.max()) * amplitude
     
-    # Create time arrays for interpolation
-    t_original = np.linspace(0, total_length_ns * 1e-9, len(signal), endpoint=True)
-    t_interpolated = np.linspace(0, total_length_ns * 1e-9, target_length, endpoint=True)
     
-    # Interpolate using cubic splines
-    interpolator = interp1d(t_original, signal, kind='cubic', fill_value="extrapolate")
-    signal_interp = interpolator(t_interpolated)
-    
-    return signal, signal_interp, t_interpolated
+    return signal
 
-
-def get_theoretical_signal_path(pulse_type: str) -> str:
-    """
-    Get the path to theoretical signal CSV based on pulse type.
-    
-    Args:
-        pulse_type: One of 'stokes', 'pump', 'P1', 'P2'
-    
-    Returns:
-        Path to CSV file
-    
-    Raises:
-        ValueError: If pulse_type is unknown
-    """
-    pulse_paths = {
-        'stokes': 'calibrations/StirapDL_awg/stokes.csv',
-        'pump': 'calibrations/StirapDL_awg/pump.csv',
-        'P1': 'calibrations/ELYSA_fibre_branch/P1.csv',
-        'P2': 'calibrations/ELYSA_fibre_branch/P2.csv',
-    }
-    if pulse_type not in pulse_paths:
-        raise ValueError(f"Unknown pulse type: {pulse_type}. Valid: {list(pulse_paths.keys())}")
-    return pulse_paths[pulse_type]
 
 
 # =========================================================================
@@ -183,54 +84,78 @@ class ScopeDataAcquisition:
         self.osc = osc_manager
         self.scope_config = scope_config
         
-    def configure_and_arm(self, trigger_channel: int, trigger_level: float,
-                         trigger_slope: str = "+") -> bool:
-        """Configure scope triggers and arm for acquisition."""
-        logger.info(f"Configuring scope: channels {self.scope_config['channel_map'].keys()}")
+    def configure(self, trigger_channel: int, trigger_level: float,
+                  trigger_slope: str = "+") -> bool:
+        """Configure scope channels and trigger (does NOT arm)."""
+        logger.info(f"Configuring scope: channels {list(self.scope_config['channel_map'].keys())}")
         self.osc.configure_scope(self.scope_config['channel_map'],
                                 samp_rate=self.scope_config['samp_rate'],
                                 timebase_range=self.scope_config['timebase_range'])
         
         logger.info(f"Setting trigger on channel {trigger_channel} at {trigger_level}V")
         self.osc.configure_trigger(trigger_channel, trigger_level, trigger_slope)
+        return True
+
+    # Keep old name as alias for backwards compatibility
+    def configure_and_arm(self, trigger_channel: int, trigger_level: float,
+                         trigger_slope: str = "+") -> bool:
+        """Configure scope and arm (legacy interface). Prefer configure()."""
+        self.configure(trigger_channel, trigger_level, trigger_slope)
         self.osc.arm_scope(max_acq_wait_sec=10)
         return True
     
-    def acquire_data(self, channels: List[int], num_measurements: int = 50) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def acquire_averaged(self, channels: List[int],
+                         num_averages: int = 50) -> pd.DataFrame:
         """
-        Perform averaged acquisition from multiple triggers.
-        
+        Acquire hardware-averaged waveform from the scope.
+
+        Workflow:
+            1. Scope is set to averaging mode with *num_averages* count.
+            2. Scope free-runs (:RUN), accumulating triggered acquisitions.
+            3. :DIGITIZE blocks until the requested averages are collected.
+            4. The single (already averaged) waveform is read back.
+
         Args:
-            channels: List of channel numbers to acquire
-            num_measurements: Number of triggered acquisitions to average
-        
+            channels: List of scope channel numbers to read.
+            num_averages: Number of hardware averages.
+
+        Returns:
+            DataFrame with 'Time (s)' and 'Channel N Voltage (V)' columns.
+        """
+        logger.info(f"Acquiring {num_averages}-average waveform on channels {channels}")
+        data = self.osc.read_slow_return_data_avgd(channels, averages=num_averages)
+        if data is None:
+            raise RuntimeError("Averaged acquisition returned no data")
+        logger.info(f"Averaged acquisition complete — {len(data)} samples")
+        return data
+
+    def acquire_data(self, channels: List[int],
+                     num_measurements: int = 50) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Acquire data using hardware averaging (single read).
+
+        This replaces the old arm-wait-read loop.  The scope's built-in
+        averaging mode collects *num_measurements* triggered waveforms and
+        returns the mean in one shot.  Because the averaging is done in
+        hardware there is no per-shot std; a zero-filled std DataFrame is
+        returned for interface compatibility.
+
+        Args:
+            channels: Scope channel numbers to read.
+            num_measurements: Number of hardware averages.
+
         Returns:
             Tuple of (mean_signal_df, std_signal_df)
         """
-        all_measurements = []
-        
-        for i in range(num_measurements):
-            if i % 10 == 0:
-                logger.info(f"Measurement {i}/{num_measurements}")
-            
-            success = self.osc.wait_for_acquisition(max_acq_wait_sec=5)
-            if not success:
-                logger.warning(f"Acquisition {i} timed out")
-                continue
-            
-            data = self.osc.read_slow_return_data(channels)
-            if data is not None:
-                all_measurements.append(data)
-        
-        if not all_measurements:
-            raise RuntimeError("No successful measurements collected")
-        
-        # Concatenate and compute statistics
-        combined = pd.concat(all_measurements, ignore_index=True)
-        mean_signal = combined.groupby('Time (s)').mean()
-        std_signal = combined.groupby('Time (s)').std()
-        
-        return mean_signal.reset_index(), std_signal.reset_index()
+        mean_df = self.acquire_averaged(channels, num_averages=num_measurements)
+
+        # Build a matching zero-std DataFrame for interface compatibility
+        std_df = mean_df.copy()
+        for col in std_df.columns:
+            if col != 'Time (s)':
+                std_df[col] = 0.0
+
+        return mean_df, std_df
 
 
 # =========================================================================
@@ -328,7 +253,7 @@ def find_optimal_mu(window_size: int, desired: np.ndarray, input_data: np.ndarra
         if mse < best_error:
             best_error = mse
             best_mu = mu
-    
+    best_error = cast(float, best_error)
     logger.info(f"Optimal mu for window {window_size}: {best_mu:.3f} (MSE: {best_error:.2e})")
     return best_mu, best_error
 
@@ -397,8 +322,6 @@ class SignalPlotter:
         
         # Configure matplotlib
         plt.rcParams.update({
-            'text.usetex': True,
-            'text.latex.preamble': r'\usepackage{amsmath}',
             'font.family': 'serif',
             'font.size': 11,
             'axes.labelsize': 12,
@@ -470,6 +393,93 @@ class SignalPlotter:
         plt.show(block=False)
         plt.pause(1)
         plt.close()
+
+
+    def plot_window_result(self, measured: np.ndarray, theoretical: np.ndarray,
+                           filtered_output: np.ndarray, window_size: int,
+                           predicted_input: Optional[np.ndarray] = None,
+                           time_array: Optional[np.ndarray] = None,
+                           filename: Optional[str] = None):
+        """Plot measured, theoretical, NLMS-filtered output, and corrected input for a single window size."""
+        n = len(filtered_output)
+        has_correction = predicted_input is not None and len(predicted_input) > 0
+
+        nrows = 2 if has_correction else 1
+        fig, axes = plt.subplots(nrows, 1, figsize=(11, 5 * nrows), squeeze=False)
+
+        if time_array is not None and len(time_array) >= window_size + n:
+            x = time_array[window_size:window_size + n]
+            xlabel = 'Time (s)'
+        else:
+            x = np.arange(n)
+            xlabel = 'Sample'
+
+        # --- Top panel: filter tracking (desired vs filter output) ---
+        ax_top = axes[0, 0]
+        desired_slice = theoretical[window_size:window_size + n]
+        measured_slice = measured[window_size:window_size + n]
+
+        ax_top.plot(x, desired_slice, linewidth=1.5, linestyle='--', color='red',
+                    label='Theoretical (desired)')
+        ax_top.plot(x, measured_slice, linewidth=1.0, alpha=0.4, color='grey',
+                    label='Measured (scope)')
+        ax_top.plot(x, filtered_output, linewidth=1.5, color='green',
+                    label='NLMS filter output')
+        ax_top.set_xlabel(xlabel)
+        ax_top.set_ylabel('Amplitude (a.u)')
+        ax_top.set_title(f'Window size = {window_size} — Filter tracking')
+        ax_top.legend(loc='best')
+        ax_top.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
+
+        # --- Bottom panel: corrected AWG input vs original measured ---
+        if has_correction:
+            predicted_input = cast(np.ndarray, predicted_input)
+            ax_bot = axes[1, 0]
+            n_corr = min(len(predicted_input), len(x))
+            ax_bot.plot(x[:n_corr], measured_slice[:n_corr], linewidth=1.0,
+                        alpha=0.5, color='grey', label='Original measured')
+            ax_bot.plot(x[:n_corr], desired_slice[:n_corr], linewidth=1.5,
+                        linestyle='--', color='red', label='Theoretical target')
+            ax_bot.plot(x[:n_corr], predicted_input[:n_corr], linewidth=1.5,
+                        color='blue', label='Corrected AWG input')
+            ax_bot.set_xlabel(xlabel)
+            ax_bot.set_ylabel('Amplitude (a.u)')
+            ax_bot.set_title(f'Window size = {window_size} — Pre-distorted input')
+            ax_bot.legend(loc='best')
+            ax_bot.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
+
+        fig.tight_layout()
+
+        if filename:
+            filepath = self.output_dir / filename
+            fig.savefig(filepath, dpi=150, bbox_inches='tight')
+            logger.info(f"Saved plot: {filepath}")
+
+        plt.close(fig)
+
+
+    def plot_mse_vs_window(self, windows: List[int], mses: List[float],
+                           filename: Optional[str] = None):
+        """Plot MSE as a function of NLMS window size."""
+        fig, ax = plt.subplots(figsize=(9, 5))
+
+        ax.plot(windows, mses, 'o-', color='navy', linewidth=1.5, markersize=5)
+        best_idx = int(np.argmin(mses))
+        ax.plot(windows[best_idx], mses[best_idx], '*', color='red',
+                markersize=14, label=f'Best: w={windows[best_idx]}, MSE={mses[best_idx]:.2e}')
+
+        ax.set_xlabel('Window size')
+        ax.set_ylabel('Normalised MSE')
+        ax.set_title('NLMS optimisation — MSE vs window size')
+        ax.legend(loc='best')
+        ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
+
+        if filename:
+            filepath = self.output_dir / filename
+            fig.savefig(filepath, dpi=150, bbox_inches='tight')
+            logger.info(f"Saved plot: {filepath}")
+
+        plt.close(fig)
 
 
 # =========================================================================
