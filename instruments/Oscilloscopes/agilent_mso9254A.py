@@ -210,8 +210,7 @@ class OscilloscopeManager:
         print("configuring the scope settings")
         self.clear_error_queue()
         
-        # 9000 Series: Use ACQuire:MODE RTIMe for real-time acquisition
-        self._write_with_retry(':ACQuire:MODE RTIMe') 
+        self._write_with_retry(':ACQuire:MODE HRESolution') 
 
         # set timebase
         t_start, t_stop = timebase_range
@@ -445,8 +444,10 @@ class OscilloscopeManager:
         print(f"Starting averaged acquisition ({averages} averages)...")
         self.clear_error_queue()
 
+        self._write_with_retry("CHANNEL1:DISPlay ON")
+
         # 1. Configure averaging
-        self._write_with_retry(":ACQuire:MODE AVERage")
+        self._write_with_retry(":ACQuire:AVERage ON")
         self._write_with_retry(f":ACQuire:AVERage:COUNt {averages}")
 
         # 2. Digitize — handles arm/trigger/stop internally

@@ -407,8 +407,8 @@ class SignalPlotter:
         nrows = 2 if has_correction else 1
         fig, axes = plt.subplots(nrows, 1, figsize=(11, 5 * nrows), squeeze=False)
 
-        if time_array is not None and len(time_array) >= window_size + n:
-            x = time_array[window_size:window_size + n]
+        if time_array is not None:
+            x = time_array
             xlabel = 'Time (s)'
         else:
             x = np.arange(n)
@@ -416,8 +416,8 @@ class SignalPlotter:
 
         # --- Top panel: filter tracking (desired vs filter output) ---
         ax_top = axes[0, 0]
-        desired_slice = theoretical[window_size:window_size + n]
-        measured_slice = measured[window_size:window_size + n]
+        desired_slice = theoretical
+        measured_slice = measured
 
         ax_top.plot(x, desired_slice, linewidth=1.5, linestyle='--', color='red',
                     label='Theoretical (desired)')

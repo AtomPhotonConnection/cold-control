@@ -46,6 +46,9 @@ from pulse_optimizer_core import (
     resample_signal,
     logger
 )
+from scipy.signal import resample as scipy_resample
+
+
 
 # Configure logging, save to a file with the current date in the filename
 logging.basicConfig(
@@ -85,7 +88,7 @@ class InvertedOptimizer:
         Config sections needed:
         - [Hardware]: scope_id, awg_id
         - [Channel]: channel (1-4), pulse_type (stokes/pump/P1/P2)
-        - [Optimization]: amplitude, window_min, window_max, step_mu, max_mu
+        - [Optimization]: amplitude, window_min, window_max, step_mu, max_mu, method, n_passes
         - [Paths]: output_dir, config_awg_path
         """
         self.config = ConfigObj(config_path)
@@ -104,6 +107,11 @@ class InvertedOptimizer:
         self.mu_min = float(optimisation_cfg['mu_min'])
         self.mu_max = float(optimisation_cfg['mu_max'])
         self.mu_pts = int(optimisation_cfg['mu_pts'])
+        self.method = str(optimisation_cfg['method'])
+        if self.method == "multi_pass":
+            self.n_passes = int(optimisation_cfg['n_passes'])
+        else:
+            self.n_passes = None  # Not used for non-multi_pass methods
         
         # Hardware paths
         paths_cfg = _cfg_section(self.config, 'Paths')
@@ -321,72 +329,159 @@ class InvertedOptimizer:
         logger.info(f"Acquired hardware-averaged waveform ({num_measurements} averages) for '{label}'")
         return mean_response, std_response
     
-    def optimize_window(self, measured_signal: np.ndarray, theoretical_signal: np.ndarray,
-                       window_size: int) -> Dict:
-        """
-        Optimize for a single window size using inverted NLMS filter.
-        
-        Inverted mode (matches original finding_amplitude_inv.py):
-        1. X = windows from MEASURED signal (system output)
-        2. desired = THEORETICAL signal (what we want)
-        3. Filter learns weights w: w · measured_windows ≈ theoretical
-           i.e. the inverse system mapping (measured → theoretical)
-        4. Apply those weights to THEORETICAL windows:
-           y_pred = w · theoretical_windows
-           This produces the pre-distorted AWG input.
-        
-        Args:
-            measured_signal: Measured scope response (voltage)
-            theoretical_signal: Target output signal (voltage)
-            window_size: NLMS filter order
-        
-        Returns:
-            Dictionary with optimization results
-        """
-        logger.info(f"\nOptimizing for window size {window_size}...")
-        
-        # Normalize both signals to the same scale (as in original)
-        measured_norm, theoretical_norm = normalize_signals_to_max(measured_signal, theoretical_signal)
-        
-        n_windows = len(measured_norm) - window_size
-        if n_windows < 1:
-            logger.warning(f"Window {window_size} too large for signal length {len(measured_norm)}")
-            return {'window': window_size, 'mse': float('inf')}
-        
-        # Step 1-2: X = windows from MEASURED, desired = THEORETICAL
-        X = np.array([measured_norm[i:i + window_size] for i in range(n_windows)])
-        desired = np.array(theoretical_norm[window_size:])
-        #desired = np.array([theoretical_norm[i:i + window_size] for i in range(n_windows)])
-        
-        
-        # Truncate to matching lengths
-        min_len = min(len(desired), len(X))
-        desired = desired[:min_len]
-        X = X[:min_len]
 
-        # Find optimal learning rate
-        best_mu, best_error = find_optimal_mu(
-            window_size, desired, X,
-            mu_range=(self.mu_min, self.mu_max),
-            n_points=20
+    def optimize_window(self, measured_signal: np.ndarray, theoretical_signal: np.ndarray,
+                       window_size: int, upsample_factor: int = 1,
+                       method: str = "multi_pass", n_passes: Optional[int] = 10) -> Dict:
+        """
+        Optimize for a single window size using a global inverse filter.
+
+        The filter analyses the *entire* measured waveform against the theoretical
+        waveform to learn a single set of weights, then applies those converged
+        weights uniformly to the theoretical signal to produce the pre-distorted
+        AWG input.
+
+        Two methods are available:
+
+        ``"multi_pass"`` (default)
+            Run the NLMS filter over the full signal ``n_passes`` times.  After
+            several passes the weights converge to a stable solution that
+            represents the global inverse system.  The final, converged weights
+            are then applied to every window of the theoretical signal.
+
+        ``"wiener"``
+            Compute the optimal Wiener (least-squares) FIR inverse filter in one
+            shot via the normal equations:  w = (X^T X)^{-1} X^T d.
+            This is the closed-form solution that the NLMS filter converges
+            towards.
+
+        Args:
+            measured_signal: Measured scope response (voltage).
+            theoretical_signal: Target output signal (voltage).
+            window_size: FIR filter order (number of taps).
+            upsample_factor: Upsample both signals by this factor before
+                filtering (≥ 1).  The result is downsampled back to the
+                original length.
+            method: ``"multi_pass"`` or ``"wiener"``.
+            n_passes: Number of NLMS passes (only used when method="multi_pass").
+
+        Returns:
+            Dictionary with optimization results.
+        """
+        logger.info(f"\nOptimizing window={window_size}, method={method}, "
+                     f"upsample={upsample_factor}x"
+                     + (f", passes={n_passes}" if method == "multi_pass" else ""))
+
+        original_length = len(theoretical_signal)
+
+        # --- Optional upsampling ---------------------------------------------
+        if upsample_factor > 1:
+
+            up_len = original_length * upsample_factor
+            measured_up = scipy_resample(measured_signal, up_len)
+            theoretical_up = scipy_resample(theoretical_signal, up_len)
+            measured_up = cast(np.ndarray, measured_up)
+            theoretical_up = cast(np.ndarray, theoretical_up)
+            logger.info(f"  Upsampled {original_length} → {up_len} samples")
+        else:
+            measured_up = measured_signal
+            theoretical_up = theoretical_signal
+
+        # Normalize both signals to the same scale
+        measured_norm, theoretical_norm = normalize_signals_to_max(
+            measured_up, theoretical_up
         )
 
-        # Step 3: Run filter — learns inverse system: measured → theoretical
-        filt = PositiveNLMS(window_size, mu=best_mu)
-        y_filtered, error, weights = filt.run(desired, X)
+        n_samples = len(measured_norm)
+        n_windows = n_samples - window_size
+        if n_windows < 1:
+            logger.warning(f"Window {window_size} too large for signal length "
+                           f"{n_samples}")
+            return {'window': window_size, 'mse': float('inf'),
+                    'upsample_factor': upsample_factor, 'method': method}
 
-        # Step 4: Apply learned weights to THEORETICAL signal windows
-        # This produces the pre-distorted input to send to the AWG.
-        # Use w[i-1] (weights from previous step) as in the original code.
+        if n_windows < 2 * window_size and method == "multi_pass":
+            raise ValueError(f"Multi-pass method requires at least 2*window_size windows "
+                             f"(n_windows={n_windows}, window_size={window_size})")
+
+        # Build Toeplitz-style input matrix from MEASURED signal
+        # X[i] = measured_norm[i : i + window_size]
+        X_measured = np.array([measured_norm[i:i + window_size]
+                               for i in range(n_windows)])
+
+        # Desired output = theoretical signal (aligned with windows)
+        desired = theoretical_norm[window_size:]
+
+        # Truncate to matching lengths
+        min_len = min(len(desired), len(X_measured))
+        desired = desired[:min_len]
+        X_measured = X_measured[:min_len]
+
+        # -----------------------------------------------------------------
+        # Step 1: Learn a GLOBAL set of filter weights from the whole signal
+        # -----------------------------------------------------------------
+        if method == "wiener":
+            global_weights, best_mu = self._solve_wiener(
+                X_measured, desired, window_size
+            )
+            # Compute filtered output for error metrics
+            y_filtered = X_measured @ global_weights
+            error = desired - y_filtered
+
+        elif method == "multi_pass":
+            assert n_passes is not None, "n_passes must be specified for multi_pass method"
+            global_weights, best_mu, y_filtered, error = self._solve_multi_pass(
+                X_measured, desired, window_size, n_passes
+            )
+        else:
+            raise ValueError(f"Unknown method '{method}'. Use 'wiener' or 'multi_pass'.")
+
+        logger.info(f"  Converged weights: min={global_weights.min():.4f}, "
+                     f"max={global_weights.max():.4f}, "
+                     f"mean={global_weights.mean():.4f}")
+
+        # -----------------------------------------------------------------
+        # Step 2: Apply the SAME global weights to the THEORETICAL signal
+        #         to produce the pre-distorted AWG input
+        # -----------------------------------------------------------------
         X_theoretical = np.array([theoretical_norm[i:i + window_size]
                                   for i in range(n_windows)])[:min_len]
-        predicted_input = np.array([
-            np.dot(X_theoretical[i], weights[i - 1]) if i > 0 else 0.0
-            for i in range(min_len)
+
+        # Single matrix-vector product — same weights for every sample
+        predicted_core = X_theoretical @ global_weights
+
+        # Pad to full (upsampled) length — prepend unfiltered head
+        predicted_input = np.concatenate([
+            theoretical_norm[:window_size],
+            predicted_core
         ])
 
-        # Compute error metrics (how well the filter fits measured → theoretical)
-        metrics = compute_error_metrics(y_filtered, desired)
+        # --- Downsample back to original length if upsampled -----------------
+        if upsample_factor > 1:
+
+            predicted_input = scipy_resample(predicted_input, original_length)
+            y_filtered_full = scipy_resample(
+                np.concatenate([np.zeros(window_size), y_filtered]),
+                original_length
+            )
+            y_filtered_full = cast(np.ndarray, y_filtered_full)
+            error_full = scipy_resample(
+                np.concatenate([np.zeros(window_size), error]),
+                original_length
+            )
+
+            # Recompute metrics at original resolution
+            _, theoretical_norm_orig = normalize_signals_to_max(
+                measured_signal, theoretical_signal
+            )
+            metrics = compute_error_metrics(
+                y_filtered_full[:len(theoretical_norm_orig)],
+                theoretical_norm_orig[:len(y_filtered_full)]
+            )
+        else:
+            y_filtered_full = np.concatenate([np.zeros(window_size), y_filtered])
+            error_full = np.concatenate([np.zeros(window_size), error])
+            metrics = compute_error_metrics(y_filtered, desired)
 
         result = {
             'window': window_size,
@@ -394,12 +489,107 @@ class InvertedOptimizer:
             'mse': metrics['mse'],
             'rmse': metrics['rmse'],
             'mae': metrics['mae'],
-            'error_array': error,
-            'output': y_filtered,
+            'error_array': error_full,
+            'output': y_filtered_full,
             'predicted_input': predicted_input,
+            'global_weights': global_weights,
+            'upsample_factor': upsample_factor,
+            'method': method,
         }
 
         return result
+
+    def _solve_wiener(self, X: np.ndarray, desired: np.ndarray,
+                      window_size: int) -> Tuple[np.ndarray, float]:
+        """
+        Compute the optimal Wiener (least-squares) FIR inverse filter.
+
+        Solves:  w = (X^T X + eps I)^{-1} X^T d
+
+        This is the closed-form solution that NLMS converges towards.  A small
+        Tikhonov regularisation (eps) prevents numerical issues when X^T X is
+        near-singular.
+
+        Returns:
+            (weights, mu) where mu is set to 0.0 (not applicable for Wiener).
+        """
+        logger.info("  Solving Wiener (least-squares) inverse filter...")
+        eps = 1e-6  # Tikhonov regularisation
+        XtX = X.T @ X + eps * np.eye(window_size)
+        Xtd = X.T @ desired
+        global_weights = np.linalg.solve(XtX, Xtd)
+
+        # Clamp to non-negative if PositiveNLMS semantics are required
+        # global_weights = np.clip(global_weights, 0, None)
+
+        residual_mse = float(np.mean((X @ global_weights - desired) ** 2))
+        logger.info(f"  Wiener solution residual MSE = {residual_mse:.6e}")
+        return global_weights, 0.0
+
+    def _solve_multi_pass(self, X: np.ndarray, desired: np.ndarray,
+                          window_size: int, n_passes: int
+                          ) -> Tuple[np.ndarray, float, np.ndarray, np.ndarray]:
+        """
+        Run the NLMS filter over the full signal multiple times until the
+        weights converge to a stable global solution.
+
+        After ``n_passes`` the weights represent the global inverse system.
+
+        Returns:
+            (global_weights, best_mu, y_filtered, error)
+            where y_filtered and error are from the *final* pass.
+        """
+        # Find optimal learning rate on a single pass first
+        best_mu, _ = find_optimal_mu(
+            window_size, desired, X,
+            mu_range=(self.mu_min, self.mu_max),
+            n_points=self.mu_pts
+        )
+        logger.info(f"  Best mu = {best_mu:.4f}, running {n_passes} passes...")
+
+        filt = PositiveNLMS(window_size, mu=best_mu)
+
+        for pass_idx in range(n_passes):
+            y_filtered, error, weights = filt.run(desired, X)
+            pass_mse = float(np.mean(error ** 2))
+            logger.info(f"    Pass {pass_idx + 1}/{n_passes}: MSE = {pass_mse:.6e}")
+
+            # Check for convergence — if MSE barely changes, stop early
+            if pass_idx > 0 and abs(prev_mse - pass_mse) / (prev_mse + 1e-12) < 1e-4:
+                logger.info(f"    Converged after {pass_idx + 1} passes")
+                break
+            prev_mse = pass_mse
+
+        # Use the final weights (last time step of last pass) as the global filter
+        global_weights = weights[-1]
+        logger.info(f"  Final pass MSE = {pass_mse:.6e}")
+
+        return global_weights, best_mu, y_filtered, error
+
+    def auto_upsample_factor(self, signal_length: int, window_size: int,
+                              min_ratio: int = 3) -> int:
+        """
+        Compute the minimum upsample factor that gives at least
+        min_ratio * window_size training samples.
+
+        Args:
+            signal_length: Number of samples in the original signal.
+            window_size: NLMS filter order.
+            min_ratio: Minimum desired ratio of training samples to
+                       window_size (default 3).
+
+        Returns:
+            Integer upsample factor (≥ 1).
+        """
+        # n_windows after upsampling = signal_length * us - window_size
+        # We want: signal_length * us - window_size >= min_ratio * window_size
+        # => us >= (min_ratio + 1) * window_size / signal_length
+        required = (min_ratio + 1) * window_size / signal_length
+        us = max(1, int(np.ceil(required)))
+        if us > 1:
+            logger.info(f"Auto upsample: factor={us} for window={window_size}, "
+                         f"signal_length={signal_length}")
+        return us
     
     def run(self):
         """Execute full inverted optimization workflow."""
@@ -473,7 +663,14 @@ class InvertedOptimizer:
             sweep_mses = []
             
             for window in range(self.window_min, self.window_max + 1, self.window_step):
-                result = self.optimize_window(measured_voltage, scaled_sig, window)
+                us = self.auto_upsample_factor(len(measured_voltage), window)
+                result = self.optimize_window(
+                    measured_voltage,
+                    scaled_sig,
+                    window,
+                    upsample_factor=us,
+                    method=self.method,
+                    n_passes=self.n_passes)
                 self.results.append(result)
                 
                 # Save per-window comparison plot
@@ -504,7 +701,14 @@ class InvertedOptimizer:
             
             # 6. Re-run optimization with best window
             logger.info(f"\nBest window: {best_window} (MSE: {best_error:.4f})")
-            best_result = self.optimize_window(measured_voltage, scaled_sig, best_window)
+            us = self.auto_upsample_factor(len(measured_voltage), best_window)
+            best_result = self.optimize_window(
+                    measured_voltage,
+                    scaled_sig,
+                    best_window,
+                    upsample_factor=us,
+                    method=self.method,
+                    n_passes=self.n_passes)
             
             # Resample optimized signal to AWG length
             optimized_input = resample_signal(best_result['predicted_input'], 
