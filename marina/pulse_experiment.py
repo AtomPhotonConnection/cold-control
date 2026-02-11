@@ -72,20 +72,20 @@ def load_signal_from_path(csv_path: str, amplitude: float) -> np.ndarray:
     return signal
 
 
-def resample_signal(
-    signal: np.ndarray,
-    original_length: int,
-    target_length: int,
-) -> np.ndarray:
-    """Resample *signal* to *target_length* using stride or zero-padding."""
-    if len(signal) == target_length:
-        return signal
-    if len(signal) > target_length:
-        factor = len(signal) // target_length
-        return signal[::factor][:target_length]
-    else:
-        padding = target_length - len(signal)
-        return np.pad(signal, (padding, 0), mode="constant")
+# def resample_signal(
+#     signal: np.ndarray,
+#     original_length: int,
+#     target_length: int,
+# ) -> np.ndarray:
+#     """Resample *signal* to *target_length* using stride or zero-padding."""
+#     if len(signal) == target_length:
+#         return signal
+#     if len(signal) > target_length:
+#         factor = len(signal) // target_length
+#         return signal[::factor][:target_length]
+#     else:
+#         padding = target_length - len(signal)
+#         return np.pad(signal, (padding, 0), mode="constant")
 
 
 def compute_error_metrics(
@@ -185,6 +185,19 @@ class PulseShapeConfig:
         opt = _cfg_section(self._raw, "Optimization")
         self.amplitude: float = float(opt["amplitude"])
 
+        # Iterative feedback
+        self.max_iterations: int = int(opt.get("max_iterations", "10"))
+        self.error_threshold: float = float(opt.get("error_threshold", "1e-4"))
+        self.gain: float = float(opt.get("gain", "0.5"))
+
+        # M-LOOP
+        self.max_num_runs: int = int(opt.get("max_num_runs", "100"))
+        self.num_fourier_coeffs: int = int(opt.get("num_fourier_coeffs", "15"))
+
+        # Memory polynomial
+        self.poly_degree: int = int(opt.get("poly_degree", "5"))
+        self.mem_depth: int = int(opt.get("mem_depth", "3"))
+
         # --- Oscilloscope ----------------------------------------------------
         osc = _cfg_section(self._raw, "Oscilloscope")
         self.trigger_channel: int = int(osc["trigger_channel"])
@@ -211,7 +224,14 @@ class PulseShapeConfig:
 
         # --- Paths -----------------------------------------------------------
         paths = _cfg_section(self._raw, "Paths")
-        self.output_dir: Path = Path(paths["output_dir"])
+        base_output = Path(paths["output_dir"])
+        # Append timestamped subdirectory: yyyy-mm-dd/HH-MM/
+        timestamp = datetime.now()
+        self.output_dir: Path = (
+            base_output
+            / timestamp.strftime("%Y-%m-%d")
+            / timestamp.strftime("%H-%M")
+        )
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.awg_config_path: str = paths["config_awg_path"]
         self.save_optimized_to: Optional[str] = paths.get("save_optimized_to")
@@ -256,9 +276,16 @@ class PulseShapeExperimentResult:
         measured_std: Optional[np.ndarray],
         metrics: Dict[str, float],
     ) -> None:
-        self.waveform_sent = waveform_sent
-        self.measured_signal = measured_signal
-        self.theoretical_signal = theoretical_signal
+        # Keep raw copies for optimisation maths
+        self._raw_waveform_sent = waveform_sent.copy()
+        self._raw_measured_signal = measured_signal.copy()
+        self._raw_theoretical_signal = theoretical_signal.copy()
+
+        # Normalise all signals to [0, 1]
+        self.waveform_sent = self._normalise_01(waveform_sent)
+        self.measured_signal = self._normalise_01(measured_signal)
+        self.theoretical_signal = self._normalise_01(theoretical_signal)
+
         self.time_array = time_array
         self.measured_std = measured_std
 
@@ -266,7 +293,16 @@ class PulseShapeExperimentResult:
         self.rmse: float = metrics["rmse"]
         self.mae: float = metrics["mae"]
 
-        self.signed_error: np.ndarray = measured_signal - theoretical_signal
+        self.signed_error: np.ndarray = self.measured_signal - self.theoretical_signal
+
+    @staticmethod
+    def _normalise_01(signal: np.ndarray) -> np.ndarray:
+        """Scale *signal* so its values lie in [0, 1]."""
+        sig = np.asarray(signal, dtype=float)
+        smin, smax = sig.min(), sig.max()
+        if smax - smin == 0:
+            return np.zeros_like(sig)
+        return (sig - smin) / (smax - smin)
 
     # ----- plotting ----------------------------------------------------------
 
@@ -288,34 +324,31 @@ class PulseShapeExperimentResult:
             title:      Custom plot title.  Defaults to an informative string
                         including the MSE.
         """
-        sent_norm, theo_norm = normalize_signals_to_max(
-            self.waveform_sent, self.theoretical_signal
-        )
-        meas_norm, _ = normalize_signals_to_max(
-            self.measured_signal, self.theoretical_signal
-        )
-
+        # Signals are already normalised to [0, 1]
         fig, ax = plt.subplots(figsize=(11, 6))
 
         ax.plot(
-            self.time_array, sent_norm, linewidth=1.2, color="blue",
+            self.time_array, self.waveform_sent, linewidth=1.2, color="blue",
             label="AWG input (sent)",
         )
         ax.plot(
-            self.time_array, meas_norm, linewidth=1.5, color="green",
+            self.time_array, self.measured_signal, linewidth=1.5, color="green",
             label="Scope measurement",
         )
         ax.plot(
-            self.time_array, theo_norm, linewidth=1.5, linestyle="--",
-            color="red", label="Theoretical (desired)",
+            self.time_array, self.theoretical_signal, linewidth=1.5,
+            linestyle="--", color="red", label="Theoretical (desired)",
         )
 
-        if self.measured_std is not None:
-            std_norm = self.measured_std / self.measured_signal.max() * meas_norm.max()
+        if self.measured_std is not None and self._raw_measured_signal.max() != 0:
+            raw_max = self._raw_measured_signal.max()
+            raw_min = self._raw_measured_signal.min()
+            denom = raw_max - raw_min if raw_max != raw_min else 1.0
+            std_norm = self.measured_std / denom
             ax.fill_between(
                 self.time_array,
-                meas_norm - std_norm,
-                meas_norm + std_norm,
+                self.measured_signal - std_norm,
+                self.measured_signal + std_norm,
                 color="green", alpha=0.2, label="Measurement std",
             )
 
@@ -323,7 +356,7 @@ class PulseShapeExperimentResult:
             title = f"Pulse Shape Experiment — MSE = {self.mse:.4e}"
         ax.set_title(title)
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Amplitude (a.u.)")
+        ax.set_ylabel("Normalised amplitude")
         ax.legend(loc="best")
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
 
