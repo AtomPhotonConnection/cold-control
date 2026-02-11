@@ -29,14 +29,10 @@ See AwgConfiguration and Waveform in classes.ExperimentalConfigs for config stru
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import (
-    WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode,
-    WX218x_TriggerSlope, WX218x_TraceMode
-)
+from instruments.WX218x.awg_manager import AWGManager
 
 # Marker configuration
 MARKER_LOW = 0.0
@@ -50,7 +46,22 @@ DEFAULT_MARKER_OFFSET = 50  # samples; increase to delay marker pulse
 MARKER_WF_LEVS = (MARKER_WF_LOW, MARKER_WF_HIGH)
 MARKER_LEVS = (MARKER_LOW, MARKER_HIGH)
 
-VALID_CHANNELS = (Channel.CHANNEL_1, Channel.CHANNEL_2, Channel.CHANNEL_3, Channel.CHANNEL_4)
+# Map legacy channel name strings (e.g. 'channel1') to integer channel numbers
+_CH_NAME_TO_INT: Dict[str, int] = {
+    'channel1': 1, 'channel2': 2, 'channel3': 3, 'channel4': 4,
+    'ch1': 1, 'ch2': 2, 'ch3': 3, 'ch4': 4,
+    '1': 1, '2': 2, '3': 3, '4': 4,
+}
+
+
+def _to_ch_int(ch) -> int:
+    """Convert a channel identifier (string or int) to an integer 1-4."""
+    if isinstance(ch, int):
+        return ch
+    key = str(ch).lower().strip()
+    if key in _CH_NAME_TO_INT:
+        return _CH_NAME_TO_INT[key]
+    raise ValueError(f"Unknown channel identifier: {ch!r}")
 
 def calculate_offsets(channel_lags: List[float], sample_rate: float, optimised=False
                       ) -> np.ndarray:
@@ -176,7 +187,7 @@ def align_data_length(seq_waveform_data:List[np.ndarray], seq_marker_data: np.nd
     return aligned_wfs, seq_marker_data
 
 
-def write_markers(marker_data, awg: WX218x_awg, awg_chs, marker_width):
+def write_markers(marker_data, awg: AWGManager, awg_chs, marker_width):
     """Configure marker output on the AWG from combined marker data."""
     marker_starts = np.where(np.diff(marker_data, prepend=0) > 0)[0]
     print('Marker_starts:', marker_starts)
@@ -186,16 +197,21 @@ def write_markers(marker_data, awg: WX218x_awg, awg_chs, marker_width):
         marker_starts = marker_starts[:1]
 
     if len(marker_starts) == 1:
-        awg.configure_marker(awg_chs[0],
-                             index=1,
-                             position=marker_starts[0] - marker_width / 4,
-                             levels=MARKER_LEVS,
-                             width=marker_width / 2)
+        first_ch = _to_ch_int(awg_chs[0])
+        pos = int(marker_starts[0] - marker_width / 4)
+        wid = int(marker_width / 2)
+        awg.configure_marker(
+            marker=1,
+            position=max(pos, 0),
+            width=wid,
+            high_level=MARKER_HIGH,
+            low_level=MARKER_LOW,
+            channel=first_ch,
+        )
     else:
         print("No markers defined, not using a marker")
 
-    awg.clear_arbitrary_sequence()
-    awg.clear_arbitrary_waveform()
+    awg.clear_all()
 
 
 def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False, plot=False, optimised=False):
@@ -224,22 +240,22 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
     if dev_mode:
         print("Running in Dev Mode: No hardware communication.")
     
-    awg = None
+    awg: Optional[AWGManager] = None
+    ch_ints = [_to_ch_int(ch) for ch in awg_config.waveform_output_channels]
+
     if not dev_mode:
-        awg = WX218x_awg()
-        awg.open(reset=False)
-        awg.clear_arbitrary_sequence()
-        awg.clear_arbitrary_waveform()
+        awg = AWGManager()  # auto-detects AWG via manufacturer ID
 
         # Stop any running output and disable channels so nothing outputs during programming
-        awg.abort_generation()
-        for ch in awg_config.waveform_output_channels:
-            awg.disable_channel(ch)
+        awg.abort()
+        awg.disable_all_channels(ch_ints)
+        awg.clear_all()
 
         # 1. Global Configuration
         awg.configure_sample_rate(awg_config.sample_rate)
-        awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
-        awg.configure_couple_enabled(True)
+        awg.set_output_mode("USER")           # arbitrary waveform mode
+        awg.enable_coupling()
+        awg.set_trace_mode("SING")
     
 
     # 2. Timing Calculations
@@ -293,24 +309,24 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
         assert awg is not None, "AWG instance should not be None in non-dev mode."
         # Configure markers and clear waveform memory first (same order as original)
         write_markers(final_marker, awg, awg_config.waveform_output_channels, marker_wid)
-        awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)
 
         # Write all waveforms and configure triggers with outputs disabled
         for ch_name, data in zip(awg_config.waveform_output_channels, aligned_wfs):
-            awg.configure_operation_mode(ch_name, WX218x_OperationMode.TRIGGER)
-            awg.configure_trigger_source(ch_name, WX218x_TriggerMode.EXTERNAL)
-            awg.configure_trigger_level(ch_name, 1.6)
-            awg.configure_trigger_slope(ch_name, WX218x_TriggerSlope.POSITIVE)
-            awg.configure_burst_count(ch_name, awg_config.burst_count)
-            awg.set_active_channel(ch_name)
-            if ch_name in VALID_CHANNELS:
-                awg.create_arbitrary_waveform_custom(data.tolist())
-            awg.configure_arb_gain(ch_name, 2.0)
+            ch_int = _to_ch_int(ch_name)
+            awg.configure_trigger(
+                channel=ch_int,
+                mode="EXT",
+                level=1.6,
+                slope="POS",
+            )
+            awg.set_burst_count(ch_int, awg_config.burst_count)
+            awg.upload_waveform(data, segment=1, channel=ch_int)
+            awg.set_amplitude(ch_int, 2.0)
 
         # Enable outputs only after all programming is complete, then arm
         for ch_name in awg_config.waveform_output_channels:
-            awg.enable_channel(ch_name)
-        awg.initiate_generation()
+            awg.enable_channel(_to_ch_int(ch_name))
+        awg.initiate()
         if not optimised:
             print("AWG armed and waiting for trigger.")
 
