@@ -282,10 +282,12 @@ class OscilloscopeManager:
         For Agilent 9000, DIGitize clears memory, starts acquisition, and waits for completion.
         """
         # Construct channel string like "CHANnel1,CHANnel2"
-        chan_str = ",".join([f"CHANnel{c}" for c in channels])
-        cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
+        # chan_str = ",".join([f"CHANnel{c}" for c in channels])
+        # cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
+        cmd = ":DIGitize"
         
-        print(f"Digitizing channels {channels}...")
+        #print(f"Digitizing channels {channels}...")
+        print("Digitizing displayed channels...")
         # Use *OPC? to wait for digitize to finish
         query_result = self._query_with_retry(f"{cmd};*OPC?")
         ok = query_result.strip() == '1'
@@ -418,6 +420,7 @@ class OscilloscopeManager:
             cols = ['Time (s)'] + [k for k in data_dict.keys() if k != 'Time (s)']
             collected_data = pd.DataFrame({k: data_dict[k] for k in cols})
 
+
         return collected_data
         
 
@@ -444,7 +447,9 @@ class OscilloscopeManager:
         print(f"Starting averaged acquisition ({averages} averages)...")
         self.clear_error_queue()
 
-        self._write_with_retry("CHANNEL1:DISPlay ON")
+        # display channels must be on for DIGitize to acquire them, so ensure they're enabled
+        for ch in channels:
+            self._write_with_retry(f":CHANnel{ch}:DISPlay ON")
 
         # 1. Configure averaging
         self._write_with_retry(":ACQuire:AVERage ON")
