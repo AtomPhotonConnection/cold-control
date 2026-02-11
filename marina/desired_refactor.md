@@ -1,5 +1,9 @@
 # New structure for the pulse shape optimisation
 
+## Current structure
+
+Currently the pulse shape optimisation has the config_inverted.ini file that specifies the parameters for the experiment. This is used by the optimize_awg_pulse_inverted.py script which contains the optimisation algorithm. This uses the pulse_optimizer_core.py script to run the experiment and calculate the error. 
+
 ## Classes
 
 **Pulse Shape Experiment runner class**
@@ -20,3 +24,7 @@
 ## Optimisation
 
 Rather than the optimisation happening in the experiment itself, I want to create a setup where I can run an experiment with a particular waveform, then use the result object to calculate a new optimal waveform, then run a new experiment with the calculated waveform to test out how good it is. This should happen in a separate script so I can try out a variety of optimisation techniques.
+
+## New structure
+
+There should be one file containing all the above classes. This file should be imported by optimisation scripts that use different optimisation methods to get from the initial pulse shape to the optimal pulse shape. 
