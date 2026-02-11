@@ -72,20 +72,7 @@ def load_signal_from_path(csv_path: str, amplitude: float) -> np.ndarray:
     return signal
 
 
-# def resample_signal(
-#     signal: np.ndarray,
-#     original_length: int,
-#     target_length: int,
-# ) -> np.ndarray:
-#     """Resample *signal* to *target_length* using stride or zero-padding."""
-#     if len(signal) == target_length:
-#         return signal
-#     if len(signal) > target_length:
-#         factor = len(signal) // target_length
-#         return signal[::factor][:target_length]
-#     else:
-#         padding = target_length - len(signal)
-#         return np.pad(signal, (padding, 0), mode="constant")
+
 
 
 def compute_error_metrics(
@@ -205,6 +192,7 @@ class PulseShapeConfig:
         self.samp_rate: float = float(osc["samp_rate"])
         self.timebase_start: float = float(osc["timebase_start"])
         self.timebase_stop: float = float(osc["timebase_stop"])
+        self.data_channel: int = int(osc["data_channel"])
 
         # Build channel_map from channel_N_lower / channel_N_upper keys
         self.channel_map: Dict[int, Tuple[float, float]] = {}
@@ -216,6 +204,7 @@ class PulseShapeConfig:
                 self.channel_map[ch_num] = (lower, upper)
         if not self.channel_map:
             self.channel_map = {1: (-0.5, 0.5)}
+
 
         # --- Measurement -----------------------------------------------------
         meas = _cfg_section(self._raw, "Measurement")
@@ -372,6 +361,19 @@ class PulseShapeExperimentResult:
         plt.pause(1)
         plt.close(fig)
 
+    def save_to_csv(self, csv_path: str, to_save = "measured") -> None:
+        """Save the measured signal to a headerless CSV file."""
+        if to_save == "measured":
+            signal_to_save = self.measured_signal
+        elif to_save == "theoretical":
+            signal_to_save = self.theoretical_signal
+        elif to_save == "sent":
+            signal_to_save = self.waveform_sent
+        else:
+            raise ValueError(f"Invalid to_save value: {to_save}. Must be 'measured', 'theoretical', or 'sent'.")
+        np.savetxt(csv_path, signal_to_save, delimiter=",")
+        logger.info(f"Saved measured signal to CSV: {csv_path}")
+
 
 # =========================================================================
 # PulseShapeExperimentRunner
@@ -505,6 +507,7 @@ class PulseShapeExperimentRunner:
         acq = _ScopeAcquisition(
             self.scope,
             {
+                "data_channel": self.config.data_channel,
                 "channel_map": self.config.channel_map,
                 "samp_rate": self.config.samp_rate,
                 "timebase_range": (
@@ -514,6 +517,79 @@ class PulseShapeExperimentRunner:
             },
         )
         return acq, self.config.trigger_channel, self.config.trigger_level
+    
+    def _timebase_align(self, measured_voltage: np.ndarray, measured_std: Optional[np.ndarray],
+                     theoretical_signal: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        
+        
+        start_time = time.time()
+        # begin by interpolating so scope and AWG have the same sample rate
+        awg_sr = self.awg_config_obj.sample_rate # type: ignore[union-attr]
+        scope_sr = self.config.samp_rate
+        print(scope_sr, awg_sr)
+
+        theoretical_points = len(theoretical_signal)
+        theoretical_duration = theoretical_points / awg_sr
+        
+        scope_points = len(measured_voltage)
+        scope_duration = scope_points / scope_sr
+
+
+
+        awg_points = len(self.waveform)
+        awg_duration = awg_points / awg_sr
+
+
+        if scope_sr != awg_sr:
+            # Create time axes for interpolation
+            t_scope_sr = np.linspace(0, scope_duration, int(scope_duration*scope_sr))
+            t_awg_sr = np.linspace(0, scope_duration, int(scope_duration*awg_sr))
+            
+            voltage_interp = np.interp(t_awg_sr, t_scope_sr, measured_voltage)
+            if measured_std is not None:
+                std_interp = np.interp(t_awg_sr, t_scope_sr, measured_std)
+            else:
+                std_interp = None
+        else:
+            voltage_interp = measured_voltage
+            std_interp = measured_std
+        
+        # We want the measured signal to have the same number of points as the theoretical signal, and to be aligned in time.
+        points_difference = len(voltage_interp) - theoretical_points
+        print(f"Scope duration: {scope_duration*1e6:.2f} µs, AWG duration: {awg_duration*1e6:.2f} µs, theoretical duration: {theoretical_duration*1e6:.2f} µs.")
+
+        print(f"Measured signal has {len(voltage_interp)} points, theoretical signal has {theoretical_points} points.")
+
+
+
+        # if points_difference > theoretical_points*2:
+        #     raise ValueError(f"The scope has {points_difference} more points than the target length, which is excessive. "
+        #                      f"Check the scope timebase settings and sampling rate.")
+        
+        # find the optimal cropping location that minimises the MSE between the cropped measured signal and the theoretical signal
+        if points_difference > 0:
+            # We have more points than needed, find the best crop
+            best_mse = float('inf')
+            best_start_idx = 0
+            for start_idx in range(points_difference + 1):
+                end_idx = start_idx + theoretical_points
+                cropped_measured = voltage_interp[start_idx:end_idx]
+                print(len(cropped_measured), len(theoretical_signal))
+                mse = np.mean((cropped_measured - theoretical_signal) ** 2)
+                if mse < best_mse:
+                    best_mse = mse
+                    best_start_idx = start_idx
+            
+            voltage_crop = voltage_interp[best_start_idx:best_start_idx + theoretical_points]
+            if std_interp is not None:
+                std_crop = std_interp[best_start_idx:best_start_idx + theoretical_points]
+            else:
+                std_crop = None
+
+        end_time = time.time()
+        print(f"Timebase alignment and resampling took {end_time - start_time:.2f} seconds.")
+
+        return voltage_crop, std_crop
 
     # ----- public API --------------------------------------------------------
 
@@ -554,7 +630,7 @@ class PulseShapeExperimentRunner:
         acq, trig_ch, trig_level = self._build_scope_acq()
         acq.configure(trig_ch, trig_level)
         mean_df, std_df = acq.acquire_data(
-            [self.config.channel], self.config.num_measurements
+            [self.config.data_channel], self.config.num_measurements
         )
 
         # Extract voltage columns
@@ -566,15 +642,12 @@ class PulseShapeExperimentRunner:
             std_df[std_col[0]].values if std_col and len(std_df) > 0 else None
         )
 
-        # 4. Resample to match waveform length
-        if len(measured_voltage) != len(self.waveform):
-            measured_voltage = resample_signal(
-                measured_voltage, len(measured_voltage), len(self.waveform)
-            )
-            if measured_std is not None:
-                measured_std = resample_signal(
-                    measured_std, len(measured_std), len(self.waveform)
-                )
+        theo_path = self.config.get_theoretical_signal_path()
+        theoretical_signal = load_signal_from_path(theo_path, self.config.amplitude)
+
+        # 4. time align the measured signal and resample to match the length of the AWG waveform
+        measured_voltage, measured_std = self._timebase_align(measured_voltage, measured_std, theoretical_signal)
+
 
         # Build time array
         assert self.awg_config_obj is not None
@@ -582,8 +655,6 @@ class PulseShapeExperimentRunner:
         time_array = np.linspace(0, total_length_s, len(self.waveform), endpoint=True)
 
         # 5. Compute theoretical signal & error metrics
-        theo_path = self.config.get_theoretical_signal_path()
-        theoretical_signal = load_signal_from_path(theo_path, self.config.amplitude)
 
         # Ensure matching lengths
         min_len = min(len(measured_voltage), len(theoretical_signal), len(self.waveform))
