@@ -245,7 +245,6 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
     # 2. Timing Calculations
     abs_offsets = calculate_offsets(awg_config.waveform_output_channel_lags,
                                     awg_config.sample_rate, optimised=optimised)
-    marker_wid = int(awg_config.marker_width * MARKER_WIDTH_FACTOR * awg_config.sample_rate)
     
     wf_list = expand_waveform_sequence(awg_config.waveforms, awg_config.waveform_sequence)
     
@@ -257,7 +256,6 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
         stitch_delays = [0] * len(awg_config.waveform_output_channels)
 
     all_channel_data = []
-    combined_marker_data = np.array([])
 
     # 3. Data Preparation Loop
     for i, (ch_name, waveforms, s_delay, ch_offset) in enumerate(
@@ -272,44 +270,14 @@ def configure_awg(awg_config: AwgConfiguration, marked_wfs=None, dev_mode=False,
         pad_r = abs(s_delay) if s_delay > 0 else 0
         full_wf = np.pad(full_wf, (pad_l, pad_r), 'constant')
 
-        # Marker Logic: match original — single waveform gets one marker; multi uses marked_wfs
-        m_pos = []
-        if len(waveforms) == 1:
-            seg_length = waveforms[0].get_n_samples() + pad_l + pad_r + abs(int(ch_offset))
-            if ch_offset <= seg_length:
-                m_pos.append(pad_l + ch_offset + DEFAULT_MARKER_OFFSET)
-        else:
-            current_idx = pad_l + ch_offset + DEFAULT_MARKER_OFFSET
-            for idx, w in enumerate(waveforms):
-                if idx in marked_wfs:
-                    m_pos.append(current_idx)
-                current_idx += w.get_n_samples()
 
-        ch_marker = get_multiwaveform_marker_data(
-            len(full_wf) - (pad_l + pad_r),
-            marker_positions=m_pos,
-            marker_levels=MARKER_WF_LEVS,
-            marker_width=marker_wid,
-            n_pad_left=pad_l,
-            n_pad_right=pad_r
-        )
 
         # Apply channel offset: waveform shifts right; marker content stays at start (original behavior)
         full_wf = np.pad(full_wf, (ch_offset, 0), 'constant')
-        ch_marker = np.pad(ch_marker, (0, ch_offset), 'constant')
 
         all_channel_data.append(full_wf)
         
-        # Accumulate markers for the trigger channel
-        if ch_name in awg_config.marked_channels:
-            if combined_marker_data.size == 0:
-                combined_marker_data = ch_marker
-            else:
-                # Ensure arrays match length before adding
-                target_len = max(len(combined_marker_data), len(ch_marker))
-                combined_marker_data = np.pad(combined_marker_data, (0, target_len - len(combined_marker_data)), 'constant')
-                ch_marker_padded = np.pad(ch_marker, (0, target_len - len(ch_marker)), 'constant')
-                combined_marker_data = np.logical_or(combined_marker_data, ch_marker_padded).astype(float)
+
 
     # 4. Final Alignment & Hardware Write
     aligned_wfs, final_marker = align_data_length(all_channel_data, combined_marker_data)

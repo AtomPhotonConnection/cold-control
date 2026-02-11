@@ -282,9 +282,9 @@ class OscilloscopeManager:
         For Agilent 9000, DIGitize clears memory, starts acquisition, and waits for completion.
         """
         # Construct channel string like "CHANnel1,CHANnel2"
-        # chan_str = ",".join([f"CHANnel{c}" for c in channels])
-        # cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
-        cmd = ":DIGitize"
+        chan_str = ",".join([f"CHANnel{c}" for c in channels])
+        cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
+        # cmd = ":DIGitize"
         
         #print(f"Digitizing channels {channels}...")
         print("Digitizing displayed channels...")

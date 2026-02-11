@@ -502,8 +502,8 @@ class PulseShapeExperimentRunner:
         logger.info(f"Saved waveform CSV: {csv_path}")
         return csv_path
 
-    def _build_scope_acq(self) -> Tuple[Any, int, float]:
-        """Build a scope acquisition helper. Returns (acq, trig_ch, trig_level)."""
+    def _build_scope_acq(self) -> "_ScopeAcquisition":
+        """Build a scope acquisition helper. Returns acq."""
         acq = _ScopeAcquisition(
             self.scope,
             {
@@ -516,7 +516,7 @@ class PulseShapeExperimentRunner:
                 ),
             },
         )
-        return acq, self.config.trigger_channel, self.config.trigger_level
+        return acq
     
     def _timebase_align(self, measured_voltage: np.ndarray, measured_std: Optional[np.ndarray],
                      theoretical_signal: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
@@ -568,17 +568,19 @@ class PulseShapeExperimentRunner:
         
         # find the optimal cropping location that minimises the MSE between the cropped measured signal and the theoretical signal
         if points_difference > 0:
+            print("points_difference:", points_difference)
             # We have more points than needed, find the best crop
             best_mse = float('inf')
             best_start_idx = 0
             for start_idx in range(points_difference + 1):
                 end_idx = start_idx + theoretical_points
                 cropped_measured = voltage_interp[start_idx:end_idx]
-                print(len(cropped_measured), len(theoretical_signal))
+                #print(len(cropped_measured), len(theoretical_signal))
                 mse = np.mean((cropped_measured - theoretical_signal) ** 2)
                 if mse < best_mse:
                     best_mse = mse
                     best_start_idx = start_idx
+
             
             voltage_crop = voltage_interp[best_start_idx:best_start_idx + theoretical_points]
             if std_interp is not None:
@@ -627,7 +629,9 @@ class PulseShapeExperimentRunner:
         time.sleep(0.5)
 
         # 3. Scope acquisition
-        acq, trig_ch, trig_level = self._build_scope_acq()
+        acq: _ScopeAcquisition = self._build_scope_acq()
+        trig_ch, trig_level = self.config.trigger_channel, self.config.trigger_level
+
         acq.configure(trig_ch, trig_level)
         mean_df, std_df = acq.acquire_data(
             [self.config.data_channel], self.config.num_measurements
@@ -635,6 +639,7 @@ class PulseShapeExperimentRunner:
 
         # Extract voltage columns
         voltage_col = [c for c in mean_df.columns if "Voltage" in c][0]
+        print(f"Extracted voltage column from scope data: '{voltage_col}'")
         measured_voltage = mean_df[voltage_col].values
 
         std_col = [c for c in std_df.columns if "Voltage" in c]
