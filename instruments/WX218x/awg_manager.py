@@ -102,10 +102,9 @@ class AWGManager:
 
         self.inst = self.rm.open_resource(resource_id)
         self.inst.timeout = timeout_ms
-        # Large chunk size speeds up binary uploads
-        self.inst.chunk_size = 4 * 1024 * 1024
         self.inst.read_termination = "\n"
         self.inst.write_termination = "\n"
+        self.inst.clear()
 
         idn = self._query("*IDN?")
         print(f"Connected to AWG: {idn}")
@@ -162,13 +161,44 @@ class AWGManager:
         Send a SCPI command followed by an IEEE-488.2 definite-length binary
         block (``#<digits><byte_count><data>``).
         """
-        n_bytes = len(data)
-        count_str = str(n_bytes)
-        header = f"#{len(count_str)}{count_str}"
-        # Build raw message: command + header + binary payload
-        raw = (cmd_prefix + header).encode("ascii") + data
+        # 1. Calculate header components
+        byte_count = len(data)
+        byte_count_str = str(byte_count)
+        header_len = len(byte_count_str)
+        
+        # 2. Build the header string (e.g., ":TRACe#3416")
+        # Note: Using :TRACe (no :DATA) for the Fast Download mode
+        header = f"#{header_len}{byte_count_str}".encode('ascii')
+        
+        # 3. Combine header and data into a single raw byte string
+        # We do NOT add a \n here because the manual (p. 4-5) says 
+        # binary blocks are an exception to the terminator rule.
+        cmd_bytes = cmd_prefix.encode('ascii')
+        raw = cmd_bytes + header + data
+        
+        self._log.debug("Sending raw binary block: %s...", header)
+        
+        # 4. Use write_raw to ensure PyVISA doesn't add spaces or terminators
         self.inst.write_raw(raw)
-        self._delay()
+
+
+        # self.inst.write_binary_values(
+        #     cmd_prefix, 
+        #     data, 
+        #     datatype='B', 
+        #     header_fmt='ieee',
+        #     termination=None
+        # )
+        # n_bytes = len(data)
+        # count_str = str(n_bytes)
+        # header = f"{len(count_str)}{count_str}"
+        # # Build raw message: command + header + binary payload
+        # raw = (cmd_prefix + header).encode("ascii") + data
+        # print(f"Sending binary command: {cmd_prefix} with {n_bytes} bytes of data")
+        # self.inst.write_raw(raw)
+        self.wait_opc()  # wait for operation to complete after binary write
+        print("Binary command sent and acknowledged by AWG.")
+        #self._delay()
 
     # ----- error helpers ----------------------------------------------------
 
@@ -209,6 +239,9 @@ class AWGManager:
     def reset(self) -> None:
         """``*RST`` — place instrument in known state."""
         self._write("*RST")
+        self.inst.write("*CLS")  # clear status registers and error queue
+        self.inst.write(":TRAC:DEL:ALL")  # clear waveform memory
+        self.inst.query("*OPC?")  # wait for reset to complete
         time.sleep(1)  # allow reset to settle
 
     def reboot(self) -> None:
@@ -347,11 +380,13 @@ class AWGManager:
 
     def set_trigger_slope(self, slope: str = "POS") -> None:
         """Set trigger edge: ``"POS"``, ``"NEG"`` or ``"EITH"``."""
-        self._write(f":TRIG:SLOP {slope}")
+        if not slope in ("POS", "NEG", "EITH"):
+            raise ValueError(f"Invalid slope {slope}. Must be 'POS', 'NEG' or 'EITH'.")
+        else:
+            self._write(f":TRIG:SLOP {slope}")
 
     def configure_trigger(
         self,
-        channel: int,
         mode: str = "EXT",
         level: float = 1.6,
         slope: str = "POS",
@@ -360,19 +395,17 @@ class AWGManager:
         Convenience: select *channel*, switch to triggered mode, and set
         source / level / slope in one call.
         """
-        self.select_channel(channel)
         self.set_continuous(False)              # triggered mode
         self.set_trigger_source(mode)
         self.set_trigger_level(level)
         self.set_trigger_slope(slope)
 
-    def set_burst_count(self, channel: int, count: int = 1) -> None:
+    def set_burst_count(self, count: int = 1) -> None:
         """
         Set the burst (trigger count) for *channel*.
 
         Range: 1 … 16 777 216.
         """
-        self.select_channel(channel)
         self._write(f":TRIG:COUN {count}")
 
     # ----- amplitude / gain / offset -----------------------------------------
@@ -388,6 +421,7 @@ class AWGManager:
 
     def set_amplitude_all(self, amplitude: float) -> None:
         """Set amplitude for ALL channels."""
+        #NOTE: DOESN'T WORK??
         self._write(f":VOLT:ALL {amplitude}")
 
     def set_offset(self, channel: int, offset: float) -> None:
@@ -470,7 +504,7 @@ class AWGManager:
         np.ndarray of uint16
         """
         data = np.asarray(data, dtype=np.float64)
-        dac = np.clip(np.round((1.0 + data) * (DAC_MAX / 2)), 0, DAC_MAX).astype(np.uint16)
+        dac = np.clip(np.round((1.0 + data) * 8191), 0, DAC_MAX).astype(np.uint16)
         return dac
 
     def upload_waveform(
@@ -510,12 +544,22 @@ class AWGManager:
             self._log.info("Padded waveform by %d samples to reach multiple of 16.", pad)
 
         # Define segment, select it, then upload binary data
+        if n_samples <192:
+            raise ValueError(f"Waveform length {n_samples} is too short. Must be at least 192 samples.")
         self.define_segment(segment, n_samples)
+        self.wait_opc()
+        print(f"Segment {segment} defined with length {n_samples} samples.")
         self.select_segment(segment)
+        self.wait_opc()
+
+        print("Segments defined and selected, uploading waveform data...")
 
         # Convert to little-endian bytes (each sample is 2 bytes)
         raw_bytes = data.astype("<u2").tobytes()
-        self._write_binary(":TRAC:DATA ", raw_bytes)
+        print("waiting for opc before uploading waveform...")
+        self.wait_opc()
+        print("AWG ready, starting waveform upload...")
+        self._write_binary(":TRACe:DATA 1", raw_bytes)
         self._log.info("Uploaded %d samples (%d bytes) to segment %d.", n_samples, len(raw_bytes), segment)
 
     # ----- marker output commands --------------------------------------------
@@ -529,7 +573,7 @@ class AWGManager:
         low_level: float = 0.0,
         delay: float = 0.0,
         source: str = "WAVE",
-        channel: Optional[int] = None,
+        # channel: Optional[int] = None,
     ) -> None:
         """
         Configure a marker output on the currently selected (or specified)
@@ -554,8 +598,8 @@ class AWGManager:
         channel : int or None
             If given, ``select_channel`` is called first.
         """
-        if channel is not None:
-            self.select_channel(channel)
+        # if channel is not None:
+        #     self.select_channel(channel)
 
         if marker not in (1, 2):
             raise ValueError(f"Marker must be 1 or 2, got {marker}.")
@@ -656,14 +700,14 @@ class AWGManager:
         self.set_trace_mode("SING")
 
         for ch in channels:
+            self.select_channel(ch)
             self.configure_trigger(
-                channel=ch,
                 mode="EXT",
                 level=trigger_level,
                 slope=trigger_slope,
             )
-            self.set_burst_count(ch, burst_count)
-            self.set_amplitude(ch, amplitude)
+            self.set_burst_count(burst_count)
+            #self.set_amplitude(ch, amplitude)
 
     def upload_and_arm(
         self,

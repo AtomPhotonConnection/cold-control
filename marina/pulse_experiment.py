@@ -42,7 +42,7 @@ import pyvisa as visa
 from configobj import ConfigObj
 
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
-from instruments.WX218x.awg_control2 import configure_awg
+from instruments.WX218x.awg_manager import AWGManager
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 
 # ---------------------------------------------------------------------------
@@ -389,16 +389,48 @@ class PulseShapeExperimentRunner:
         waveform: 1-D numpy array — the waveform to play on the AWG channel.
     """
 
+    # Map channel name strings to integers (matching awg_control2 convention)
+    _CH_MAP: Dict[str, int] = {
+        'channel1': 1, 'channel2': 2, 'channel3': 3, 'channel4': 4,
+        'ch1': 1, 'ch2': 2, 'ch3': 3, 'ch4': 4,
+        '1': 1, '2': 2, '3': 3, '4': 4,
+    }
+
     def __init__(self, config: PulseShapeConfig, waveform: np.ndarray) -> None:
         self.config = config
         self.waveform = waveform
 
         self.scope: Optional[OscilloscopeManager] = None
         self._owns_scope: bool = False
-        self.awg: Optional[Any] = None
+        self.awg: Optional[AWGManager] = None
         self.awg_config_obj: Optional[AwgConfiguration] = None
+        self.waveform_duration_s: float = 0.0
+
+    # ----- helpers -----------------------------------------------------------
+
+    @classmethod
+    def _ch_int(cls, ch) -> int:
+        """Convert a channel identifier (string or int) to an integer 1–4."""
+        if isinstance(ch, int):
+            return ch
+        key = str(ch).lower().strip()
+        if key in cls._CH_MAP:
+            return cls._CH_MAP[key]
+        raise ValueError(f"Unknown AWG channel identifier: {ch!r}")
 
     # ----- hardware helpers --------------------------------------------------
+
+    def _connect_awg(self) -> AWGManager:
+        """Return the existing AWGManager or create a new connection."""
+        if self.awg is not None:
+            try:
+                if self.awg.is_connected():
+                    return self.awg
+            except Exception:
+                pass
+        logger.info("Connecting to AWG...")
+        self.awg = AWGManager()  # auto-detects by manufacturer ID
+        return self.awg
 
     def _connect_scope(self) -> OscilloscopeManager:
         """Connect to oscilloscope using the ID from config."""
@@ -447,50 +479,151 @@ class PulseShapeExperimentRunner:
         return self.awg_config_obj
 
     def _program_awg(self, signal: np.ndarray, label: str = "signal") -> None:
-        """Upload *signal* to the AWG on the configured channel and arm."""
+        """
+        Upload *signal* to the AWG on the configured channel and arm.
+
+        Uses :class:`AWGManager` directly to:
+        1. Abort & disable all channels (safe state during programming).
+        2. Clear waveform memory, set sample rate, output mode, coupling.
+        3. Build per-channel waveform arrays from the AwgConfiguration,
+           substituting the target channel's waveform with *signal*.
+        4. Align all channels to the same length (multiple-of-16).
+        5. Upload waveforms, configure triggers, burst count and amplitude.
+        6. Configure marker pulses on marked channels.
+        7. Enable channel outputs and arm for trigger.
+        """
         if self.awg_config_obj is None:
             self._load_awg_config()
-        self.awg_config_obj = cast(AwgConfiguration, self.awg_config_obj)
+        cfg = cast(AwgConfiguration, self.awg_config_obj)
 
         # Save CSV for record-keeping
         self._save_waveform_csv(signal, label)
 
+        # --- Validate target channel -----------------------------------------
         ch_idx = self.config.channel - 1
-        if ch_idx >= len(self.awg_config_obj.waveform_sequence):
+        if ch_idx >= len(cfg.waveform_sequence):
             raise ValueError(
                 f"Channel {self.config.channel} not in AWG waveform_sequence "
-                f"({len(self.awg_config_obj.waveform_sequence)} channels configured)"
+                f"({len(cfg.waveform_sequence)} channels configured)"
             )
-
-        wf_ids = self.awg_config_obj.waveform_sequence[ch_idx]
+        wf_ids = cfg.waveform_sequence[ch_idx]
         if not wf_ids:
             raise ValueError(f"No waveforms configured for channel {self.config.channel}")
 
+        # Replace the first waveform on the target channel with our signal
         target_wf_id = wf_ids[0]
-        target_wf = self.awg_config_obj.waveforms[target_wf_id]
-        target_wf.data = signal.tolist()
+        cfg.waveforms[target_wf_id].data = signal.tolist()
 
         logger.info(
             f"Programming AWG ch{self.config.channel} with '{label}' "
             f"({len(signal)} samples, wf_id={target_wf_id})"
         )
 
-        # Close previous AWG session if open
-        if self.awg is not None:
-            try:
-                self.awg.abort_generation()
-                self.awg.close()
-            except Exception:
-                pass
+        # --- Connect to AWG --------------------------------------------------
+        awg = self._connect_awg()
+        awg.reset()
 
-        self.awg, duration_s = configure_awg(
-            self.awg_config_obj,
-            marked_wfs=[1] if len(wf_ids) > 1 else [0],
-            dev_mode=False,
-            plot=False,
-            optimised=True,
+        ch_names = cfg.waveform_output_channels
+        ch_ints = [self._ch_int(c) for c in ch_names]
+
+        # 1. Safe state: stop output and disable all channels
+        awg.abort()
+        awg.disable_all_channels(ch_ints)
+        awg.clear_all()
+
+        # 2. Global configuration
+        awg.configure_sample_rate(cfg.sample_rate)
+        awg.set_output_mode("USER")           # arbitrary waveform mode
+        awg.enable_coupling()
+        awg.set_trace_mode("SING")
+
+        # --- Compute channel timing offsets ----------------------------------
+        lags = np.asarray(cfg.waveform_output_channel_lags, dtype=float)
+        raw_offsets = np.rint(lags * cfg.sample_rate * 1e-6).astype(int)
+        abs_offsets = raw_offsets - raw_offsets.min()
+
+        # --- Calculate stitch delays for interleaved waveforms ---------------
+        if cfg.interleave_waveforms:
+            stitch_delays: List[int] = []
+            for direction, target_wf_ids in cfg.waveform_stitch_delays:
+                ids = target_wf_ids or []
+                total = sum(cfg.waveforms[wid].get_n_samples() for wid in ids)
+                stitch_delays.append(int(direction) * total)
+        else:
+            stitch_delays = [0] * len(ch_names)
+
+        # --- Build per-channel waveform arrays -------------------------------
+        all_channel_data: List[np.ndarray] = []
+        for i, (ch_name, s_delay, ch_offset) in enumerate(
+            zip(ch_names, stitch_delays, abs_offsets)
+        ):
+            ch_wf_ids = cfg.waveform_sequence[i]
+            waveforms = [cfg.waveforms[wid] for wid in ch_wf_ids]
+
+            raw_chunks = [
+                np.array(w.get(sample_rate=cfg.sample_rate)) for w in waveforms
+            ]
+            full_wf = np.concatenate(raw_chunks)
+
+            # Stitch-delay padding
+            pad_l = abs(s_delay) if s_delay < 0 else 0
+            pad_r = abs(s_delay) if s_delay > 0 else 0
+            full_wf = np.pad(full_wf, (pad_l, pad_r), "constant")
+
+            # Channel timing-offset padding (shift waveform right)
+            full_wf = np.pad(full_wf, (ch_offset, 0), "constant")
+
+            all_channel_data.append(full_wf)
+
+        # --- Align all channels to the same length (mult of 16) --------------
+        max_len = max(len(d) for d in all_channel_data)
+        if max_len % 16 != 0:
+            max_len += 16 - (max_len % 16)
+        aligned: List[np.ndarray] = [
+            np.pad(d, (0, max_len - len(d)), "constant") for d in all_channel_data
+        ]
+        print(f"Aligned all channels to {max_len} samples (multiple of 16)")
+        print(f"Configuring trigger mode")
+        awg.configure_trigger(mode="EXT", level=1.6, slope="POS")
+        print(f"Setting burst count to {cfg.burst_count}")
+        awg.set_burst_count(cfg.burst_count)
+        
+        # --- Upload waveforms and configure per-channel settings --------------
+        for ch_int, data in zip(ch_ints, aligned):
+            print(f"Uploading to channel {ch_int} (length {len(data)} samples)")
+
+            awg.upload_waveform(data, segment=1, channel=ch_int)
+            awg.wait_opc()
+            print(f"Uploaded waveform to channel {ch_int}, segment 1")
+
+        print("All waveforms uploaded and amplitudes set")
+        # --- Configure markers -----------------------------------------------
+        #marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
+        # NOTE: marker width not being used currently
+        marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
+        for ch_int in ch_ints:
+            if ch_int in marked_ch_ints:
+                print(f"Configuring marker on channel {ch_int} with width {10} samples")
+                awg.configure_marker(
+                    marker=1,
+                    position=0,
+                    width=10,
+                    high_level=1.2,
+                    low_level=0.0
+                )
+                awg.wait_opc()
+
+        # --- Enable outputs and arm ------------------------------------------
+        for ch_int in ch_ints:
+            print(f"Enabling output for channel {ch_int}")
+            awg.enable_channel(ch_int)
+        print("AWG outputs enabled, initiating...")
+        awg.initiate()
+
+        self.waveform_duration_s = max_len / cfg.sample_rate
+        logger.info(
+            f"AWG armed — waveform duration {self.waveform_duration_s * 1e6:.1f} µs"
         )
-        logger.info(f"AWG armed — waveform duration {duration_s * 1e6:.1f} µs")
 
     def _save_waveform_csv(self, signal: np.ndarray, label: str) -> Path:
         """Write waveform to a timestamped CSV in the output directory."""
@@ -685,7 +818,7 @@ class PulseShapeExperimentRunner:
         """Release hardware connections opened by this runner."""
         if self.awg is not None:
             try:
-                self.awg.abort_generation()
+                self.awg.abort()
                 self.awg.close()
             except Exception:
                 pass
