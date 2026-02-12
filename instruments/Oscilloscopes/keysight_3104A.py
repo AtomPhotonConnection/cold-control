@@ -6,14 +6,14 @@ Created on 22/05/2025.
 @description: This script contains the OscilloscopeManager class, which is used to manage
 the connection to and data acquisition from an oscilloscope (Keysight 3104A / InfiniiVision 3000T).
 """
+from datetime import datetime
+import os
+import time
+import logging
 
 import numpy as np
 import pyvisa as visa
 import pandas as pd
-import os
-from datetime import datetime
-import time
-import logging
 import matplotlib.pyplot as plt
 
 # Robustness: retries and delays for flaky USB/SCPI
@@ -34,6 +34,10 @@ class OscilloscopeManager:
             self.rm = visa.ResourceManager()
             self.scope = self.rm.open_resource(scope_id)
             self.scope.timeout = DEFAULT_TIMEOUT_MS
+
+            self.scope.chunk_size = 1024 * 1024
+            self.scope.read_termination = '\n'
+            self.scope.write_termination = '\n'
 
             _ = self._query_with_retry("*IDN?")
             print("Connected to the scope: ", _)
@@ -122,32 +126,32 @@ class OscilloscopeManager:
 
     @staticmethod
     def save_data(dataframe, filename, window):
-            """
-            Static method to save a dataframe to a file. 
-            Inputs:
-             - dataframe (pd.Dataframe): The dataframe to be stored as a csv
-             - filename (str): desired name of the file
-             
-            Returns:
-             - full_name (str): full name of the file including file path
-            """
+        """
+        Static method to save a dataframe to a file. 
+        Inputs:
+            - dataframe (pd.Dataframe): The dataframe to be stored as a csv
+            - filename (str): desired name of the file
+            
+        Returns:
+            - full_name (str): full name of the file including file path
+        """
 
-            # Get current date and time
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            current_time = datetime.now().strftime("%H-%M-%S")
+        # Get current date and time
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_time = datetime.now().strftime("%H-%M-%S")
 
-            # Ensure the new directory exists
-            directory = os.path.join("data", current_date)
-            os.makedirs(directory, exist_ok=True) 
+        # Ensure the new directory exists
+        directory = os.path.join("data", current_date)
+        os.makedirs(directory, exist_ok=True) 
 
-            # Creates full file name including time and parent folders
-            full_name = f"{window}_{current_time}_{filename}"
-            full_name = os.path.join(directory, full_name)
+        # Creates full file name including time and parent folders
+        full_name = f"{window}_{current_time}_{filename}"
+        full_name = os.path.join(directory, full_name)
 
-            # Saves the dataframe
-            dataframe.to_csv(full_name, index=False)
-            print(f"Data saved to {full_name}")
-            return full_name
+        # Saves the dataframe
+        dataframe.to_csv(full_name, index=False)
+        print(f"Data saved to {full_name}")
+        return full_name
 
 
     @staticmethod
@@ -348,6 +352,8 @@ class OscilloscopeManager:
 
         collected_data = None
         self.clear_error_queue()
+        self._write_with_retry(':WAVEFORM:POINTS:MODE NORMAL')
+        self._write_with_retry('WAVEFORM:FORMAT WORD')
         self._write_with_retry('WAVEFORM:BYTEORDER LSBFIRST')
 
         for channel in channels:
@@ -361,15 +367,21 @@ class OscilloscopeManager:
             if opc != '1':
                 raise RuntimeError(f"Operation did not complete successfully. OPC returned: {opc!r}")
             preamble = self._query_with_retry('WAVEFORM:PREAMBLE?')
-            print(f"Preamble info: {preamble}")
-            y_incr = float(self._query_with_retry('WAVEFORM:YINCREMENT?'))
-            y_orig = float(self._query_with_retry('WAVEFORM:YORIGIN?'))
+            pre = preamble.split(',')
+            print(f"Preamble info: {pre}")
+            num_points = int(pre[2])    
+            x_incr = float(pre[4])  # XINCREMENT is at index 4
+            x_orig = float(pre[5])  # XORIGIN is at index 5
+            y_incr = float(pre[7])  # YINCREMENT is at index 7
+            y_orig = float(pre[8])  # YORIGIN is at index 8
+            y_ref = float(pre[9])   # YREFERENCE is at index 9
 
             # Binary read can timeout; retry a few times
             for attempt in range(DEFAULT_WRITE_QUERY_RETRIES):
                 try:
-                    y_data = self.scope.query_binary_values(
-                        'WAVEFORM:DATA?', datatype='H', container=np.array, is_big_endian=False
+                    raw_data = self.scope.query_binary_values(
+                        'WAVEFORM:DATA?', datatype='H', container=np.array,
+                          is_big_endian=False, chunk_size=1024 * 1024
                     )
                     break
                 except Exception as e:
@@ -378,17 +390,14 @@ class OscilloscopeManager:
                     self._log.warning("WAVEFORM:DATA? attempt %d failed: %s", attempt + 1, e)
                     time.sleep(RETRY_DELAY_SEC)
 
-            y_data = y_data * y_incr + y_orig
+            y_data = (raw_data-y_ref) * y_incr + y_orig
+
             if len(y_data) == 0:
                 raise ValueError(f"No data collected from channel {channel}.")
 
-            if collected_data is None:
-                print("collecting time data")
-                x_incr = float(self._query_with_retry('WAVEFORM:XINCREMENT?'))
-                x_orig = float(self._query_with_retry('WAVEFORM:XORIGIN?'))
-                num_points = int(self._query_with_retry('WAVEFORM:POINTS?'))
-                time_data = np.linspace(x_orig, x_orig + x_incr * (num_points - 1), num_points)
-                collected_data = pd.DataFrame({'Time (s)': time_data})
+
+            time_data = np.linspace(x_orig, x_orig + x_incr * (num_points), num_points)
+            collected_data = pd.DataFrame({'Time (s)': time_data})
 
             collected_data[f'Channel {channel} Voltage (V)'] = y_data
 

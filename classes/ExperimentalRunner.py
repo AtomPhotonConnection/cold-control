@@ -56,7 +56,7 @@ from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingC
     MotFluoresceConfigurationSweep
 from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
 from classes.Sequence import IntervalStyle, Sequence
-import instruments.keysight_3104A as osc
+import instruments.Oscilloscopes.keysight_3104A as osc
 
 
 
