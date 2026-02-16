@@ -6,10 +6,30 @@ import glob
 import re
 
 from classes.ExperimentalConfigs import AWGSequenceConfiguration, AwgConfiguration, Waveform
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import (
-    WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode, WX218x_TriggerSlope, WX218x_TraceMode
-)
+
+def _is_dev_mode() -> bool:
+    return str(os.environ.get("COLD_CONTROL_DEVELOPMENT_MODE", "0")).strip().lower() in (
+        "1", "true", "t", "yes", "y"
+    )
+
+try:
+    from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+except Exception:
+    if not _is_dev_mode():
+        raise
+    from instruments.WX218x.WX218x_awg_dummy import DummyWX218x_awg as WX218x_awg
+    from instruments.WX218x.WX218x_awg import Channel
+
+try:
+    from instruments.WX218x.WX218x_DLL import (
+        WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode, WX218x_TriggerSlope, WX218x_TraceMode
+    )
+except Exception:
+    from instruments.WX218x.WX218x_dll_compat_shim import (
+        WX218x_OperationMode, WX218x_OutputMode,
+        WX218x_TraceMode, WX218x_TriggerMode, WX218x_TriggerSlope,
+    )
+
 import matplotlib.pyplot as plt
 
 

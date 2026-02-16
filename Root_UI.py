@@ -4,9 +4,23 @@ import tkinter as tk
 from tkinter import messagebox as tkMessageBox
 import os
 import typing
-
+from configobj import ConfigObj
 
 import classes.Styles as Styles
+
+def _set_dev_mode_env_from_root_config() -> None:
+    # ...existing code...
+    root_cfg = os.path.join(os.getcwd(), 'configs', 'rootConfig.ini')
+    try:
+        cfg = ConfigObj(root_cfg)
+        dev_mode = str(cfg.get('development_mode', 'false')).strip().lower() in ('1', 'true', 't', 'yes', 'y')
+        os.environ['COLD_CONTROL_DEVELOPMENT_MODE'] = '1' if dev_mode else '0'
+    except Exception:
+        # Default to hardware mode if config cannot be read
+        os.environ.setdefault('COLD_CONTROL_DEVELOPMENT_MODE', '0')
+
+_set_dev_mode_env_from_root_config()
+
 from classes.Config import ConfigReader
 
 from UI_classes.DAQ_UI import DAQ_UI

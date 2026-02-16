@@ -197,7 +197,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
                  use_cam: bool,
                  use_scope: bool,
                  use_awg: bool,
-                 sequence: Sequence,
+                 sequence: Sequence | None = None,
                  cam_config: 'CameraConfiguration' | None = None,
                  scope_config: ScopeConfiguration | None = None,
                  awg_config: AwgConfiguration | None = None,

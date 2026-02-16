@@ -9,7 +9,6 @@ import time
 import os
 import warnings
 from importlib_metadata import metadata
-from mock import patch
 import numpy as np
 import glob
 import re, ast
@@ -18,7 +17,20 @@ from typing import Dict, List, Any, Tuple, Optional
 from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
       INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
 
-from instruments.WX218x.WX218x_awg import Channel
+def _env_flag_true(name: str, default: str = "0") -> bool:
+    return str(os.environ.get(name, default)).strip().lower() in ("1", "true", "t", "yes", "y")
+
+try:
+    if _env_flag_true("COLD_CONTROL_DEVELOPMENT_MODE"):
+        raise ImportError("Skipping AWG import in development mode")
+    from instruments.WX218x.WX218x_awg import Channel
+except Exception:
+    class Channel:
+        CHANNEL_1 = 'channel1'
+        CHANNEL_2 = 'channel2'
+        CHANNEL_3 = 'channel3'
+        CHANNEL_4 = 'channel4'
+
 from classes.Sequence import Sequence
 from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
       AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig, SingleExperimentConfig,\
@@ -123,8 +135,9 @@ class ConfigReader(object):
         return self.get_experiment_config_fname()
     
     def is_development_mode(self):
-        print("Config keys:", self.config.keys())
-        return self.config.as_bool('development_mode')
+        mode = self.config.as_bool('development_mode')
+        os.environ['COLD_CONTROL_DEVELOPMENT_MODE'] = '1' if mode else '0'
+        return mode
     
 class ConfigWriter(object):
     
@@ -236,9 +249,13 @@ class DaqReader(object):
             
         return DAQ_controller(DAQ_master, DAQ_slaves)
     
-    @patch('DAQ.DAQ2502')
-    @patch('DAQ.DAQ_controller.enslave')
-    def load_dummy_DAQ_controller(self, *varArgs):
+    def load_dummy_DAQ_controller(self):
+        """Load DAQ controller in development mode.
+
+        When COLD_CONTROL_DEVELOPMENT_MODE is set, classes.DAQ already
+        substitutes a _DummyD2kDLL for the real WinDLL, so no patching
+        is needed — just delegate to the normal loader.
+        """
         return self.load_DAQ_controller()
     
 class DaqWriter(object):
@@ -457,11 +474,10 @@ class ExperimentConfigReader():
         configs_section = self.config.get('configs', {})
         sequence_path = configs_section.get('sequence_path')
         
-        if sequence_path is None:
-            raise ValueError("[configs] section must contain 'sequence_path'")
-        
-        sequence_path = resolve_config_path(str(sequence_path).strip(), get_config_root())
-        sequence = SequenceReader(sequence_path).loadSequence()
+        sequence = None
+        if sequence_path is not None:
+            sequence_path = resolve_config_path(str(sequence_path).strip(), get_config_root())
+            sequence = SequenceReader(sequence_path).loadSequence()
 
         # Create camera configuration if needed
         cam_config = None
@@ -1253,8 +1269,6 @@ def _makeExperimentalAutomationConfig_xBiasScan(x_biases = [], iterations=50, mo
     
     min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(x_biases), max(x_biases)])
     
-    
-
     filename =  os.getcwd() + '/configs/experimental automation/scans/x bias scan/scan_x_bias__{0}A_to_{1}A'.\
                                         format(min_bias, max_bias)
     config = MyConfig(filename)
@@ -1429,57 +1443,25 @@ if __name__ == "__main__":
     _makeSequenceConfig()
     #_makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(87,91.1,0.2), cav_daq_channel = 10, iterations=150, mot_reload = 1000*10**3)
 
-#     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
-
-
-#     _makeAbsorbtionImagingConfig()
-#     _makeSequenceConfig()
-#     _makePhotonProductionConfig()
-#     _makeExperimentalAutomationConfig()
-#     e = ExperimentalAutomationReader(os.getcwd() + '/configs/experimental automation/defaultExperimentalAutomationConfig')
-#     e.get_experimental_automation_configuration()
-# 
-
-#     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(90.25,100.24,1))
-# #     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=[x for x in np.arange(92.75,100,0.5) if x not in (92.75, 93.25,97.75,98.25,98.75,99.25,99.75,93.75,94.25,94.75)])
-#   
-#      
-#     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
-    
-#       
-#     _makeExperimentalAutomationConfig_xBiasScan()
-#     freqs=np.arange(59.5,90.5,1.75)*10**6
-#     freqs=np.array([73.25,74.25,75.25,76.25,77.25])*10**6
-
     '''
     x bias scan
     '''
-#     x_biases = [3,4.5,6]
-#     _makeExperimentalAutomationConfig_xBiasScan(x_biases, iterations=500, mot_reload=400*10**3, n_repeat=2)
+    #_makeExperimentalAutomationConfig_xBiasScan(x_biases=[3,4.5,6], iterations=500, mot_reload=400*10**3, n_repeat=2)
     
     '''
     y bias scan
     '''
-#     y_biases = [0,1,2,3,4,5]
-#     y_biases = [3.5,3.75,4.25,4.5]
-#     _makeExperimentalAutomationConfig_yBiasScan(y_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
-#  
-#     __copy_scan_seq_params(channels_to_copy=[10,21],
-#                            seq_folder=r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F0 line\y bias scan',
-#                            base_seq_fname=r'0A_yBias')
-
+    #_makeExperimentalAutomationConfig_yBiasScan(y_biases=[0,1,2,3,4,5], iterations=333, mot_reload=500*10**3, n_repeat=3)
+    
     '''
     z bias scan
     '''
-#     z_biases = [3.1,3.2,3.3,3.4,3.5]
-#     _makeExperimentalAutomationConfig_zBiasScan(z_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
+    #_makeExperimentalAutomationConfig_zBiasScan(z_biases=[3.1,3.2,3.3,3.4,3.5], iterations=333, mot_reload=500*10**3, n_repeat=3)
 
     '''
     driving freq scan
     '''
-#     freqs=np.linspace(72.25,78.25,7)*10**6
-# #     freqs=np.linspace(70.25,80.25,5)*10**6
-#     _makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
+    #_makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
      
     
     print('Done')

@@ -6,12 +6,19 @@ Created on 26 Sep 2016
 import ctypes
 from ctypes import c_char_p, c_int, c_ulong, byref, c_uint, c_double, c_short, c_int32, \
     POINTER, create_string_buffer, c_uint32, c_ushort, c_bool, c_long
-import pyvisa as visa
 import numpy as np
 
-from .WX218x_DLL import WX218x_MarkerSource, WX218x_DLL
-#from .WX218x_dll_compat_shim import wx218x_dll as WX218x_DLL
-from .WX218x_dll_compat_shim import WX218x_MarkerSource
+try:
+    import pyvisa as visa
+except Exception:
+    visa = None
+
+try:
+    from .WX218x_DLL import WX218x_MarkerSource, WX218x_DLL
+except Exception:
+    from .WX218x_dll_compat_shim import WX218x_MarkerSource
+    WX218x_DLL = None
+
 from .WX218x_Exception import WX218x_Exception
 from .WX218x_Warning import WX218x_Warning
 #from esky.slaveproc import ctypes
@@ -45,6 +52,8 @@ class WX218x_awg(object):
         if name:
             self.name = name
         else:
+            if visa is None:
+                raise RuntimeError("pyvisa is required to auto-discover AWG resources.")
             resources = visa.ResourceManager().list_resources()
             print('Currently connected VISA resources are', resources)
             try:
@@ -67,6 +76,8 @@ class WX218x_awg(object):
         Gory details are described in the DLL documentation for the called
         functions.
         '''
+        if WX218x_DLL is None:
+            raise RuntimeError("WX218x DLL backend is unavailable on this system.")
         name_cstr = bytes(self.name, 'utf-8')
 
         print("DLL object:", WX218x_DLL)

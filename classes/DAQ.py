@@ -5,7 +5,7 @@ Created on 2 Apr 2016. Revised 8 Jan 2025.
 
 @author: tombarrett
 '''
-
+import ctypes
 import numpy as np
 from ctypes import c_ubyte, c_short, c_ushort, c_long, c_ulong, c_float, c_double, c_void_p,\
       POINTER, byref, WinDLL
@@ -22,8 +22,33 @@ ULONG_PTR = c_void_p
 
 REPO_PATH = "C:\\Users\\LabUser\\Documents\\cold-control"
 
-# Import DLL using the __stdcall convention
-dll = WinDLL('D2K-Dask64')
+def _env_flag_true(name: str, default: str = "0") -> bool:
+    return str(os.environ.get(name, default)).strip().lower() in ("1", "true", "t", "yes", "y")
+
+class _DummyD2kDLL:
+    """Mock DLL object for development mode (no hardware access)."""
+    def __init__(self) -> None:
+        self._funcs = {}
+
+    def __getattr__(self, name: str):
+        if name not in self._funcs:
+            fn = MagicMock(name=name, return_value=0)
+            self._funcs[name] = fn
+        return self._funcs[name]
+
+_USE_DUMMY_DLL = _env_flag_true("COLD_CONTROL_DEVELOPMENT_MODE") or os.name != "nt" or not hasattr(ctypes, "WinDLL")
+
+if _USE_DUMMY_DLL:
+    dll = _DummyD2kDLL()
+    dll.D2K_Register_Card.side_effect = lambda _card_type, card_number: int(card_number)
+else:
+    try:
+        # Import DLL using the __stdcall convention
+        dll = WinDLL('D2K-Dask64')
+    except OSError as exc:
+        raise OSError(
+            "Failed to load D2K-Dask64. If running without hardware, set COLD_CONTROL_DEVELOPMENT_MODE=1."
+        ) from exc
 
 # DAQ2000 Device
 DAQ_2010 = 1

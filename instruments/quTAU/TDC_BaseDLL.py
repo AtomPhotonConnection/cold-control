@@ -33,7 +33,28 @@ class TDC_SimType(object):
     (SIM_FLAT,                      
      SIM_NORMAL,                    
      SIM_NONE) = map(c_int, range(3))
-     
+
+
+class _DummyTDCFunc:
+    """Callable stub that prints what it would do."""
+    def __init__(self, name):
+        self._name = name
+        self.restype = None
+        self.argtypes = None
+    def __call__(self, *args, **kwargs):
+        print(f"[DEV TDC] {self._name}({args}, {kwargs})")
+        return 0
+
+class _DummyTDCDLL:
+    def __init__(self):
+        self._cache = {}
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name not in self._cache:
+            self._cache[name] = _DummyTDCFunc(name)
+        return self._cache[name]
+
 class TDC_BaseDLL(object):
     
     """
@@ -41,7 +62,14 @@ class TDC_BaseDLL(object):
     """
     #tdc_base_dll = windll.LoadLibrary('C:\\Users\\LabUser\\APC\\Cold Control Heavy\\dlls\\quTAU\\userlib\\lib64\\tdcbase.dll')  from Mark's code
     base_path = "C:\\Users\\LabUser\\Documents\\cold-control\\dlls"
-    tdc_base_dll = windll.LoadLibrary(os.path.join(base_path,r"quTAU\userlib\lib64\tdcbase.dll"))
+
+    _TDC_DLL_AVAILABLE = True
+    try:
+        tdc_base_dll = windll.LoadLibrary(os.path.join(base_path,r"quTAU\userlib\lib64\tdcbase.dll"))
+    except Exception as _tdc_load_err:
+        _TDC_DLL_AVAILABLE = False
+        tdc_base_dll = _DummyTDCDLL()
+        print(f"[DEV TDC] quTAU DLL not available: {_tdc_load_err}. Using dummy.")
 
     #//////////////////////////////////////////////////////////////////////////
     #/*! 

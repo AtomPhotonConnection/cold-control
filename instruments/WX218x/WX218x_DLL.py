@@ -8,9 +8,12 @@ Created on 26 Sep 2016
 '''
 from ctypes import POINTER, byref, c_double, c_int, c_long, c_short, c_uint, c_int32, \
 c_char, c_char_p, c_ushort, windll
-from pyvisa.ctwrapper.functions import get_attribute
-#from jinja2._stringdefs import combine
-#from DAQ import High_Hysteresis
+
+try:
+    from pyvisa.ctwrapper.functions import get_attribute
+except Exception:
+    def get_attribute(*args, **kwargs):
+        raise RuntimeError("pyvisa ctwrapper is unavailable in this environment.")
 
 # #if defined(_VI_INT64_UINT64_DEFINED)
 # typedef ViUInt64    _VI_PTR ViPUInt64;
@@ -291,14 +294,48 @@ class WX218x_Waveform(object):
      NOISE       # Configures the function generator to produce a noise waveform.
      ) = map(c_int32, range(1,11))
 
+
+class _WX218x_MissingCFunc:
+    """Callable stub for DLL functions when the DLL is unavailable."""
+    def __init__(self, name: str, load_error: Exception):
+        self._name = name
+        self._load_error = load_error
+        self.restype = None
+        self.argtypes = None
+
+    def __call__(self, *args, **kwargs):
+        print(f"[DEV AWG DLL] {self._name}({args}) — DLL unavailable")
+        return 0
+
+
+class _WX218x_MissingDLLProxy:
+    """Proxy object that returns dummy callable stubs for any attribute access."""
+    def __init__(self, load_error: Exception):
+        self._load_error = load_error
+        self._cache = {}
+
+    def __getattr__(self, name: str):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name not in self._cache:
+            self._cache[name] = _WX218x_MissingCFunc(name, self._load_error)
+        return self._cache[name]
+
+
 class WX218x_DLL(object):
     """
     ctypes funcs to talk to wx218x.dll.
     """
-    #wx218x_dll = WinDLL("C:\\Users\\apc\\Documents\\Python Scripts\\Cold Control Heavy\\dlls\\IVI Foundation\\IVI\\Bin\\wx218x_64.dll")
+    _WX218X_DLL_PATH = r"C:\Program Files\IVI Foundation\IVI\Bin\wx218x_64.dll"
+    _WX218X_DLL_LOAD_ERROR = None
 
-    #wx218x_dll = windll.LoadLibrary("C:\\Users\\LabUser\\Documents\\cold-control\\dlls\\IVI Foundation\\IVI\\Bin\\wx218x_64.dll")
-    wx218x_dll = windll.LoadLibrary(r"C:\Program Files\IVI Foundation\IVI\Bin\wx218x_64.dll")
+    try:
+        _wx218x_dll = windll.LoadLibrary(_WX218X_DLL_PATH)
+    except Exception as _err:
+        _WX218X_DLL_LOAD_ERROR = _err
+        _wx218x_dll = _WX218x_MissingDLLProxy(_err)
+
+    wx218x_dll = _wx218x_dll
 
     # ///////////////////////////////////////////////////////////////////////////
     # /*!
@@ -1698,4 +1735,3 @@ class WX218x_DLL(object):
 
     def __init__(self):
         raise Exception("You probably don't want to instantiate this class!")
-    

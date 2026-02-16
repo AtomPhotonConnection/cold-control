@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox as tkMessageBox
 import math
-from typing import List
+from typing import List, Any
 # import matlab.engine
 import numpy as np
 import copy
@@ -29,28 +29,85 @@ from classes.DAQ import DaqPlayException, DAQ_dio
 from classes.ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
      AwgConfiguration, TdcConfiguration, Waveform, MotFluoresceConfiguration,\
      MotFluoresceConfigurationSweep, SweepConfiguration
-from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment,\
-    ExperimentalAutomationRunner,  MotFluoresceExperiment, GenericExperiment,\
-    MotFluoresceSweepExperiment
+
+# ExperimentalRunner imports are guarded below (may fail without hardware DLLs)
 
 from classes.abcoll import Sequence
-from atom.event import Event
-from win32inetcon import STICKY_CACHE_ENTRY
-#from _hotshot import resolution
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_OutputMode, WX218x_OperationMode, WX218x_Waveform 
-from tkinter import StringVar
-from tkinter.scrolledtext import ScrolledText
+try:
+    from atom.event import Event
+except Exception:
+    Event = None  # type: ignore
+try:
+    from win32inetcon import STICKY_CACHE_ENTRY
+except Exception:
+    STICKY_CACHE_ENTRY = None  # type: ignore
 
+def _is_dev_mode() -> bool:
+    return str(os.environ.get("COLD_CONTROL_DEVELOPMENT_MODE", "0")).strip().lower() in (
+        "1", "true", "t", "yes", "y"
+    )
 
-import threading
-import queue
-import time
-from msilib import init_database
+# AWG imports: use dummy in dev mode to avoid DLL loading
+try:
+    from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+except Exception:
+    if _is_dev_mode():
+        from instruments.WX218x.WX218x_awg_dummy import DummyWX218x_awg as WX218x_awg
+        from instruments.WX218x.WX218x_awg import Channel
+    else:
+        raise
+try:
+    from instruments.WX218x.WX218x_DLL import WX218x_OutputMode, WX218x_OperationMode, WX218x_Waveform
+    _AWG_DLL_ENUMS_AVAILABLE = True
+except Exception as _awg_err:
+    _AWG_DLL_ENUMS_AVAILABLE = False
+    class WX218x_OutputMode: FUNCTION = 0  # type: ignore
+    class WX218x_OperationMode:  # type: ignore
+        CONTINUOUS = 0
+        BURST = 1
+    class WX218x_Waveform:  # type: ignore
+        SINE = 0
+        DC = 1
 
-from tkinter import filedialog as tkFileDialog
+_EXPERIMENT_RUNNER_IMPORT_ERROR = None
+try:
+    from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment, \
+        ExperimentalAutomationRunner, MotFluoresceExperiment, GenericExperiment, MotFluoresceSweepExperiment
+    _EXPERIMENT_RUNNER_AVAILABLE = True
+except Exception as _err:
+    _EXPERIMENT_RUNNER_IMPORT_ERROR = _err
+    _EXPERIMENT_RUNNER_AVAILABLE = False
+    PhotonProductionExperiment = Any  # type: ignore
+    AbsorbtionImagingExperiment = Any  # type: ignore
+    ExperimentalAutomationRunner = Any  # type: ignore
+    MotFluoresceExperiment = Any  # type: ignore
+    GenericExperiment = Any  # type: ignore
+    MotFluoresceSweepExperiment = Any  # type: ignore
 
+try:
+    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+except Exception:
+    IC_ImagingControl = Any  # type: ignore
+
+def _ensure_experimental_runner_available(parent=None) -> bool:
+    global _EXPERIMENT_RUNNER_AVAILABLE, _EXPERIMENT_RUNNER_IMPORT_ERROR
+    global PhotonProductionExperiment, AbsorbtionImagingExperiment, ExperimentalAutomationRunner
+    global MotFluoresceExperiment, GenericExperiment, MotFluoresceSweepExperiment
+    if _EXPERIMENT_RUNNER_AVAILABLE:
+        return True
+    try:
+        from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment, \
+            ExperimentalAutomationRunner, MotFluoresceExperiment, GenericExperiment, MotFluoresceSweepExperiment
+        _EXPERIMENT_RUNNER_AVAILABLE = True
+        return True
+    except Exception as ex:
+        _EXPERIMENT_RUNNER_IMPORT_ERROR = ex
+        if parent is not None:
+            tkMessageBox.showwarning(
+                "Experimental backend unavailable",
+                f"Experimental runtime could not be loaded.\nDetails: {ex}"
+            )
+        return False
 
 class ImageButton(tk.Button):
     """Important class to prevent image being garbage collected.
@@ -284,6 +341,8 @@ class Experimental_UI(tk.LabelFrame):
         """
         Function to run experimental sequences when the "Run sequence" button is pressed.
         """
+        if not _ensure_experimental_runner_available(self):
+            return
         # If run tone is on, turn it off!
         for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
             if state:
@@ -318,6 +377,8 @@ class Experimental_UI(tk.LabelFrame):
 
 
     def fluoresce_sweep(self):
+        if not _ensure_experimental_runner_available(self):
+            return
         # If run tone is on, turn it off!
         for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
             if state:
@@ -356,6 +417,8 @@ class Experimental_UI(tk.LabelFrame):
 
             
     def runAutomatedExp(self, liveUI=True):
+        if not _ensure_experimental_runner_available(self):
+            return
         fname = tkFileDialog.askopenfilename(master=self, title="Choose an Experimental Automation Configuration",
                                              initialdir=os.path.join(os.getcwd(),"/configs/experimental automation"))
         
@@ -418,6 +481,8 @@ class Experimental_UI(tk.LabelFrame):
         
             
     def runAbsorbtionImaging(self, bkg_test=False):
+        if not _ensure_experimental_runner_available(self):
+            return
         if self.parent.camera_live:
             tkMessageBox.showwarning("Error", "Can't run an absorption imaging experiment\n while the camera is running.")
             return
@@ -481,6 +546,12 @@ class Experimental_UI(tk.LabelFrame):
         self.winfo_toplevel().wait_window(absorbtion_imaging_review_UI)
 
     def toggleRunTone(self, button:tk.Button, i_ch):
+        if not _AWG_DLL_ENUMS_AVAILABLE:
+            tkMessageBox.showwarning(
+                "AWG backend unavailable",
+                "AWG DLL enums are unavailable; run-tone control is disabled in this environment."
+            )
+            return
         if i_ch == 4:
             daq_controller = self.daq_ui.daq_controller
             daq_controller.updateChannelValue(14, 2.485)
@@ -877,9 +948,6 @@ class Photon_production_configuration_UI(object):
         ##############################################################################
         # TDC
         ##############################################################################
-        
-#         self.counter_channels = counter_channels
-#         self.marker_channel = marker_channel
         
         tdc_widgets.append(Frame_ExperimentalParam(tdc_frame,
                                                    label='Counter channels:',
@@ -1634,7 +1702,8 @@ class Absorbtion_imaging_configuration_UI(object):
             if apply_on_exit == None:
                     return
             elif apply_on_exit:
-                self.apply_changes = True
+                self.apply_changes = True 
+        
         self.top.grab_release()
         for wid in self.top.winfo_children():
             wid.destroy()
@@ -2067,7 +2136,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         self.wm_title("Absorbtion imaging review")
         self.grab_set()     
         # Changes the close button to call my close function.
-        self.protocol('WM_DELETE_WINDOW', self.closeWindow)
+        self.top.protocol('WM_DELETE_WINDOW', self.closeWindow)
         
         img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.getResults()
         
@@ -2326,4 +2395,4 @@ class Count_rate_plot_live(tk.LabelFrame):
                 pass
 #             self.canvas.update()
 #             self.canvas.flush_events()
-        
+

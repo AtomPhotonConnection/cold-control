@@ -6,9 +6,15 @@ Created on 25 Mar 2016
 import tkinter as tk
 from PIL import Image,ImageTk
 #import cv2
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
 from tkinter import messagebox as tkMessageBox
 import numpy as np
+
+try:
+    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+    _IC_IMPORT_ERROR = None
+except Exception as _err:
+    IC_ImagingControl = None
+    _IC_IMPORT_ERROR = _err
 
 class Camera_UI(tk.LabelFrame):
     '''
@@ -19,23 +25,38 @@ class Camera_UI(tk.LabelFrame):
         tk.LabelFrame.__init__(self, parent, text=text, font=font, **kwargs)
         
         self.parent=parent
-        
+        self.camera_available = True
+        self.cam = None
+        self.cam_names = []
+        self.cam_fpms = 33
+
         if ic_imaging_control:
             self.ic_ic = ic_imaging_control
-            if not self.ic_ic.initialised:
-                self.ic_ic.init_library()
+            try:
+                if not self.ic_ic.initialised:
+                    self.ic_ic.init_library()
+            except Exception:
+                self.camera_available = False
         else:
-            self.ic_ic = IC_ImagingControl()
-            self.ic_ic.init_library()
+            if IC_ImagingControl is None:
+                self.ic_ic = None
+                self.camera_available = False
+            else:
+                try:
+                    self.ic_ic = IC_ImagingControl()
+                    self.ic_ic.init_library()
+                except Exception:
+                    self.ic_ic = None
+                    self.camera_available = False
         
         # Calculate the aspect ratio of the requested video dimensions so we keep this when re-sizing the picture.
         self.video_dims = video_dims
         self.video_aspect_ratio = float(self.video_dims[0]) / float(self.video_dims[1])
                 
-        # Select the first available camera - TODO make camera dropdown
-        self.cam_names = self.ic_ic.get_unique_device_names()
-        if self.cam_names != []:
-            self.cam = self.ic_ic.get_device(self.cam_names[0])
+        if self.camera_available and self.ic_ic is not None:
+            self.cam_names = self.ic_ic.get_unique_device_names()
+            if self.cam_names:
+                self.cam = self.ic_ic.get_device(self.cam_names[0])
         self.is_live = False
         
         # Make a frame for the camera image.  By disabling pack_propagate and manually setting the height and width
@@ -77,6 +98,12 @@ class Camera_UI(tk.LabelFrame):
         self.updateDisplayedFrame(self.img.pil_image_cache)
                 
     def startCamera(self):
+        if not self.camera_available or self.cam is None:
+            tkMessageBox.showwarning(
+                "Camera unavailable",
+                f"IC Imaging backend not available (likely missing IC_GrabberDLL).\nDetails: {_IC_IMPORT_ERROR}"
+            )
+            return
         '''
         Set up the camera, start streaming and start updating the displayed frame.
         ''' 
@@ -147,11 +174,15 @@ class Camera_UI(tk.LabelFrame):
         self.update() 
             
     def cameraConfigButton(self):
+        if not self.camera_available or self.cam is None:
+            return
         config_UI = Camera_configuration_UI(self, self.cam)
         self.winfo_toplevel().wait_window(config_UI)
         self.winfo_toplevel().focus_set()
             
     def closeCameras(self):
+        if not self.camera_available or self.ic_ic is None:
+            return
         '''
         Closes any live cameras.
         '''

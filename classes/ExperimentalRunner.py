@@ -35,28 +35,122 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import re, ast
 
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \
-    WX218x_SequenceAdvanceMode, WX218x_TraceMode, WX218x_TriggerImpedance, WX218x_TriggerMode,\
-    WX218x_TriggerSlope, WX218x_Waveform 
-from instruments.quTAU.TDC_quTAU import TDC_quTAU
-from instruments.quTAU.TDC_BaseDLL import TDC_SimType, TDC_DevType, TDC_SignalCond
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
-from instruments.pyicic.IC_Exception import IC_Exception
-from instruments.pyicic.IC_Camera import IC_Camera
-from instruments.TF930 import TF930
+# ---------------------------------------------------------------------------
+# Development-mode flag (set by Root_UI / environment)
+# ---------------------------------------------------------------------------
+def _is_dev_mode() -> bool:
+    return str(os.environ.get("COLD_CONTROL_DEVELOPMENT_MODE", "0")).strip().lower() in (
+        "1", "true", "t", "yes", "y"
+    )
 
-from instruments.WX218x.awg_control2 import configure_awg # updated version
-#from lab_control_functions.awg_control_functions_psh import run_awg # old version
-from lab_control_functions.awg_control_functions_single_psh import run_awg_single
+_DEV_MODE = _is_dev_mode()
 
+# ---------------------------------------------------------------------------
+# Hardware imports – wrapped so they degrade gracefully in dev mode
+# ---------------------------------------------------------------------------
+
+# AWG -----------------------------------------------------------------
+try:
+    from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+except Exception as _e:
+    if not _DEV_MODE:
+        raise
+    from instruments.WX218x.WX218x_awg_dummy import DummyWX218x_awg as WX218x_awg
+    from instruments.WX218x.WX218x_awg import Channel  # Channel is pure-Python, always available
+
+try:
+    from instruments.WX218x.WX218x_DLL import (
+        WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode,
+        WX218x_SequenceAdvanceMode, WX218x_TraceMode, WX218x_TriggerImpedance,
+        WX218x_TriggerMode, WX218x_TriggerSlope, WX218x_Waveform,
+    )
+except Exception:
+    # Fallback: use the compat shim which always provides enums even without DLL
+    from instruments.WX218x.WX218x_dll_compat_shim import (
+        WX218x_MarkerSource, WX218x_OperationMode, WX218x_OutputMode,
+        WX218x_TraceMode, WX218x_TriggerMode, WX218x_TriggerSlope,
+    )
+    # Provide stubs for enums not in the shim
+    from ctypes import c_int32 as _c_int32
+
+    class WX218x_SequenceAdvanceMode:
+        (AUTO, ONCE, STEP) = map(_c_int32, range(3))
+
+    class WX218x_TriggerImpedance:
+        (LOW, HIGH) = map(_c_int32, range(2))
+
+    class WX218x_Waveform:
+        (SINE, SQUARE, TRIANGLE, RAMP_UP, RAMP_DOWN, DC,
+         SINC, GAUSSIAN, EXPONENTIAL, NOISE) = map(_c_int32, range(1, 11))
+
+# TDC (quTAU) ---------------------------------------------------------
+try:
+    from instruments.quTAU.TDC_quTAU import TDC_quTAU
+    from instruments.quTAU.TDC_BaseDLL import TDC_SimType, TDC_DevType, TDC_SignalCond
+except Exception:
+    if not _DEV_MODE:
+        raise
+    TDC_quTAU = None  # type: ignore
+    class TDC_SimType:
+        (SIM_FLAT, SIM_NORMAL, SIM_NONE) = range(3)
+    class TDC_DevType:
+        (DEVTYPE_1A, DEVTYPE_1B, DEVTYPE_1C, DEVTYPE_NONE) = range(4)
+    class TDC_SignalCond:
+        (SCOND_TTL, SCOND_LVTTL, SCOND_NIM, SCOND_MISC, SCOND_NONE) = range(5)
+
+# Camera ---------------------------------------------------------------
+try:
+    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+    from instruments.pyicic.IC_Exception import IC_Exception
+    from instruments.pyicic.IC_Camera import IC_Camera
+except Exception:
+    if not _DEV_MODE:
+        raise
+    IC_ImagingControl = None  # type: ignore
+    class IC_Exception(Exception):  # type: ignore
+        pass
+    IC_Camera = None  # type: ignore
+
+# Frequency counter ----------------------------------------------------
+try:
+    from instruments.TF930 import TF930
+except Exception:
+    if not _DEV_MODE:
+        raise
+    TF930 = None  # type: ignore
+
+# AWG control helpers ---------------------------------------------------
+try:
+    from instruments.WX218x.awg_control2 import configure_awg
+except Exception:
+    if not _DEV_MODE:
+        raise
+    def configure_awg(*args, **kwargs):  # type: ignore
+        print("[DEV] configure_awg() called (dummy)")
+        return None, 0
+
+try:
+    from lab_control_functions.awg_control_functions_single_psh import run_awg_single
+except Exception:
+    if not _DEV_MODE:
+        raise
+    def run_awg_single(*args, **kwargs):  # type: ignore
+        print("[DEV] run_awg_single() called (dummy)")
+        return None, 0
+
+# Oscilloscope ---------------------------------------------------------
+if _DEV_MODE:
+    import instruments.Oscilloscopes.oscilloscope_dummy as osc
+else:
+    import instruments.Oscilloscopes.keysight_3104A as osc
+
+# Non-hardware imports (always available) --------------------------------
 from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingConfiguration,\
     PhotonProductionConfiguration, MotFluoresceConfiguration,\
     ExperimentSessionConfig, SingleExperimentConfig, Waveform, AwgConfiguration,\
     MotFluoresceConfigurationSweep
 from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
 from classes.Sequence import IntervalStyle, Sequence
-import instruments.Oscilloscopes.keysight_3104A as osc
 
 
 
