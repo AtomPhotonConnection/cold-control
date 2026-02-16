@@ -501,6 +501,7 @@ class PulseShapeExperimentRunner:
 
         # --- Validate target channel -----------------------------------------
         ch_idx = self.config.channel - 1
+        print(f"Config AWG channel: {self.config.channel} (index {ch_idx})")
         if ch_idx >= len(cfg.waveform_sequence):
             raise ValueError(
                 f"Channel {self.config.channel} not in AWG waveform_sequence "
@@ -524,10 +525,10 @@ class PulseShapeExperimentRunner:
         awg.reset()
 
         ch_names = cfg.waveform_output_channels
-        ch_ints = [self._ch_int(c) for c in ch_names]
+        ch_ints = [1]#[self._ch_int(c) for c in ch_names]
 
         # 1. Safe state: stop output and disable all channels
-        awg.abort()
+        #awg.abort() # I don't think you need to do this
         awg.disable_all_channels(ch_ints)
         awg.clear_all()
 
@@ -535,7 +536,21 @@ class PulseShapeExperimentRunner:
         awg.configure_sample_rate(cfg.sample_rate)
         awg.set_output_mode("USER")           # arbitrary waveform mode
         awg.enable_coupling()
-        awg.set_trace_mode("SING")
+
+        # Configure trigger
+        print("Configuring trigger settings for all channels")
+        for ch_int in ch_ints:
+            awg.select_channel(ch_int)
+            awg.set_burst_count(cfg.burst_count)
+            awg.set_continuous(True)#False)# in future we'll want this to be false
+            awg.set_trigger_level(1.6)  # volts, adjust as needed
+            awg.set_trigger_source("EXT")  # external trigger
+            awg.set_trigger_slope("POS")  # trigger on rising edge
+
+        opc = awg.wait_opc()
+        print("channel triggers configured")
+
+        #awg.set_trace_mode("SING")
 
         # --- Compute channel timing offsets ----------------------------------
         lags = np.asarray(cfg.waveform_output_channel_lags, dtype=float)
@@ -583,10 +598,10 @@ class PulseShapeExperimentRunner:
             np.pad(d, (0, max_len - len(d)), "constant") for d in all_channel_data
         ]
         print(f"Aligned all channels to {max_len} samples (multiple of 16)")
-        print(f"Configuring trigger mode")
-        awg.configure_trigger(mode="EXT", level=1.6, slope="POS")
-        print(f"Setting burst count to {cfg.burst_count}")
-        awg.set_burst_count(cfg.burst_count)
+        #print(f"Configuring trigger mode")
+        #awg.configure_trigger(mode="EXT", level=1.6, slope="POS")
+        #print(f"Setting burst count to {cfg.burst_count}")
+        #awg.set_burst_count(cfg.burst_count)
         
         # --- Upload waveforms and configure per-channel settings --------------
         for ch_int, data in zip(ch_ints, aligned):
@@ -596,22 +611,25 @@ class PulseShapeExperimentRunner:
             awg.wait_opc()
             print(f"Uploaded waveform to channel {ch_int}, segment 1")
 
+        awg.set_amplitude(1, 0.3)  # volts, adjust as needed
+        awg.set_offset(1, 0.0)     # volts, adjust as needed
+
         print("All waveforms uploaded and amplitudes set")
-        # --- Configure markers -----------------------------------------------
-        #marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
-        # NOTE: marker width not being used currently
-        marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
-        for ch_int in ch_ints:
-            if ch_int in marked_ch_ints:
-                print(f"Configuring marker on channel {ch_int} with width {10} samples")
-                awg.configure_marker(
-                    marker=1,
-                    position=0,
-                    width=10,
-                    high_level=1.2,
-                    low_level=0.0
-                )
-                awg.wait_opc()
+        # # --- Configure markers -----------------------------------------------
+        # #marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
+        # # NOTE: marker width not being used currently
+        # marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
+        # for ch_int in ch_ints:
+        #     if ch_int in marked_ch_ints:
+        #         print(f"Configuring marker on channel {ch_int} with width {10} samples")
+        #         awg.configure_marker(
+        #             marker=1,
+        #             position=0,
+        #             width=10,
+        #             high_level=1.2,
+        #             low_level=0.0
+        #         )
+        #         awg.wait_opc()
 
         # --- Enable outputs and arm ------------------------------------------
         for ch_int in ch_ints:
@@ -619,6 +637,10 @@ class PulseShapeExperimentRunner:
             awg.enable_channel(ch_int)
         print("AWG outputs enabled, initiating...")
         awg.initiate()
+        awg.trigger()
+        awg.select_channel(1)
+        awg.inst.write(":TRAC:SEL 1")
+        print("AWG running...")
 
         self.waveform_duration_s = max_len / cfg.sample_rate
         logger.info(

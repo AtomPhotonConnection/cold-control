@@ -156,50 +156,7 @@ class AWGManager:
                     time.sleep(RETRY_DELAY_SEC)
         raise last_exc  # type: ignore[misc]
 
-    def _write_binary(self, cmd_prefix: str, data: bytes) -> None:
-        """
-        Send a SCPI command followed by an IEEE-488.2 definite-length binary
-        block (``#<digits><byte_count><data>``).
-        """
-        # 1. Calculate header components
-        byte_count = len(data)
-        byte_count_str = str(byte_count)
-        header_len = len(byte_count_str)
-        
-        # 2. Build the header string (e.g., ":TRACe#3416")
-        # Note: Using :TRACe (no :DATA) for the Fast Download mode
-        header = f"#{header_len}{byte_count_str}".encode('ascii')
-        
-        # 3. Combine header and data into a single raw byte string
-        # We do NOT add a \n here because the manual (p. 4-5) says 
-        # binary blocks are an exception to the terminator rule.
-        cmd_bytes = cmd_prefix.encode('ascii')
-        raw = cmd_bytes + header + data
-        
-        self._log.debug("Sending raw binary block: %s...", header)
-        
-        # 4. Use write_raw to ensure PyVISA doesn't add spaces or terminators
-        self.inst.write_raw(raw)
-
-
-        # self.inst.write_binary_values(
-        #     cmd_prefix, 
-        #     data, 
-        #     datatype='B', 
-        #     header_fmt='ieee',
-        #     termination=None
-        # )
-        # n_bytes = len(data)
-        # count_str = str(n_bytes)
-        # header = f"{len(count_str)}{count_str}"
-        # # Build raw message: command + header + binary payload
-        # raw = (cmd_prefix + header).encode("ascii") + data
-        # print(f"Sending binary command: {cmd_prefix} with {n_bytes} bytes of data")
-        # self.inst.write_raw(raw)
-        self.wait_opc()  # wait for operation to complete after binary write
-        print("Binary command sent and acknowledged by AWG.")
-        #self._delay()
-
+    
     # ----- error helpers ----------------------------------------------------
 
     def clear_error_queue(self) -> list:
@@ -259,6 +216,19 @@ class AWGManager:
         except Exception as exc:
             self._log.warning("Error closing resource manager: %s", exc)
 
+    def check_errors(self):
+        """Check for instrument errors"""
+        try:
+            error = self.inst.query(':SYST:ERR?')
+            if not error.startswith('0,'):
+                print(f"Instrument error: {error.strip()}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error checking instrument status: {e}")
+            return False
+    
+
     # ----- run control (abort / initiate / enable) --------------------------
 
     def abort(self) -> None:
@@ -283,6 +253,10 @@ class AWGManager:
             return resp.strip() == "1"
         finally:
             self.inst.timeout = old_timeout
+
+    def trigger(self) -> None:
+        """Send a software trigger (``*TRG``). Only relevant in triggered mode."""
+        self._write("*TRG")
 
     # ----- channel selection & output state ----------------------------------
 
@@ -321,6 +295,7 @@ class AWGManager:
 
     def enable_coupling(self) -> None:
         """Couple channels 1&2 with 3&4 so they share a sample clock."""
+        #Instrument:Couple:State ON|OFF
         self._write(":INST:COUP:STAT ON")
 
     def disable_coupling(self) -> None:
@@ -352,6 +327,8 @@ class AWGManager:
             (sequenced), ``"ASEQ"`` (advanced seq), ``"MOD"``, ``"PULS"``,
             ``"PATT"``.
         """
+        if mode not in ("FIX", "USER", "SEQ", "ASEQ", "MOD", "PULS", "PATT"):
+            raise ValueError(f"Invalid output mode {mode}.")
         self._write(f":FUNC:MODE {mode}")
 
     # ----- run mode (continuous / triggered) ----------------------------------
@@ -360,6 +337,7 @@ class AWGManager:
         """
         ``INIT:CONT ON`` → continuous;  ``INIT:CONT OFF`` → triggered.
         """
+        # Full command is  :INITiate:CONTinuous ON|OFF
         self._write(f":INIT:CONT {'ON' if on else 'OFF'}")
 
     def set_trigger_source(self, source: str = "EXT") -> None:
@@ -376,6 +354,7 @@ class AWGManager:
 
     def set_trigger_level(self, level: float = 1.6) -> None:
         """Set trigger threshold in volts (−5 V to +5 V)."""
+        # :TRIGger:LEVel <level>
         self._write(f":TRIG:LEV {level}")
 
     def set_trigger_slope(self, slope: str = "POS") -> None:
@@ -483,36 +462,83 @@ class AWGManager:
         self.delete_all_sequences()
 
     # ----- waveform upload ---------------------------------------------------
-
-    @staticmethod
-    def float_to_dac(data: np.ndarray) -> np.ndarray:
+    def validate_waveform_size(self, num_points):
         """
-        Convert a floating-point waveform (−1 … +1) to 14-bit DAC codes
-        (0 … 16 383) stored as ``uint16``.
-
-        This matches the DLL's ``create_arbitrary_waveform_custom`` behaviour::
-
-            DAC = round((1 + sample) * 8191)
-
-        Parameters
-        ----------
-        data : np.ndarray
-            Waveform samples in the range [−1, +1].
-
-        Returns
-        -------
-        np.ndarray of uint16
+        Validate that waveform size meets requirements
+        
+        Requirements from manual:
+        - Minimum: 192 points
+        - Must be multiple of 16 points
+        
+        Args:
+            num_points: Number of waveform points
+            
+        Returns:
+            Validated number of points
         """
-        data = np.asarray(data, dtype=np.float64)
-        dac = np.clip(np.round((1.0 + data) * 8191), 0, DAC_MAX).astype(np.uint16)
-        return dac
+        if num_points < 192:
+            raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
+        
+        if num_points % 16 != 0:
+            # Round up to nearest multiple of 16
+            adjusted = ((num_points + 15) // 16) * 16
+            print(f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)")
+            return adjusted
+        
+        return num_points
+    
+    def normalize_waveform(self, waveform_data):
+        """
+        Normalize waveform data to 14-bit DAC values (0-16383)
+        
+        The WX2184C uses 14-bit DAC values:
+        - 0x0000 (0) corresponds to -2V
+        - 0x2000 (8192) corresponds to 0V  
+        - 0x3FFF (16383) corresponds to +2V
+        
+        Args:
+            waveform_data: NumPy array of float values (typically -1.0 to +1.0)
+            
+        Returns:
+            NumPy array of uint16 values (0-16383)
+        """
+        # Normalize to -1.0 to +1.0 range
+        waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
+        
+        # Scale to 0-16383 (14-bit range)
+        # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
+        dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
+        
+        # Ensure we don't exceed 14-bit range
+        dac_values = np.clip(dac_values, 0, 16383)
+        
+        return dac_values
+    
+    def create_binary_block_header(self, num_bytes):
+        """
+        Create IEEE 488.2 binary block header
+        
+        Format: #<num_digits><byte_count><data>
+        Example: #42048 means 4 digits follow, then 2048 bytes of data
+        
+        Args:
+            num_bytes: Number of bytes in the data block
+            
+        Returns:
+            Header string (e.g., '#42048')
+        """
+        byte_count_str = str(num_bytes)
+        num_digits = len(byte_count_str)
+        header = f'#{num_digits}{byte_count_str}'
+        return header
+
 
     def upload_waveform(
         self,
-        data: np.ndarray,
+        waveform_data: np.ndarray,
         segment: int = 1,
         channel: Optional[int] = None,
-    ) -> None:
+    ) -> bool:
         """
         Upload waveform data to the AWG.
 
@@ -526,41 +552,100 @@ class AWGManager:
             Target segment number (default 1).
         channel : int or None
             If given, ``select_channel`` is called first.
+
+                    
+        Upload arbitrary waveform to AWG memory
+        
+        This is the critical function that must be done correctly to avoid
+        freezing the AWG. Follows the proper sequence from the manual.
+        
+        Args:
+            waveform_data: NumPy array of float values (-1.0 to +1.0)
+            segment: Segment number (1-32000)
+            
+        Returns:
+            True if successful, False otherwise
         """
         if channel is not None:
             self.select_channel(channel)
+        else:
+            raise ValueError("Channel must be specified for waveform upload.")
+        
+        self.set_trace_mode("SING")  # ensure single-channel upload mode
 
-        data = np.asarray(data)
-        if np.issubdtype(data.dtype, np.floating):
-            data = self.float_to_dac(data)
-        data = data.astype(np.uint16)
 
-        n_samples = len(data)
-        if n_samples % 16 != 0:
-            # Silently pad to next multiple of 16
-            pad = 16 - (n_samples % 16)
-            data = np.pad(data, (0, pad), constant_values=DAC_MID)
-            n_samples = len(data)
-            self._log.info("Padded waveform by %d samples to reach multiple of 16.", pad)
 
-        # Define segment, select it, then upload binary data
-        if n_samples <192:
-            raise ValueError(f"Waveform length {n_samples} is too short. Must be at least 192 samples.")
-        self.define_segment(segment, n_samples)
-        self.wait_opc()
-        print(f"Segment {segment} defined with length {n_samples} samples.")
-        self.select_segment(segment)
-        self.wait_opc()
+        try:
+            # Step 1: Validate and adjust waveform size
+            num_points = len(waveform_data)
+            validated_points = self.validate_waveform_size(num_points)
+            
+            # Pad with zeros if size was adjusted
+            if validated_points > num_points:
+                waveform_data = np.pad(waveform_data, 
+                                      (0, validated_points - num_points), 
+                                      mode='constant')
+            
+            # Step 2: Convert to 14-bit DAC values
+            dac_values = self.normalize_waveform(waveform_data)
+            
+            # Step 3: Define segment in memory
+            # CRITICAL: Must define segment BEFORE uploading data
+            print(f"Defining segment {segment} with {validated_points} points...")
+            self.inst.write(f':TRAC:DEF {segment},{validated_points}')
+            time.sleep(0.05)  # Small delay after defining
+            
+            if not self.check_errors():
+                print("Error defining segment!")
+                return False
+            
+            # Step 4: Select the segment
+            print(f"Selecting segment {segment}...")
+            self.inst.write(f':TRAC:SEL {segment}')
+            time.sleep(0.05)
+            
+            if not self.check_errors():
+                print("Error selecting segment!")
+                return False
+            
+            # Step 5: Prepare binary data
+            # Each point is 2 bytes (16-bit word, but only 14 bits used)
+            binary_data = dac_values.astype('<u2').tobytes()  # Little-endian uint16
+            num_bytes = len(binary_data)
+            
+            # Step 6: Create IEEE 488.2 binary block header
+            header = self.create_binary_block_header(num_bytes)
+            command = f':TRAC:DATA {header}'
+            
+            # Step 7: Upload data using binary write
+            print(f"Uploading {validated_points} points ({num_bytes} bytes)...")
+            
+            # Write command header
+            self.inst.write_raw(command.encode('ascii'))
+            
+            # Write binary data
+            self.inst.write_raw(binary_data)
+            
+            # Write termination
+            self.inst.write_raw(b'\n')
+            
+            # Wait for operation to complete
+            self.inst.query('*OPC?')
+            time.sleep(0.1)
+            
+            # Step 8: Verify no errors occurred
+            if not self.check_errors():
+                print("Error during waveform upload!")
+                return False
+            
+            print(f"Successfully uploaded waveform to segment {segment}")
+            return True
+            
+        except Exception as e:
+            print(f"Error uploading waveform: {e}")
+            return False
+        
 
-        print("Segments defined and selected, uploading waveform data...")
-
-        # Convert to little-endian bytes (each sample is 2 bytes)
-        raw_bytes = data.astype("<u2").tobytes()
-        print("waiting for opc before uploading waveform...")
-        self.wait_opc()
-        print("AWG ready, starting waveform upload...")
-        self._write_binary(":TRACe:DATA 1", raw_bytes)
-        self._log.info("Uploaded %d samples (%d bytes) to segment %d.", n_samples, len(raw_bytes), segment)
 
     # ----- marker output commands --------------------------------------------
 
@@ -690,14 +775,13 @@ class AWGManager:
         4. Configure trigger on each channel.
         5. (Waveforms must still be uploaded separately.)
         """
-        self.abort()
+        #self.abort()
         self.disable_all_channels(channels)
         self.clear_all()
 
         self.configure_sample_rate(sample_rate)
         self.set_output_mode("USER")               # arbitrary
         self.enable_coupling()
-        self.set_trace_mode("SING")
 
         for ch in channels:
             self.select_channel(ch)
