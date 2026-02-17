@@ -1212,19 +1212,21 @@ class DAQ_card(DAQ2502):
         digital_values = np.ascontiguousarray(digital_values, dtype=np.uint16)
         return digital_values
     
-    def play(self, t_step=1, buffer_id=None):
-        '''Note t_step is in microseconds'''
-        update_interval = int(round(t_step*10**-6 * self.clock_speed))
-        if self.updateIntervalLimits[0] > update_interval or self.updateIntervalLimits[1] < update_interval:
+    def play(self, update_interval=1, buffer_id=None):
+        '''Note update_interval is in microseconds for DAQ_card (converted to clock ticks internally)'''
+        update_interval_ticks = int(round(update_interval*10**-6 * self.clock_speed))
+        if self.updateIntervalLimits[0] > update_interval_ticks or self.updateIntervalLimits[1] < update_interval_ticks:
             raise DaqPlayException('Error on DAQ card {0}: update interval of {1} is not between card limits of {2} to {3}.'.\
-                                   format(self.card, update_interval, *self.updateIntervalLimits))
-        DAQ2502.play(self, update_interval=update_interval, buffer_id=buffer_id)
+                                   format(self.card, update_interval_ticks, *self.updateIntervalLimits))
+        DAQ2502.play(self, update_interval=update_interval_ticks, buffer_id=buffer_id)
         
-    def write(self, valueArray):
-        return DAQ2502.write(self, self.arrayToDigitalValues(valueArray, [0,1,2,3,4,5,6,7]))
+    def write(self, digital_values):
+        """NOTE: digital_values isn't actually an array of digital values. It must be converted."""
+        return DAQ2502.write(self, self.arrayToDigitalValues(digital_values, [0,1,2,3,4,5,6,7]))
         
-    def load(self, sequenceArray):
-        return DAQ2502.load(self, self.arrayToDigitalValues(sequenceArray, self.expectedChOrderForSeq))
+    def load(self, digital_values):
+        """NOTE: digital_values isn't actually an array of digital values. It must be converted."""
+        return DAQ2502.load(self, self.arrayToDigitalValues(digital_values, self.expectedChOrderForSeq))
         
     def validateAndSortChannels(self, channels):
         ''' Check the right number of channels are registered and attempt to fix it if they are not.'''

@@ -10,9 +10,11 @@ from datetime import datetime
 import os
 import time
 import logging
+from typing import cast
 
 import numpy as np
 import pyvisa as visa
+from pyvisa.resources import MessageBasedResource
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -32,7 +34,8 @@ class OscilloscopeManager:
 
         try:
             self.rm = visa.ResourceManager()
-            self.scope = self.rm.open_resource(scope_id)
+            scope = self.rm.open_resource(scope_id)
+            self.scope = cast(MessageBasedResource, scope)
             self.scope.timeout = DEFAULT_TIMEOUT_MS
 
             self.scope.chunk_size = 1024 * 1024
@@ -55,7 +58,7 @@ class OscilloscopeManager:
         last_exc = None
         for attempt in range(retries):
             try:
-                self.scope.write(cmd)
+                cast(MessageBasedResource, self.scope).write(cmd)
                 self._delay()
                 return
             except Exception as e:
@@ -63,14 +66,15 @@ class OscilloscopeManager:
                 self._log.warning("Scope write attempt %d failed: %s", attempt + 1, e)
                 if attempt < retries - 1:
                     time.sleep(RETRY_DELAY_SEC)
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
 
     def _query_with_retry(self, cmd, retries=DEFAULT_WRITE_QUERY_RETRIES):
         """Send SCPI query with retries. Returns response string. Raises last exception on failure."""
         last_exc = None
         for attempt in range(retries):
             try:
-                resp = self.scope.query(cmd)
+                resp = cast(MessageBasedResource, self.scope).query(cmd)
                 self._delay()
                 return resp
             except Exception as e:
@@ -78,14 +82,16 @@ class OscilloscopeManager:
                 self._log.warning("Scope query attempt %d failed: %s", attempt + 1, e)
                 if attempt < retries - 1:
                     time.sleep(RETRY_DELAY_SEC)
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
 
     def clear_error_queue(self):
         """Read and clear the instrument error queue. Returns list of (code, message) or empty."""
         errors = []
         try:
             while True:
-                s = self._query_with_retry("SYSTem:ERRor?", retries=2).strip()
+                s = self._query_with_retry("SYSTem:ERRor?", retries=2)
+                s = cast(str, s).strip()
                 if s.startswith("0,") and ("No error" in s or "No Error" in s):
                     break
                 parts = s.split(",", 1)
@@ -101,7 +107,7 @@ class OscilloscopeManager:
     def is_connected(self):
         """Return True if the scope responds to *IDN?."""
         try:
-            self.scope.query("*IDN?")
+            cast(MessageBasedResource, self.scope).query("*IDN?")
             return True
         except Exception:
             return False
@@ -112,7 +118,7 @@ class OscilloscopeManager:
         """
         try:
             if self.scope is not None:
-                self.scope.close()
+                cast(MessageBasedResource, self.scope).close()
                 self.scope = None
         except Exception as e:
             self._log.warning("Error closing scope: %s", e)
@@ -295,6 +301,7 @@ class OscilloscopeManager:
         data from the scope. Use this before sending a trigger pulse to the scope.
         """
         query_result = self._query_with_retry(':DIGitize;*OPC?')
+        query_result = cast(str, query_result)
         ok = query_result.strip() == '1'
         if ok:
             print(f"Oscilloscope digitized channels {channels}.")
@@ -313,7 +320,7 @@ class OscilloscopeManager:
         Function to reset the oscilloscope. This will clear all settings and data.
         """
         try:
-            self.scope.clear()
+            cast(MessageBasedResource, self.scope).clear()
         except Exception:
             pass
         self._write_with_retry('*RST')
@@ -323,7 +330,7 @@ class OscilloscopeManager:
         Function to clear the oscilloscope. This will clear all settings and data.
         """
         try:
-            self.scope.clear()
+            cast(MessageBasedResource, self.scope).clear()
         except Exception:
             pass
         self.clear_error_queue()
@@ -363,10 +370,11 @@ class OscilloscopeManager:
             if errs:
                 for code, msg in errs:
                     print(f"Scope errors: {code}, {msg}")
-            opc = self._query_with_retry('*OPC?').strip()
+            opc = self._query_with_retry('*OPC?')
+            opc = cast(str, opc).strip()
             if opc != '1':
                 raise RuntimeError(f"Operation did not complete successfully. OPC returned: {opc!r}")
-            preamble = self._query_with_retry('WAVEFORM:PREAMBLE?')
+            preamble = cast(str, self._query_with_retry('WAVEFORM:PREAMBLE?'))
             pre = preamble.split(',')
             print(f"Preamble info: {pre}")
             num_points = int(pre[2])    
@@ -376,11 +384,13 @@ class OscilloscopeManager:
             y_orig = float(pre[8])  # YORIGIN is at index 8
             y_ref = float(pre[9])   # YREFERENCE is at index 9
 
+            raw_data = None
+
             # Binary read can timeout; retry a few times
             for attempt in range(DEFAULT_WRITE_QUERY_RETRIES):
                 try:
-                    raw_data = self.scope.query_binary_values(
-                        'WAVEFORM:DATA?', datatype='H', container=np.array,
+                    raw_data = cast(MessageBasedResource, self.scope).query_binary_values(
+                        'WAVEFORM:DATA?', datatype='H', container=np.array,#type: ignore
                           is_big_endian=False, chunk_size=1024 * 1024
                     )
                     break
@@ -390,6 +400,9 @@ class OscilloscopeManager:
                     self._log.warning("WAVEFORM:DATA? attempt %d failed: %s", attempt + 1, e)
                     time.sleep(RETRY_DELAY_SEC)
 
+            
+
+            raw_data = cast(np.ndarray, raw_data)
             y_data = (raw_data-y_ref) * y_incr + y_orig
 
             if len(y_data) == 0:
@@ -451,7 +464,7 @@ class OscilloscopeManager:
         while armed_status != 1 and (time.perf_counter() - start_time) <= max_acq_wait_sec:
             time.sleep(poll_interval_sec)
             try:
-                query_result = self._query_with_retry(":AER?")
+                query_result = cast(str, self._query_with_retry(":AER?"))
                 armed_status = int(query_result.strip().split()[0] if query_result.strip() else 0)
                 if armed_status == 1:
                     acq_started = True
@@ -464,7 +477,7 @@ class OscilloscopeManager:
         if not acq_started:
             print("Oscilloscope did not arm within the maximum wait time.")
             try:
-                self.scope.clear()
+                cast(MessageBasedResource, self.scope).clear()
             except Exception:
                 pass
             self.clear_error_queue()
@@ -484,12 +497,15 @@ class OscilloscopeManager:
         success = False
         acq_complete_bool = False
         run_state = ""
+        acq_pct = 0
+        ter_str = ""
+        run_state_bool = False
 
         while not success and (time.perf_counter() - start_time) <= max_acq_wait_sec:
             time.sleep(poll_interval_sec)
             try:
-                acq_complete_str = self._query_with_retry(":ACQuire:COMPlete?").strip()
-                run_state = self._query_with_retry(":RSTATE?").strip().upper()
+                acq_complete_str = cast(str, self._query_with_retry(":ACQuire:COMPlete?")).strip()
+                run_state = cast(str, self._query_with_retry(":RSTATE?")).strip().upper()
 
                 try:
                     acq_pct = int(acq_complete_str.split()[0])
@@ -501,7 +517,7 @@ class OscilloscopeManager:
 
                 # Only read :TER? when acquisition appears done (TER is cleared on read)
                 if acq_complete_bool and run_state_bool and triggered is False:
-                    ter_str = self._query_with_retry(":TER?").strip()
+                    ter_str = cast(str, self._query_with_retry(":TER?")).strip()
                     triggered = ter_str == "+1"
                     #print(f"Triggered status from :TER?: {ter_str} -> {triggered}")
 

@@ -8,7 +8,7 @@ Date: 23 June 2025
 
 import os
 import numpy as np
-import numpy as np
+from typing import cast, Any
 import pandas as pd
 import matplotlib.pylab as plt
 from scipy.interpolate import interp1d
@@ -47,7 +47,7 @@ class RabiFreqVoltageConverter:
 
         # Interpolation: voltage -> rabi (safe to use raw x and y)
         self._volt_to_rabi_interp = interp1d(
-            self.x, self.y, kind='cubic', fill_value="extrapolate", assume_sorted=False
+            self.x, self.y, kind='cubic', fill_value=cast(Any, "extrapolate"), assume_sorted=False
         )
 
         # Interpolation: rabi -> voltage — must sort and deduplicate
@@ -59,7 +59,7 @@ class RabiFreqVoltageConverter:
         self.sorted_x = df_clean['amp'].values
 
         self._rabi_to_volt_interp = interp1d(
-            self.sorted_y, self.sorted_x, kind='cubic', fill_value="extrapolate", assume_sorted=True
+            self.sorted_y, self.sorted_x, kind='cubic', fill_value=cast(Any, "extrapolate"), assume_sorted=True
         )
 
         # Plot and save

@@ -27,7 +27,7 @@ import re
 import collections.abc
 import pandas as pd
 import _tkinter
-from typing import List, Tuple, Dict, Any, Optional, TypeVar, Generic
+from typing import List, Tuple, Dict, Any, Optional, TypeVar, Generic, cast
 import pyvisa
 from configobj import ConfigObj
 from numpy import trapz
@@ -35,10 +35,15 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import re, ast
 
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \
-    WX218x_SequenceAdvanceMode, WX218x_TraceMode, WX218x_TriggerImpedance, WX218x_TriggerMode,\
-    WX218x_TriggerSlope, WX218x_Waveform 
+# from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+# from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \
+#     WX218x_SequenceAdvanceMode, WX218x_TraceMode, WX218x_TriggerImpedance, WX218x_TriggerMode,\
+#     WX218x_TriggerSlope, WX218x_Waveform 
+# from instruments.WX218x.awg_control2 import configure_awg # updated version
+# #from lab_control_functions.awg_control_functions_psh import run_awg # old version
+# from lab_control_functions.awg_control_functions_single_psh import run_awg_single
+
+
 from instruments.quTAU.TDC_quTAU import TDC_quTAU
 from instruments.quTAU.TDC_BaseDLL import TDC_SimType, TDC_DevType, TDC_SignalCond
 from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
@@ -46,9 +51,6 @@ from instruments.pyicic.IC_Exception import IC_Exception
 from instruments.pyicic.IC_Camera import IC_Camera
 from instruments.TF930 import TF930
 
-from instruments.WX218x.awg_control2 import configure_awg # updated version
-#from lab_control_functions.awg_control_functions_psh import run_awg # old version
-from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 
 from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingConfiguration,\
     PhotonProductionConfiguration, MotFluoresceConfiguration,\
@@ -57,6 +59,7 @@ from classes.ExperimentalConfigs import GenericConfiguration, AbsorbtionImagingC
 from classes.DAQ import DAQ_controller, DaqPlayException, DAQ_channel
 from classes.Sequence import IntervalStyle, Sequence
 import instruments.Oscilloscopes.keysight_3104A as osc
+import instruments.WX218x.awg_manager as awg_manager
 
 
 
@@ -171,10 +174,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         
         # If the trigger levs have not been set, default them to 0 and the maximum permitted value on the camera/imaging channels.
         if c.camera_trig_levs == None:
-            c.camera_trig_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1])
+            c.camera_trig_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1]) #type:ignore
                                            for ch in daq_controller.getChannels() if ch.chNum == c.camera_trig_ch))
         if c.imag_power_levs == None:
-            c.imag_power_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1])
+            c.imag_power_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1]) # type:ignore
                                            for ch in daq_controller.getChannels() if ch.chNum == c.imag_power_ch))
             
             
@@ -340,6 +343,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __takeImages(self, save_raw_images):
             img_arrs = []
             bkg_arrs = []
+            img_dir = None
+            bkg_dir = None
             
                  
             for seq, bkg_seq, label in zip(self.sequences, self.bkg_sequences, self.sequence_labels):
@@ -456,13 +461,13 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             print("No images to save.")
         elif self.corr_img_arrs == None:
             # this code runs when only a background experiment has been run
-            for bkg_img, label in zip(self.ave_bkg_arrs, self.sequence_labels):
+            for bkg_img, label in zip(cast(List[Any], self.ave_bkg_arrs), self.sequence_labels):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
                     bkg_img = (255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)).astype(np.uint8)
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
         else:
-            for img, bkg_img, label in zip(self.corr_img_arrs, self.ave_bkg_arrs, self.sequence_labels):
+            for img, bkg_img, label in zip(self.corr_img_arrs, cast(List[Any], self.ave_bkg_arrs), self.sequence_labels):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
                     bkg_img = (255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)).astype(np.uint8)
@@ -481,7 +486,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def getResults(self):
         if not self.results_ready:
             raise Exception('The abosrbtion imaging experiment has not been run yet.')
-        print('Returning absorbtion imaging results.', len(self.ave_bkg_arrs))
+        print('Returning absorbtion imaging results.', len(cast(List[Any], self.ave_bkg_arrs)))
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
     
     def close(self):
@@ -498,7 +503,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         print('...closed')
     
         super().daq_cards_off()  
-    
+
+r"""
+Needs to be reworked to use the new AWG manager.
+
 class PhotonProductionExperiment(GenericExperiment):
     
     def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, photon_production_configuration:PhotonProductionConfiguration):
@@ -961,6 +969,8 @@ class PhotonProductionExperiment(GenericExperiment):
         print(f'Setting reload_time to {reload_time}ms')
         self.mot_reload_time = reload_time
         
+"""
+
 class MotFluoresceExperiment(GenericExperiment):
     """
     Experimental runner for the mot fluoresce experiment.
@@ -1120,15 +1130,12 @@ class MotFluoresceExperiment(GenericExperiment):
         Configures the AWG for the experiment, loads data for all channels
         """
         start_time = time.time()
-        rm = pyvisa.ResourceManager()
-        awg = rm.open_resource("USB0::0x168C::0x1284::0000215582::0::INSTR")   
-        awg.write(":SYSTem:REBoot") # type: ignore
+        awg = awg_manager.AWGManager()
+        awg.reboot()
         awg.close()
-        if self.awg_config_single is not None:
-            print("Configuring single AWG")
-            run_awg_single(self.awg_config_single)
 
-        configure_awg(self.awg_config)
+        awg.configure_awg(self.awg_config)
+
         print("AWG configured in {}s".format(time.time()-start_time))
 
 
@@ -1457,6 +1464,8 @@ class PhotonProductionDataSaver(object):
         data = []
         data_buffer = []
 #         sti_lens = []
+        t_stirap_0 = None
+        ch = None
 
         try:
             for t, ch in zip(timestamps, channels):
@@ -1469,6 +1478,7 @@ class PhotonProductionDataSaver(object):
                     data_buffer = []
                 else:
 #                     print 'DATA', t, ch
+                    assert t_stirap_0 is not None, "Unknown error has occurred. t_stirap_0 is None."
                     data_buffer.append((ch, t-t_stirap_0, t, pulse_number))
         except _tkinter.TclError as err:
             print(t, ch)
@@ -1500,192 +1510,16 @@ class PhotonProductionDataSaver(object):
             
             if callable(log_input):
                 log_input = log_input()
-            if type(log_input) in [list, tuple]:
+
+            if isinstance(log_input, (list, tuple)):
                 def flatten(l):
                     for el in l:
-                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
-                            # https://stackoverflow.com/questions/60743762/basestring-equivalent-in-python3-str-and-string-types-from-future-and-six-not
-                            for sub in flatten(el):
-                                yield sub
+                        # Check for iterable but exclude strings (to avoid infinite recursion on chars)
+                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, (str, bytes)):
+                             yield from flatten(el)
                         else:
-                            yield el
-                log_input = ' '.join([str(x) for x in flatten([x() if callable(x) else x for x in log_input])])
-
-            f = open(self.log_file, 'w')
-            f.write('Throw {0}: {1}\n'.format(throw_number, log_input))
-            f.close()
-            print('__log: closed log file')
-        else:
-            print('__log: Can not write. No log file exists.')
-
-class MOTFluorescenceDataSaver(object):
-    '''
-    This object takes raw data from the PD Measuring MOT fluorescnece, parses it into our desired format and saves
-    it to file.  It also enables all of the parsing/saving to be done in a separate thread
-    so as to not hold up the experiment.
-    '''
-    def __init__(self, scope_timebase, scope_marker_channel, save_location, data_queue=None, create_log=False):
-        '''
-        Initialise the object with the information it will need for saving.
-        '''
-        self.scope_timebase = scope_timebase
-        self.scope_marker_channel = scope_marker_channel
-        
-        self.experiment_time = time.strftime("%H-%M-%S")
-        self.experiment_date = time.strftime("%y-%m-%d")
-        
-        self.save_location = os.path.join(save_location, self.experiment_date, self.experiment_time)
-        self.save_location_raw = os.path.join(self.save_location, 'raw')
-        
-        if not os.path.exists(self.save_location):
-            os.makedirs(self.save_location)
-        if not os.path.exists(self.save_location_raw):
-            os.makedirs(self.save_location_raw)
-            
-        if create_log:
-            self.log_file = os.path.join(self.save_location, 'log.txt')
-            print('Log file at {0}'.format(self.log_file))
-        else:
-            self.log_file = None
+                             yield el
                 
-        self.data_queue = data_queue
-            
-        self.threads = []
-        
-    def save_in_thread(self,timestamps, channels, valid, throw_number):
-        '''
-        Save the data in a new thread.
-        '''
-        thread = threading.Thread(name='Throw {0} save'.format(throw_number),
-                                  target=self.__save,
-                                  args=(timestamps, channels, valid, throw_number))
-        thread.start()
-        self.threads.append(thread)
-        return thread
-    
-    def log_in_thread(self, log_input, throw_number):
-        thread = threading.Thread(name='Throw {0} save'.format(throw_number),
-                                  target=self.__log,
-                                  args=(log_input, throw_number))
-        thread.start()
-        self.threads.append(thread)
-        return thread
-        
-    def combine_saves(self):
-        '''
-        Combine all the individual files from each MOT throw into a single file.
-        '''
-        t = 0
-        # Check only the main thread is still running i.e. nothing is stills saving.
-        while True in [thread.is_alive() for thread in self.threads]:
-            time.sleep(1)
-            t+=1
-            if t>60:
-                print("Timed-out waiting for save-threads to finish. Abandoning combine_saves().")
-                return
-            
-        combined_file = open(os.path.join(self.save_location, self.experiment_time + '.txt'), 'w')
-        for fname in os.listdir(self.save_location_raw):
-            if fname.endswith(".txt"):
-                data_file = open(os.path.join(self.save_location_raw, fname))
-                combined_file.write(data_file.read())
-                data_file.close()
-                combined_file.write('nan,nan,nan,nan\n') # Batman!
-        combined_file.close()
-        
-    def __save(self, timestamps, channels, valid, throw_number):
-        '''
-        Save the data returned from the TDC.
-        '''
-        print('__save iter', throw_number)
-        
-        t = time.time()
-#         print 'Num markers:', channels.tolist().count(self.tdc_marker_channel)
-        try:
-#             marker_index = channels.tolist().index(self.tdc_marker_channel)
-            first_marker_index = next(i for i,elm in enumerate(channels.tolist()) if elm==self.tdc_marker_channel)
-            last_marker_index  = next(len(channels)-1-i for i,elm in enumerate(reversed(channels.tolist())) if elm==self.tdc_marker_channel)
-        except ValueError as err:
-            print("__save(throw={0}) Nothing measured on marker channel - so nothing to save.".format(throw_number))
-            print(err)
-            return
-        print('__save: found first marker index ({0} sec)'.format(time.time()-t))
-        x_0 = timestamps[first_marker_index]
-#         t_mot_0 = x_0*self.tdc_timebase
-#         timestamps = [(x-x_0)*self.tdc_timebase for x in timestamps[marker_index+1:] if x >= 0]
-#         channels = [x for x in channels[marker_index+1:] if x >= 0]
-        
-        # This step essentially does two things:
-        #     1. Converts all the timestamps to picoseconds by *tdc_timebase.
-        #     2. Makes t=0 be the time of the initial marker pulse, i.e. writes
-        #        all timestamps in terms of the so-called mot-time.
-        t = time.time()
-        timestamps = [(x-x_0)*self.tdc_timebase for x in timestamps[first_marker_index:last_marker_index+1]]
-        channels = channels[first_marker_index:last_marker_index+1]
-#         print 'create temp data dump'
-#         t = open(os.path.join(self.save_location, 'temp.txt'), 'w')
-#         for line in zip(timestamps, channels):
-#             t.write('{0},{1}\n'.format(*line))
-#         t.close()
-#         
-        print('__save: selected valid timestamps and channels')
-        t = time.time()
-        pulse_number = 0
-        data = []
-        data_buffer = []
-#         sti_lens = []
-
-        try:
-            for t, ch in zip(timestamps, channels):
-                if ch == self.tdc_marker_channel:
-#                     print 'MARKER', t, ch
-                    t_stirap_0 = t
-                    pulse_number += 1
-                    data += data_buffer
-    #                 sti_lens.append(len(data_buffer))
-                    data_buffer = []
-                else:
-#                     print 'DATA', t, ch
-                    data_buffer.append((ch, t-t_stirap_0, t, pulse_number))
-        except _tkinter.TclError as err:
-            print(t, ch)
-            raise err
-        
-        if pulse_number > 25000:
-            print('__save: Too many pulses recorded ({0}) - returning.'.format(pulse_number))
-            return
-        
-#         print len(data), sti_lens
-        print('__save: creating file')
-        f = open(os.path.join(self.save_location_raw, '{0}.txt'.format(throw_number)), 'w')
-        print('__save: writing file')
-        for line in data:
-            f.write('{0},{1},{2},{3}\n'.format(*line))
-        print('__save: closing file')
-        f.close()
-        
-        # If a push data function is configured, throw it now
-        if self.data_queue:
-            print('Queuing  data')
-            self.data_queue.put((throw_number, data))
-        
-        print('iter {0}: counts {1}, pulses recorded {2}'.format(throw_number, len(data), pulse_number))
-
-    def __log(self, log_input, throw_number):
-        if self.log_file != None:
-            print('__log: writing to log')
-            
-            if callable(log_input):
-                log_input = log_input()
-            if type(log_input) in [list, tuple]:
-                def flatten(l):
-                    for el in l:
-                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, str):# replaced basestring with str as an update from python 2 python 3. See
-                            # https://stackoverflow.com/questions/60743762/basestring-equivalent-in-python3-str-and-string-types-from-future-and-six-not
-                            for sub in flatten(el):
-                                yield sub
-                        else:
-                            yield el
                 log_input = ' '.join([str(x) for x in flatten([x() if callable(x) else x for x in log_input])])
 
             f = open(self.log_file, 'w')
@@ -1695,156 +1529,22 @@ class MOTFluorescenceDataSaver(object):
         else:
             print('__log: Can not write. No log file exists.')
 
-class MotFluoresceDataProcessor(object):
-    """
-    Processes oscilloscope data: detects triggers in the marker channel,
-    extracts PD signal after each trigger, and saves all readouts in binary format.
-    """
-    def __init__(self, collected_data, window=500e-6, save_dir='outputs'):
-        """
-        Initialize with marker and PD data, window size, and save path.
-        """
-        self.data = collected_data
-        self.window = window
-        self.save_dir = save_dir
-        os.makedirs(self.save_dir, exist_ok=True)
-        self.trigger_times = None
-        self.integrals_fl = []
-        self.ref_0 = []
-
-    def detect_triggers(self):
-        """
-        Detect all falling edges (triggers) in the marker channel.
-        """
-        signal = self.data['Channel 2 Voltage (V)'].values
-        trigger_val = (signal.max() + signal.min()) / 2
-        trigger_idxs = np.where((signal[:-1] > trigger_val) & (signal[1:] < trigger_val))[0] + 1
-        self.trigger_times = self.data['Time (s)'].iloc[trigger_idxs].values
-    
-    def process_readouts(self):
-        """
-        Processes the PD signals after each trigger and calculates the fluorescence integral.
-        """
-        if self.trigger_times is None:
-            self.detect_triggers()
-
-        time_array = self.data['Time (s)'].values
-        ch2_array = self.data['Channel 2 Voltage (V)'].values
-        ch4_array = self.data['Channel 4 Voltage (V)'].values
-
-        for t0 in self.trigger_times:
-            # Before Imaging Trigger
-            mask_pre = (time_array >= t0 - self.window) & (time_array < t0)
-            time_pre = time_array[mask_pre] - t0
-            ch2_pre = ch2_array[mask_pre]
-            ch4_pre = ch4_array[mask_pre]
-
-            self.plot_pre_trigger(time_pre, ch2_pre, ch4_pre, t0)
-
-            # After Imaging Trigger
-            mask_post = (time_array >= t0) & (time_array <= t0 + self.window)
-            time_post = time_array[mask_post] - t0
-            ch4_post = ch4_array[mask_post]
-
-            ch4_smooth = pd.Series(ch4_post).rolling(window=15, center=True, min_periods=1).mean().values
-
-            # Detection imaging start
-            mask_rise = (time >= 2.1e-3) & (time <= 2.3e-3)  # imaging starts at 2.1ms
-            ch3_smooth_rise = ch4_smooth[mask_rise]
-            time_rise = time[mask_rise]
-            deriv_rise = np.gradient(ch3_smooth_rise, time_rise)
-
-            idx_rise_rel = np.argmax(deriv_rise)
-            idx_rise = time_rise.index[idx_rise_rel]
-            t_rise = time.iloc[idx_rise]
-
-            # Detection imaging end
-            t_drop = t_rise + 450e-6
-
-            # Fluorescence
-            mask_fl = (time_post >= t_rise) & (time_post <= t_drop)
-            time_fl = time_post[mask_fl]
-            ch4_fl = ch4_post[mask_fl]
-
-            # Reference (background noise)
-            t_start_ref = t_drop + 50e-6
-            t_end_ref = time_post[-1]
-            mask_ref = (time_post >= t_start_ref) & (time_post <= t_end_ref)
-            ch4_ref = ch4_post[mask_ref]
-            average = np.mean(ch4_ref)
-
-            # Integrated area
-            area = trapz(ch4_fl - average, time_fl)
-
-            self.integrals_fl.append(area)
-            self.ref_0.append(average)
-
-        today = datetime.datetime.now().strftime("%d-%m")
-        output_path = os.path.join(self.save_dir, f'integrated_area_{today}.csv')
-        integrals_fl_df = pd.DataFrame({'integral': self.integrals_fl, 'ref 0': self.ref_0})
-        integrals_fl_df.to_csv(output_path, index=False)
-    
-    def plot_pre_trigger(self, time, ch1, ch4, t0):
-        """
-        Generates and saves a plot of the average signals of channels 1 and 4 before the trigger, 
-        as a reference of what is happening before the imaging.
-        """
-        fig, ax1 = plt.subplots(figsize=(11, 5))
-        ax1.plot(time, ch1, linewidth=1.5, color='tab:blue', label='CH 1')
-        ax1.set_xlabel(r'Time (s)')
-        ax1.set_ylabel(r'Intensity (a.u.) CH 1', color='tab:blue')
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-        ax2 = ax1.twinx()
-        ax2.plot(time, ch4, linewidth=1.5, color='tab:orange', label='CH 4')
-        ax2.set_ylabel(r'Intensity (a.u.) CH 4', color='tab:orange')
-        ax2.tick_params(axis='y', labelcolor='tab:orange')
-
-        fig.suptitle(r'Average of CH1 and CH4 before Imaging')
-        fig.tight_layout()
-        plot_filename = os.path.join(self.save_dir, 'pre_imaging_average.png')
-        plt.savefig(plot_filename)
-        plt.close()
-
-    def plot_post_trigger(self, time, ch1, ch4, t0, window_size=64):
-        """
-        Generates and saves a plot of CH1 and rolling-averaged CH4 after the trigger,
-        to visualize what happens during/after the imaging.
-        """
-        mask_post = time >= t0
-        time_post = time[mask_post]
-        ch1_post = ch1[mask_post]
-        ch4_post = ch4[mask_post]
-
-        ch4_smoothed = pd.Series(ch4_post).rolling(window=window_size, center=True, min_periods=1).mean()
-
-        fig, ax1 = plt.subplots(figsize=(11, 5))
-        ax1.plot(time_post, ch1_post, linewidth=1.5, color='tab:blue', label='CH 1')
-        ax1.set_xlabel(r'Time (s)')
-        ax1.set_ylabel(r'Intensity (a.u.) CH 1', color='tab:blue')
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-        ax2 = ax1.twinx()
-        ax2.plot(time_post, ch4_smoothed, linewidth=1.5, linestyle='--', color='tab:orange', label='CH 4 (smoothed)')
-        ax2.set_ylabel(r'Intensity (a.u.) CH 4 (smoothed)', color='tab:orange')
-        ax2.tick_params(axis='y', labelcolor='tab:orange')
-
-        fig.suptitle(r'Signals after Trigger: CH1 and Smoothed CH4')
-        fig.tight_layout()
-        plot_filename = os.path.join(self.save_dir, 'post_imaging_plot.png')
-        plt.savefig(plot_filename)
-        plt.close()
 
 
 class ExperimentalAutomationRunner(object):
+    daq_controller:DAQ_controller
+    experimental_automation_configuration:ExperimentSessionConfig
+    photon_production_configuration:PhotonProductionConfiguration
      
-    def __init__(self, daq_controller:DAQ_controller, experimental_automation_configuration:ExperimentSessionConfig , photon_production_configuration:PhotonProductionConfiguration):
+    def __init__(
+            self,
+            daq_controller:DAQ_controller,
+            experimental_automation_configuration:ExperimentSessionConfig,
+            photon_production_configuration:PhotonProductionConfiguration):
          
         self.daq_controller = daq_controller
-        self.experimental_automation_configuration:ExperimentSessionConfig  = None
-        c:ExperimentSessionConfig  = None
         self.experimental_automation_configuration = c = experimental_automation_configuration
-        self.photon_production_configuration = photon_production_configuration
+        self.photon_prod_cfg = photon_production_configuration
          
         self.experiements_to_run = len(c.automated_experiment_configurations)
         self.experiements_iter = 0
@@ -1873,13 +1573,14 @@ class ExperimentalAutomationRunner(object):
         self.experiements_iter += 1
          
         # Update MOT reload, iterations and, if necessary, the modulation frequencies.
-        self.photon_production_configuration.iterations = config.iterations
-        self.photon_production_configuration.mot_reload = config.mot_reload
+        self.photon_prod_cfg.iterations = config.iterations
+        self.photon_prod_cfg.mot_reload = config.mot_reload
         
         if config.modulation_frequencies != []:
             j=0
-            waveform:Waveform = None
-            for waveform in [self.photon_production_configuration.waveforms[i] for i in self.photon_production_configuration.waveform_sequence[0]]:
+            waveforms_list:List[Waveform] = [self.photon_prod_cfg.waveforms[i] for i in self.photon_prod_cfg.waveform_sequence[0]]
+            
+            for waveform in waveforms_list:
                 try:
                     waveform.mod_frequency = config.modulation_frequencies[j]
                     print('Set freq', config.modulation_frequencies[j])
@@ -1898,11 +1599,15 @@ class ExperimentalAutomationRunner(object):
             self._update_daq_channel_static_values(channel_number, value)
          
         # Return photon experiment
+        """
+        NOTE: PhotonProductionExperiment is currently broken. It needs to use the new awg_manager
+
         return (PhotonProductionExperiment(daq_controller=self.daq_controller,
                                           sequence=config.sequence,
-                                          photon_production_configuration=self.photon_production_configuration),
+                                          photon_production_configuration=self.photon_prod_cfg),
                 config.sequence_fname,
                 config.modulation_frequencies)
+        """
      
     def write_to_summary_file(self, text):        
 #         if not os.path.exists(self.summary_fname):
@@ -1927,15 +1632,15 @@ class ExperimentalAutomationRunner(object):
          
         start_val = self.daq_controller.channelValues[channel_number]
         if channel.isCalibrated:
-            start_val = channel.calibrationFromVFunc(start_val)
+            start_val = channel.calibrationFromVFunc(start_val) #type: ignore
          
         print('Updating channel {0} from {1} to {2}'.format(channel_number, start_val, float(new_val)),)
 
         for val in np.linspace(start_val, new_val, self.experimental_automation_configuration.daq_channel_update_steps):
             self.daq_controller.updateChannelValue(channel.chNum,
-                                                   val if not channel.isCalibrated else channel.calibrationToVFunc(val)) 
+                                                   val if not channel.isCalibrated else channel.calibrationToVFunc(val)) # type: ignore
             time.sleep(self.experimental_automation_configuration.daq_channel_update_delay)
-            print('.'),
+            print('.')
         print('channel {0} update.'.format(channel_number))
      
     def _reset_daq_channel_static_values(self, channels_to_ignore=[]):
@@ -1959,7 +1664,7 @@ class ExperimentalAutomationRunner(object):
                         return
                                 
                     orig_val = self.original_daq_channel_values[chNum]
-                    channel_values_to_reset.append((chNum, orig_val if not channel.isCalibrated else channel.calibrationFromVFunc(orig_val)))
+                    channel_values_to_reset.append((chNum, orig_val if not channel.isCalibrated else channel.calibrationFromVFunc(orig_val)))# type: ignore
         
         print('Resetting DAQ channels {0}'.format([x[0] for x in channel_values_to_reset]))
         for args in channel_values_to_reset:

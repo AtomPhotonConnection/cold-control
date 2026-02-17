@@ -18,7 +18,7 @@ from typing import Dict, List, Any, Tuple, Optional
 from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
       INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
 
-from instruments.WX218x.WX218x_awg import Channel
+#from instruments.WX218x.WX218x_awg import Channel
 from classes.Sequence import Sequence
 from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
       AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig , SingleExperimentConfig,\
@@ -577,9 +577,7 @@ class ExperimentConfigReader():
             else:
                 awg_settings_dict["config_path_single"] = None
 
-            default_sweep_path = self.config.get('default_sweep_config_path', None)
-            if default_sweep_path:
-                default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
+
             metadata = self.config.get('metadata') or {}
             ct = metadata.get('config_type', '').strip().lower()
             if ct == 'experiment':
@@ -600,9 +598,6 @@ class ExperimentConfigReader():
         else:
             awg_settings_dict = None
 
-        default_sweep_path = self.config.get('default_sweep_config_path', None)
-        if default_sweep_path:
-            default_sweep_path = resolve_config_path(str(default_sweep_path).strip(), get_config_root())
         metadata = self.config.get('metadata') or {}
         ct = getattr(metadata, 'get', lambda k, d='': d)('config_type', '').strip().lower()
         if ct == 'experiment':
@@ -619,7 +614,6 @@ class ExperimentConfigReader():
                                 cam_dict=camera_settings_dict,
                                 scope_dict=scope_settings_dict,
                                 awg_dict=awg_settings_dict,
-                                default_sweep_config_path=default_sweep_path,
                                 )
         
         
@@ -1082,7 +1076,7 @@ def _makePhotonProductionConfig():
     config['AWG'] = {}
     config['AWG']['sample rate'] = 1.25*10**9
     config['AWG']['burst count'] = 12500
-    config['AWG']['waveform output channel'] = Channel.CHANNEL_1
+    config['AWG']['waveform output channel'] = "channel 1"
     
     config['TDC'] = {}
     config['TDC']['counter channels'] = [0]
