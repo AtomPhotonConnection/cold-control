@@ -743,6 +743,14 @@ class PulseShapeExperimentRunner:
             else:
                 std_crop = None
 
+        elif points_difference == 0:
+            print("Measured signal has the same number of points as the theoretical signal, no cropping needed.")
+            voltage_crop = voltage_interp
+            std_crop = std_interp
+            
+        else:
+            raise ValueError(f"Measured signal has {abs(points_difference)} fewer points than the theoretical signal, which is unexpected. ")
+
         end_time = time.time()
         print(f"Timebase alignment and resampling took {end_time - start_time:.2f} seconds.")
 

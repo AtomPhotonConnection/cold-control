@@ -40,10 +40,11 @@ from __future__ import annotations
 import logging
 import struct
 import time
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import pyvisa as visa
+from pyvisa.resources import MessageBasedResource
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -98,8 +99,9 @@ class AWGManager:
 
         self.resource_id = resource_id
         self._log.info("Opening AWG: %s", resource_id)
-
-        self.inst = self.rm.open_resource(resource_id)
+        instrument = self.rm.open_resource(resource_id)
+        self.inst = cast(MessageBasedResource, instrument)
+        
         self.inst.timeout = timeout_ms
         self.inst.read_termination = "\n"
         self.inst.write_termination = "\n"
@@ -750,7 +752,7 @@ class AWGManager:
         5. (Waveforms must still be uploaded separately.)
         """
         #self.abort()
-        self.disable_all_channels(channels)
+        #self.disable_all_channels(channels)
         self.clear_all()
 
         self.configure_sample_rate(sample_rate)

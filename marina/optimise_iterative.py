@@ -18,6 +18,7 @@ Usage::
 
 import os
 import sys
+from typing import Optional
 import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -46,7 +47,7 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
     waveform = theoretical.copy()
     runner = PulseShapeExperimentRunner(cfg, waveform)
 
-    best_result: PulseShapeExperimentResult | None = None
+    best_result: Optional[PulseShapeExperimentResult] = None
     best_mse = float("inf")
 
     try:

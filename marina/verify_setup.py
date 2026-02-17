@@ -21,6 +21,8 @@ from pathlib import Path
 from configobj import ConfigObj
 import logging
 
+from typing import Dict
+
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
@@ -158,6 +160,14 @@ def check_new_modules():
     return all_ok
 
 
+def _cfg_section(cfg: ConfigObj, key: str) -> Dict[str, str]:
+    """Extract a config section with a runtime guard."""
+    section = cfg[key]
+    if not isinstance(section, dict):
+        raise TypeError(f"Config key '{key}' must be a section, got scalar: {section!r}")
+    return section
+
+
 def check_config_file(config_path):
     """Verify configuration file structure and validity."""
     print_header("Configuration File")
@@ -186,24 +196,28 @@ def check_config_file(config_path):
     
     # Check key parameters
     if 'Hardware' in config:
-        scope_id = config['Hardware'].get('scope_id')
+        hardware_section = _cfg_section(config, 'Hardware')
+        scope_id = hardware_section.get('scope_id')
         check_mark(scope_id, f"Hardware.scope_id set")
     
     if 'Channel' in config:
-        channel = config['Channel'].get('channel')
-        pulse = config['Channel'].get('pulse_type')
+        channel_section = _cfg_section(config, 'Channel')
+        channel = channel_section.get('channel')
+        pulse = channel_section.get('pulse_type')
         check_mark(channel and pulse, f"Channel config: channel={channel}, pulse={pulse}")
     
     if 'Optimization' in config:
-        amplitude = config['Optimization'].get('amplitude')
-        len_awg = config['Optimization'].get('len_awg')
+        optimization_section = _cfg_section(config, 'Optimization')
+        amplitude = optimization_section.get('amplitude')
+        #len_awg = optimization_section.get('len_awg')
         warn_mark(
             float(amplitude or 0) > 1.0,
             f"Amplitude {amplitude} (typical: 0.1-0.5)"
         )
     
     if 'Measurement' in config:
-        num_meas = config['Measurement'].get('num_measurements')
+        measurement_section = _cfg_section(config, 'Measurement')
+        num_meas = measurement_section.get('num_measurements')
         check_mark(int(num_meas or 0) > 0, f"num_measurements set: {num_meas}")
     
     return all_ok
@@ -214,7 +228,7 @@ def check_visa_devices():
     print_header("VISA Hardware Detection")
     
     try:
-        import visa
+        import pyvisa as visa
     except ImportError:
         check_mark(False, "PyVISA installed (required for hardware)")
         return False
@@ -243,14 +257,15 @@ def check_oscilloscope_connection(config_path):
     
     try:
         config = ConfigObj(str(config_path))
-        scope_id = config['Hardware'].get('scope_id')
+        hardware_section = _cfg_section(config, 'Hardware')
+        scope_id = hardware_section.get('scope_id')
         
         if not scope_id:
             check_mark(False, "scope_id not configured")
             return False
         
         try:
-            from instruments.agilent_9000 import OscilloscopeManager
+            from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
             
             print(f"  Attempting to connect to Agilent 9000: {scope_id}")
             scope = OscilloscopeManager(scope_id)
@@ -300,7 +315,8 @@ def check_output_directory(config_path):
     
     try:
         config = ConfigObj(str(config_path))
-        output_dir = config['Paths'].get('output_dir', './optimization_results')
+        paths_section = _cfg_section(config, 'Paths')
+        output_dir = paths_section.get('output_dir', './optimization_results')
         
         output_path = Path(output_dir)
         
