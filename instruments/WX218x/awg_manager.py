@@ -88,14 +88,13 @@ class AWGManager:
 
     def __init__(
         self,
-        resource_id: Optional[str] = None,
+        resource_id: str = "USB0::0x168C::0x1284::0000215582::0::INSTR",
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
     ) -> None:
         self._log = logging.getLogger(__name__)
         self.rm = visa.ResourceManager()
 
-        if resource_id is None:
-            resource_id = self._auto_detect()
+
 
         self.resource_id = resource_id
         self._log.info("Opening AWG: %s", resource_id)
@@ -109,17 +108,6 @@ class AWGManager:
         idn = self._query("*IDN?")
         print(f"Connected to AWG: {idn}")
 
-    def _auto_detect(self) -> str:
-        """Find the first VISA resource whose address contains the manufacturer ID."""
-        resources = self.rm.list_resources()
-        self._log.debug("VISA resources: %s", resources)
-        try:
-            return next(r for r in resources if MANUFACTURER_ID in r)
-        except StopIteration:
-            raise RuntimeError(
-                f"No AWG with manufacturer ID {MANUFACTURER_ID} found. "
-                f"Connected resources: {resources}"
-            )
 
     # ----- low-level I/O (with retries, mirroring OscilloscopeManager) ------
 
@@ -186,6 +174,18 @@ class AWGManager:
             return True
         except Exception:
             return False
+        
+    def check_errors(self):
+        """Check for instrument errors"""
+        try:
+            error = self.inst.query(':SYST:ERR?')
+            if not error.startswith('0,'):
+                print(f"Instrument error: {error.strip()}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error checking instrument status: {e}")
+            return False
 
     # =====================================================================
     # High-level instrument commands
@@ -215,18 +215,6 @@ class AWGManager:
             self.rm.close()
         except Exception as exc:
             self._log.warning("Error closing resource manager: %s", exc)
-
-    def check_errors(self):
-        """Check for instrument errors"""
-        try:
-            error = self.inst.query(':SYST:ERR?')
-            if not error.startswith('0,'):
-                print(f"Instrument error: {error.strip()}")
-                return False
-            return True
-        except Exception as e:
-            print(f"Error checking instrument status: {e}")
-            return False
     
 
     # ----- run control (abort / initiate / enable) --------------------------
@@ -283,13 +271,6 @@ class AWGManager:
         self.select_channel(channel)
         self._write(":OUTP OFF")
 
-    def enable_all_channels(self, channels: Sequence[int] = (1, 2, 3, 4)) -> None:
-        for ch in channels:
-            self.enable_channel(ch)
-
-    def disable_all_channels(self, channels: Sequence[int] = (1, 2, 3, 4)) -> None:
-        for ch in channels:
-            self.disable_channel(ch)
 
     # ----- coupling ----------------------------------------------------------
 
@@ -651,14 +632,13 @@ class AWGManager:
 
     def configure_marker(
         self,
-        marker: int = 1,
+        marker: int = 2,
         position: int = 0,
         width: int = 4,
         high_level: float = 1.2,
-        low_level: float = 0.0,
         delay: float = 0.0,
         source: str = "WAVE",
-        # channel: Optional[int] = None,
+        channel: Optional[int] = None,
     ) -> None:
         """
         Configure a marker output on the currently selected (or specified)
@@ -674,8 +654,6 @@ class AWGManager:
             Marker pulse width in waveform points (must be ≥ 2, even).
         high_level : float
             Marker high voltage (0.5 … 1.2 V).
-        low_level : float
-            Marker low voltage.
         delay : float
             Delay from SYNC in seconds (0 … 3 ns).
         source : str
@@ -683,8 +661,8 @@ class AWGManager:
         channel : int or None
             If given, ``select_channel`` is called first.
         """
-        # if channel is not None:
-        #     self.select_channel(channel)
+        if channel is not None:
+            self.select_channel(channel)
 
         if marker not in (1, 2):
             raise ValueError(f"Marker must be 1 or 2, got {marker}.")

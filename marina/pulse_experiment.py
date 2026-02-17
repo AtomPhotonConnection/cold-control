@@ -420,7 +420,7 @@ class PulseShapeExperimentRunner:
 
     # ----- hardware helpers --------------------------------------------------
 
-    def _connect_awg(self) -> AWGManager:
+    def _connect_awg(self, awg_id: str = "USB0::0x168C::0x1284::0000215582::0::INSTR") -> AWGManager:
         """Return the existing AWGManager or create a new connection."""
         if self.awg is not None:
             try:
@@ -429,7 +429,7 @@ class PulseShapeExperimentRunner:
             except Exception:
                 pass
         logger.info("Connecting to AWG...")
-        self.awg = AWGManager()  # auto-detects by manufacturer ID
+        self.awg = AWGManager(resource_id=awg_id)
         return self.awg
 
     def _connect_scope(self) -> OscilloscopeManager:
@@ -521,7 +521,7 @@ class PulseShapeExperimentRunner:
         )
 
         # --- Connect to AWG --------------------------------------------------
-        awg = self._connect_awg()
+        awg = self._connect_awg(self.config.awg_id)
         awg.reset()
 
         ch_names = cfg.waveform_output_channels
@@ -529,7 +529,7 @@ class PulseShapeExperimentRunner:
 
         # 1. Safe state: stop output and disable all channels
         #awg.abort() # I don't think you need to do this
-        awg.disable_all_channels(ch_ints)
+        #awg.disable_all_channels(ch_ints)
         awg.clear_all()
 
         # 2. Global configuration
@@ -542,7 +542,7 @@ class PulseShapeExperimentRunner:
         for ch_int in ch_ints:
             awg.select_channel(ch_int)
             awg.set_burst_count(cfg.burst_count)
-            awg.set_continuous(True)#False)# in future we'll want this to be false
+            awg.set_continuous(True)#False)  # in future we'll want this to be false
             awg.set_trigger_level(1.6)  # volts, adjust as needed
             awg.set_trigger_source("EXT")  # external trigger
             awg.set_trigger_slope("POS")  # trigger on rising edge
@@ -616,20 +616,20 @@ class PulseShapeExperimentRunner:
 
         print("All waveforms uploaded and amplitudes set")
         # # --- Configure markers -----------------------------------------------
-        # #marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
-        # # NOTE: marker width not being used currently
-        # marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
-        # for ch_int in ch_ints:
-        #     if ch_int in marked_ch_ints:
-        #         print(f"Configuring marker on channel {ch_int} with width {10} samples")
-        #         awg.configure_marker(
-        #             marker=1,
-        #             position=0,
-        #             width=10,
-        #             high_level=1.2,
-        #             low_level=0.0
-        #         )
-        #         awg.wait_opc()
+        #marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
+        # NOTE: marker width not being used currently
+        #marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
+        for ch_int in [2]:
+            if ch_int in [2]:#[self._ch_int(c) for c in cfg.marked_channels if c]:
+                print(f"Configuring marker on channel {ch_int} with width {10} samples")
+                awg.configure_marker(
+                    marker=2,
+                    width=4,
+                    high_level=1.2,
+                    source="USER",
+                    delay=1e-9
+                )
+                awg.wait_opc()
 
         # --- Enable outputs and arm ------------------------------------------
         for ch_int in ch_ints:

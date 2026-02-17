@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 DEFAULT_WRITE_QUERY_RETRIES = 3
 RETRY_DELAY_SEC = 0.15
 COMMAND_DELAY_SEC = 0.05 # Increased slightly for 9000 series processing
-DEFAULT_TIMEOUT_MS = 60000  # 60 s for long acquisitions
+DEFAULT_TIMEOUT_MS = 10e3  # 10 s for long acquisitions
 
 
 class OscilloscopeManager:
