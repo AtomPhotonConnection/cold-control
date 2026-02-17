@@ -244,7 +244,7 @@ class AWGManager:
 
     def trigger(self) -> None:
         """Send a software trigger (``*TRG``). Only relevant in triggered mode."""
-        self._write("*TRG")
+        self._write(":TRIGger")
 
     # ----- channel selection & output state ----------------------------------
 
@@ -331,6 +331,8 @@ class AWGManager:
             ``"EXT"`` (external TRIG IN), ``"BUS"`` (software), ``"TIM"``
             (internal timer), ``"EVEN"`` (Event IN).
         """
+        if source not in ("EXT", "BUS", "TIM", "EVEN"):
+            raise ValueError(f"Invalid trigger source {source}.")
         self._write(f":TRIG:SOUR:ADV {source}")
 
     def set_trigger_level(self, level: float = 1.6) -> None:
@@ -677,15 +679,9 @@ class AWGManager:
         self._write(f":MARK:POS {position}")
         self._write(f":MARK:WIDT {width}")
         self._write(f":MARK:VOLT:HIGH {high_level}")
-        # Low level is not an independent SCPI command in the WX2184C marker
-        # subsystem — the low level is implicitly 0 V. But we keep the
-        # parameter for API completeness. If the hardware supports it in
-        # future firmware, uncomment:
-        # self._write(f":MARK:VOLT:LOW {low_level}")
+        
         self._write(f":MARK:DEL {delay}")
         self._write(f":MARK:STAT ON")
-        # Refresh marker (similar to the DLL's marker_refresh call)
-        self._write(f":MARK:REF ON")
         self._log.info(
             "Marker %d configured: pos=%d, width=%d, high=%.2f V",
             marker, position, width, high_level,
