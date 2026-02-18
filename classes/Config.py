@@ -626,7 +626,7 @@ class ExperimentConfigReader():
 
 
 
-    def get_mot_flourescence_configuration_sweep(self):
+    def get_mot_flourescence_configuration_sweep(self) -> Tuple[str, int, Dict[str, Any]]:
         """
         Method to extract the MOT fluorescence configuration for sweep experiments.
         First determines the sweep type, and then does different things from there.
@@ -727,6 +727,9 @@ class ExperimentConfigReader():
                 "pulse_times": pulse_times
             }
             return sweep_type, num_shots, sweep_dict
+        
+        else:
+            raise ValueError(f"Unknown sweep type: {sweep_type}")
 
     
     def get_absorbtion_imaging_configuration(self):

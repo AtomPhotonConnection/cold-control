@@ -506,8 +506,15 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
 r"""
 Needs to be reworked to use the new AWG manager.
-
+"""
 class PhotonProductionExperiment(GenericExperiment):
+    def __init__(self, daq_controller, sequence, photon_production_configuration):
+        self.forced_stop = False
+        self.data_saver:PhotonProductionDataSaver
+        self.iterations = 0
+        self.mot_reload_time = 0
+        pass
+"""
     
     def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, photon_production_configuration:PhotonProductionConfiguration):
         super().__init__(daq_controller, sequence, photon_production_configuration)
@@ -1564,7 +1571,7 @@ class ExperimentalAutomationRunner(object):
             print("DAQ output must be on to run an experiement - turning it on.")
             self.daq_controller.toggleContinuousOutput()
          
-    def get_next_experiment(self):
+    def get_next_experiment(self) -> Tuple[PhotonProductionExperiment, str, List[float]]:
          
         print('Configuring experiment {0} of {1}'.format(self.experiements_iter+1, self.experiements_to_run))
          
@@ -1599,15 +1606,15 @@ class ExperimentalAutomationRunner(object):
             self._update_daq_channel_static_values(channel_number, value)
          
         # Return photon experiment
-        """
-        NOTE: PhotonProductionExperiment is currently broken. It needs to use the new awg_manager
+        
+        #NOTE: PhotonProductionExperiment is currently broken. It needs to use the new awg_manager
 
         return (PhotonProductionExperiment(daq_controller=self.daq_controller,
                                           sequence=config.sequence,
                                           photon_production_configuration=self.photon_prod_cfg),
                 config.sequence_fname,
                 config.modulation_frequencies)
-        """
+
      
     def write_to_summary_file(self, text):        
 #         if not os.path.exists(self.summary_fname):

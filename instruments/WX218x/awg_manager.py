@@ -494,7 +494,6 @@ class AWGManager:
 
     def set_amplitude_all(self, amplitude: float) -> None:
         """Set amplitude for ALL channels."""
-        #NOTE: DOESN'T WORK??
         self._write(f":VOLT:ALL {amplitude}")
 
     def set_offset(self, channel: int, offset: float) -> None:
@@ -505,6 +504,15 @@ class AWGManager:
     def set_output_coupling(self, mode: str = "DC") -> None:
         """Select output amplifier path for all channels: ``"DC"`` or ``"HV"``."""
         self._write(f":OUTP:COUP:ALL {mode}")
+
+    # play a standard sine wave on a particular channel at a particular frequency
+    def play_sine_wave(self, channel: int, frequency: float, amplitude: float = 1.0) -> None:
+        """Configure a standard sine wave on *channel* with given frequency and amplitude."""
+        self.select_channel(channel)
+        self.set_output_mode("FIX")
+        self._write(f":FUNC:SHAP SIN")
+        self._write(f":FREQ {frequency}")
+        self._write(f":VOLT {amplitude}")
 
     # ----- trace / waveform memory -------------------------------------------
 
