@@ -7,6 +7,8 @@ import copy
 import numpy as np
 import math
 
+from typing import Dict, Any, List
+
 import tkinter as tk
 from tkinter import messagebox as tkMessageBox
 from tkinter import filedialog as tkFileDialog
@@ -16,6 +18,7 @@ from PIL import Image, ImageTk
 from classes.DAQ import DAQ_controller, DAQ_channel
 from classes.Config import DaqReader, DaqWriter
 import UI_classes.ToolTip_UI as tooltip
+from UI_classes.UI_helpers import ImageButton
 
 
 class DAQ_UI(tk.Frame):
@@ -26,7 +29,7 @@ class DAQ_UI(tk.Frame):
         self.parent = parent
         self.reader = DaqReader(config_fname)
         if not development_mode:
-            self.daq_controller = self.reader.load_DAQ_controller()
+            self.daq_controller: DAQ_controller = self.reader.load_DAQ_controller()
         else:
             print("Running in development mode...\nLoading Dummy DAQ cards")
             self.daq_controller = self.reader.load_dummy_DAQ_controller()
@@ -42,7 +45,7 @@ class DAQ_UI(tk.Frame):
         # Lay out all the tk obects created
         numCols = np.ceil(len(self.channelFrames)/8.0)
  
-        gridConfig = {'padx':5, 'pady':2}
+        gridConfig: Dict[str, Any] = {'padx':5, 'pady':2}
  
         c = 0
         for column in [self.channelFrames[i:i + int(len(self.channelFrames)/int(numCols))]
@@ -57,17 +60,17 @@ class DAQ_UI(tk.Frame):
             
         icon = Image.open("icons/config_icon.png").resize((20,20))
         icon = ImageTk.PhotoImage(icon)
-        self.configButton = tk.Button(self.Frame_Channels, image=icon, command=self.daqConfigButton, height=20, width=20)
-        self.configButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        self.configButton = ImageButton(self.Frame_Channels, image=icon, command=self.daqConfigButton, height=20, width=20)
+        self.configButton.image_ref = icon
         self.configButton.grid(row=gridSize[1], column=gridSize[0]-1, sticky=tk.E+tk.S,  **gridConfig)
         tooltip.createToolTip(self.configButton, 'Configure DAQ channels', openDelay=2000)
          
         icon = Image.open("icons/power_icon.png").resize((20,20))
         icon = ImageTk.PhotoImage(icon)
-        self.daqOutputButton = tk.Button(self.Frame_Channels, image=icon, bg='red', command=self.toggleDAQbutton, height=20, width=20)
-        self.daqOutputButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        self.daqOutputButton = ImageButton(self.Frame_Channels, image=icon, bg='red', command=self.toggleDAQbutton, height=20, width=20)
+        self.daqOutputButton.image_ref = icon # store the image as a variable in the widget to prevent garbage collection.
         self.daqOutputButton.grid(row=gridSize[1], column=0, sticky=tk.W+tk.S,  **gridConfig)
-        tooltip.createToolTip(self.configButton, 'Start/stop DAQ channels', openDelay=2000)    
+        tooltip.createToolTip(self.daqOutputButton, 'Start/stop DAQ channels', openDelay=2000)    
             
         cols, rows = self.Frame_Channels.grid_size()
         for c in range(0,cols):
@@ -75,15 +78,16 @@ class DAQ_UI(tk.Frame):
         for r in range(0, rows):
             self.Frame_Channels.grid_rowconfigure(r, weight=0, pad=0, uniform='rows')   
            
-#         self.dioFrames = []
-#         r = 0   
-#         for dio in sorted(self.daq_controller.getDIOs(), key=lambda dio: dio.dio_num):
-#             frame = Frame_DIOline(self.Frame_DIOs, dio)
-#             self.dioFrames.append(frame)
-#             frame.grid(row=r, column=0, **gridConfig)
-#             r+=1
-#             
-#         c = 0
+        #         self.dioFrames = []
+        #         r = 0   
+        #         for dio in sorted(self.daq_controller.getDIOs(), key=lambda dio: dio.dio_num):
+        #             frame = Frame_DIOline(self.Frame_DIOs, dio)
+        #             self.dioFrames.append(frame)
+        #             frame.grid(row=r, column=0, **gridConfig)
+        #             r+=1
+        #             
+        #         c = 0
+        r = 0
         self.dioFrames = [Frame_DIOline(self.Frame_DIOs, dio) for dio in 
                           sorted(self.daq_controller.getDIOs(), key=lambda dio: dio.dio_num)]
 
@@ -220,7 +224,7 @@ class Entry_DAQchannel(tk.Entry):
         
         self.widget = tk.Entry(self,justify=tk.CENTER)
         
-        self.widget.insert(0, self.chValue)
+        self.widget.insert(0, str(self.chValue))
         self.widget.bind("<FocusOut>", self.focusOut)
         self.widget.bind("<Return>",self.focusOut)
         self.widget.bind("<Up>", self.arrowKey)
@@ -261,7 +265,7 @@ class Entry_DAQchannel(tk.Entry):
             ndp = currentValue[::-1].find('.')
             
             self.widget.delete(0, tk.END)
-            self.widget.insert(0, round(float(currentValue) + iterator, ndp))
+            self.widget.insert(0, str(round(float(currentValue) + iterator, ndp)))
             self.focusOut(event)
             self.widget.icursor(cursorIndex)
   
@@ -278,7 +282,7 @@ class Entry_DAQchannel(tk.Entry):
             flashCol = 'red'
         finally:
             self.widget.delete(0, tk.END)
-            self.widget.insert(0, self.chValue)
+            self.widget.insert(0, str(self.chValue))
          
         if flashCol: self.flash(flashCol) 
         # Update channel value (after converting it to a voltage if the channel is calibrated)
@@ -287,12 +291,12 @@ class Entry_DAQchannel(tk.Entry):
             
 class DAQ_configuration_UI(object):
         
-    def __init__(self, parent, DAQ_controller):
+    def __init__(self, parent, daq_control: DAQ_controller):
         '''This object creates a copy of the DAQ controller as backup and then a top level window to edit the origional.
         On exit from the top level window the changes are either kept or we revert to the original controller.  The
         edited controller must then be fetched from this object by code that wishes to use it.'''
-        self.controllerOrig = copy.deepcopy(DAQ_controller)
-        self.controller = DAQ_controller
+        self.controllerOrig = copy.deepcopy(daq_control)
+        self.controller = daq_control
         # A flag for whether the rest of the UI needs to update due to changes made.
         self.triggerDAQUpdates = False
         
@@ -303,7 +307,7 @@ class DAQ_configuration_UI(object):
         self.configureForCurrentController()
         
         # Changes the close button to call my close function.
-        self.top.protocol('WM_DELETE_WINDOW', self.closeWindow);
+        self.top.protocol('WM_DELETE_WINDOW', self.closeWindow)
         
         self.top.grab_set()
         
@@ -360,7 +364,7 @@ class DAQ_configuration_UI(object):
     def getChannelsFrame(self, frameConfig={}, labelConfig={}):
         channelsFrame = tk.LabelFrame(self.top, text='Channels', **frameConfig)
                 
-        controllerChannels = self.controller.getChannels()
+        controllerChannels: List[DAQ_channel] = self.controller.getChannels()
                 
         channelOptions = [self.getChannelDropdownLabel(ch.chNum, ch.chName) for ch in sorted(controllerChannels, key=lambda x: x.chNum)]
         self.dropdownVar = tk.StringVar()
@@ -368,8 +372,8 @@ class DAQ_configuration_UI(object):
         self.dropdown = tk.OptionMenu(channelsFrame, self.dropdownVar, *channelOptions, command=lambda var=self.dropdownVar: self.channelSelected(var))
 
         channels={}
-        chLabGridOpts = {'sticky':tk.W}
-        chWidGridOpts = {'sticky':tk.E+tk.W}
+        chLabGridOpts:Dict[str, Any] = {'sticky':tk.W}
+        chWidGridOpts:Dict[str, Any] = {'sticky':tk.E+tk.W}
 
         for ch in controllerChannels:
             frame = tk.Frame(channelsFrame)
@@ -403,7 +407,10 @@ class DAQ_configuration_UI(object):
             chDefValLab = tk.Label(frame, text='Default value ({0}):'.format('V' if not ch.isCalibrated else ch.calibrationUnits), **labelConfig)
             chDefValLab.grid(row=r, column=0, **chLabGridOpts)
             chDefValWid = e = tk.Entry(frame)
-            e.insert(0, ch.defaultValue if not ch.isCalibrated else ch.calibrationFromVFunc(ch.defaultValue))
+            value = ""
+            if ch.calibrationFromVFunc is not None:
+                value = str(ch.calibrationFromVFunc(ch.defaultValue))
+            e.insert(0, str(ch.defaultValue) if not ch.isCalibrated else value)
             e.grid(row=r, column=1, **chWidGridOpts)
             r+=1
             
@@ -424,18 +431,18 @@ class DAQ_configuration_UI(object):
             
             icon = Image.open("icons/delete_icon.png").resize((20,20))
             icon = ImageTk.PhotoImage(icon)
-            removeCalibButton = tk.Button(calibFrame, image=icon,
+            removeCalibButton = ImageButton(calibFrame, image=icon,
                                     command = lambda ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid : self.removeCalibFileButton(ch, wid, defValLab, defValWid),
                                     height=16, width=16)
-            removeCalibButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+            removeCalibButton.image_ref = icon
             removeCalibButton.pack(side=tk.RIGHT)
             
             icon = Image.open("icons/folder_icon.png").resize((20,20))
             icon = ImageTk.PhotoImage(icon)
-            addCalibButton = tk.Button(calibFrame, image=icon,
+            addCalibButton = ImageButton(calibFrame, image=icon,
                                     command = lambda ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid : self.selectCalibFileButton(ch, wid, defValLab, defValWid),
                                     height=16, width=16)
-            addCalibButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
+            addCalibButton.image_ref = icon # store the image as a variable in the widget to prevent garbage collection.
             addCalibButton.pack(side=tk.RIGHT)
 
             calibFrame.grid(row=r, column=1, **chWidGridOpts)
@@ -515,77 +522,88 @@ class DAQ_configuration_UI(object):
         self.channelSelected(newChLabel)
         self._flash(wid,'green')
         
-    def chLimitsUpdated(self, event, ch, limWids, dVwid):
+    def chLimitsUpdated(self, event, ch: DAQ_channel, limWids:List[Any], dVwid):
         oldLimits = ch.chLimits
-        valid = True
         flash_col='green'
+
         # Check the new limits are valid (can be floats and min <= max)
         try:
-            newLimits = map(lambda x: float(x.get()), limWids)
-        except ValueError:
-            valid = False
-            flash_col='red'
-        if valid:
-            if newLimits[0] >= newLimits[1]:
-                valid = False
-                flash_col='red'
-        # If valid update channel
-        if valid:
+            newLimits = [float(w.get()) for w in limWids]
+
+            if not newLimits[0] <= newLimits[1]:
+                raise ValueError('Lower limit must be less than upper limit')
+            
+            # Must be valid if we got here
             ch.chLimits = newLimits
             if not newLimits[0] <= ch.defaultValue <= newLimits[1]:
                 dVwid.delete(0, tk.END)
-                dVwid.insert(0, np.clip(ch.defaultValue, *newLimits))
+                dVwid.insert(0, np.clip(ch.defaultValue, newLimits[0], newLimits[1]))
                 self.chDefValUpdated(None, ch, dVwid)
-        # revert changes
-        else:
+
+        except (ValueError, IndexError):
+            flash_col='red'
+
+            # revert changes
             for i in [0,1]:
                 limWids[i].delete(0,tk.END)
                 limWids[i].insert(0,oldLimits[i])
+
         for wid in limWids:
             self._flash(wid, flash_col)
         
-    def chDefValUpdated(self, event, ch, wid):
-        oldDefVal = ch.defaultValue
-        valid = True
-        flash_col='green'
-        try:
-            # Get the new value - it must be in V to be stored in the DAQ Channel so perform the conversion
-            # if the channel is calibrated.
-            newDefVal = float(wid.get()) if not ch.isCalibrated else ch.calibrationToVFunc(float(wid.get()))
-            if not ch.chLimits[0] <= newDefVal <= ch.chLimits[1]:
-                valid = False
-                flash_col='red'
-        except ValueError:
-            valid = False
-            flash_col='red'
+    def chDefValUpdated(self, event, ch: DAQ_channel, wid):
+            oldDefVal = ch.defaultValue
+            flash_col = 'green'
             
-        if valid:
-            ch.defaultValue = newDefVal
-            # if the channel is calibrated then the new value may have been clipped to the calibrated limits
-            # so update the widget to show this
-            if ch.isCalibrated:
+            try:
+                # 1. Extract and convert the input string to float once
+                raw_val = float(wid.get())
+                
+                # 2. Handle Calibration logic with explicit None checks for Pylance
+                if ch.isCalibrated and ch.calibrationToVFunc is not None:
+                    newDefVal = float(ch.calibrationToVFunc(raw_val))
+                else:
+                    newDefVal = raw_val
+
+                # 3. Validation against limits
+                if not (ch.chLimits[0] <= newDefVal <= ch.chLimits[1]):
+                    raise ValueError("Value out of bounds")
+
+                # 4. Success Path
+                ch.defaultValue = newDefVal
+                
+                # If calibrated, update the widget (in case the function modified/clipped the value)
+                if ch.isCalibrated and ch.calibrationFromVFunc is not None:
+                    wid.delete(0, tk.END)
+                    wid.insert(0, ch.calibrationFromVFunc(newDefVal))
+
+            except (ValueError, TypeError, IndexError):
+                # 5. Failure Path
+                flash_col = 'red'
                 wid.delete(0, tk.END)
-                wid.insert(0, ch.calibrationFromVFunc(newDefVal)) 
-        else:
-            wid.delete(0, tk.END)
-            if ch.isCalibrated:
-                wid.delete(0, tk.END)
-                wid.insert(0, ch.calibrationFromVFunc(oldDefVal))
-            else:
-                wid.insert(0, oldDefVal)
-        self._flash(wid, flash_col)
+                
+                if ch.isCalibrated and ch.calibrationFromVFunc is not None:
+                    wid.insert(0, ch.calibrationFromVFunc(oldDefVal))
+                else:
+                    wid.insert(0, oldDefVal)
+
+            self._flash(wid, flash_col)
     
-    def chUIVisUpdated(self, ch, var):
+    def chUIVisUpdated(self, ch: DAQ_channel, var):
         ch.isUIVisable = var.get()
         
-    def chCalibFileUpdated(self, event, ch, wid, defValLab, defValWid):
+    def chCalibFileUpdated(self, event, ch: DAQ_channel, wid, defValLab, defValWid):
         # Get the old value of the widget to restore it if the calibration fails.
         oldWidValue = ch.calibrationFname if ch.isCalibrated else 'None'
         try:
             ch.calibrate(wid.get())
             defValLab.configure(text = 'Default value ({0}):'.format(ch.calibrationUnits))
             defValWid.delete(0, tk.END)
-            defValWid.insert(0, ch.calibrationFromVFunc(ch.defaultValue))
+            if ch.calibrationFromVFunc is not None:
+                value = ch.calibrationFromVFunc(ch.defaultValue)
+            else:
+                raise ValueError('Calibration function is None')
+            defValWid.insert(0, value)
             flash_col='green'
         except IOError:
             # If the calibration failed as a bad file was selected, reset the widget to it's previous state
@@ -599,7 +617,7 @@ class DAQ_configuration_UI(object):
         wid.after(delay, lambda: wid.configure(bg='white'))
          
     def selectCalibFileButton(self, ch, wid, defValLab, defValWid):
-        fname = tkFileDialog.askopenfilename(master=self.top, title="Select a calibration file", initialdir="")
+        fname = tkFileDialog.askopenfilename(parent=self.top, title="Select a calibration file", initialdir="")
         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
         self.top.lift()
     

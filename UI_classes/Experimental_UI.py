@@ -4,29 +4,32 @@ Created on 13 Aug 2016
 @author: apc
 '''
 
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox as tkMessageBox
+
 import math
-from typing import Any, List, cast
-# import matlab.engine
+from typing import Any, Dict, List, Literal, cast
 import numpy as np
 import copy
 import re
 import os
 import glob
+import threading
+import queue
+import time
 
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox as tkMessageBox
+from tkinter import simpledialog
+from tkinter.scrolledtext import ScrolledText
+from tkinter import filedialog as tkFileDialog
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.backends._backend_tk import NavigationToolbar2Tk as NavigationToolbar2TkAgg
 import matplotlib.pyplot as plt
 
-from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader, get_config_root
-from UI_classes.ToolTip_UI import ToolTip
-from UI_classes.Sequence_UI import Sequence_UI
-from UI_classes.DAQ_UI import DAQ_UI
 from PIL import Image, ImageTk
 
+
+from classes.Config import ExperimentConfigReader, ExperimentalAutomationReader, get_config_root
 from classes.DAQ import DaqPlayException, DAQ_dio
 from classes.ExperimentalConfigs import PhotonProductionConfiguration, GenericConfiguration,\
      AwgConfiguration, TdcConfiguration, Waveform, MotFluoresceConfiguration,\
@@ -34,34 +37,20 @@ from classes.ExperimentalConfigs import PhotonProductionConfiguration, GenericCo
 from classes.ExperimentalRunner import PhotonProductionExperiment, AbsorbtionImagingExperiment,\
     ExperimentalAutomationRunner,  MotFluoresceExperiment, GenericExperiment,\
     MotFluoresceSweepExperiment
+
+from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
 from instruments.WX218x.awg_manager import AWGManager
 
-
-from classes.abcoll import Sequence
-from atom.event import Event
-from win32inetcon import STICKY_CACHE_ENTRY
-#from _hotshot import resolution
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
-from tkinter import StringVar
-from tkinter.scrolledtext import ScrolledText
+from UI_classes.UI_helpers import ImageButton
+from UI_classes.ToolTip_UI import ToolTip
+from UI_classes.Sequence_UI import Sequence_UI
+from UI_classes.DAQ_UI import DAQ_UI
 
 
-import threading
-import queue
-import time
-from msilib import init_database
 
-from tkinter import filedialog as tkFileDialog
-
-
-class ImageButton(tk.Button):
-    """Important class to prevent image being garbage collected.
-    Usage: 
-    self.addButton = ImageButton(..., image=icon)
-    self.addButton.image_ref=icon
-    """
-    image_ref: ImageTk.PhotoImage
-
+# =======================================================================================
+# MARK: Experimental UI
+# =======================================================================================
 
 class Experimental_UI(tk.LabelFrame):
 
@@ -129,7 +118,7 @@ class Experimental_UI(tk.LabelFrame):
             icon = ImageTk.PhotoImage(img.resize((30,30)))
             self.configure_flash_channel_button = ImageButton(self, image=icon, width=25, height=25, command=self.configure_flash_channel, background='light salmon')
             self.configure_flash_channel_button.image_ref = icon
-        self.flash_channel_config = {"channel":-1, "duration":1, "low_val":0, "high_val":10, "repeats":10}
+        self.flash_channel_config: Dict[str, Any] = {"channel":-1, "duration":1, "low_val":0, "high_val":10, "repeats":10}
 
         # Run sweep button and settings
         with Image.open("icons/play_icon.png") as img:
@@ -260,6 +249,7 @@ class Experimental_UI(tk.LabelFrame):
         spawns a new thread to save every iterations data to file.
         '''
         #loaded_experiment.configure() # The experiment should configure itself, so this is not needed.
+        experiment_live_ui = None
         
         if liveUI:
             assert isinstance(loaded_experiment, PhotonProductionExperiment), "Live UI only works with PhotonProductionExperiment objects."
@@ -271,7 +261,7 @@ class Experimental_UI(tk.LabelFrame):
         # Small delay to ensure the photon_production_experiment is flagged as live before the UI starts polling it.
         # Otherwise the UI can think it's already over and not update!
         time.sleep(0.1)
-        if liveUI:
+        if liveUI and experiment_live_ui is not None:
             experiment_live_ui.poll_live_data()
             # Wait for the live window to close!
             self.winfo_toplevel().wait_window(experiment_live_ui)
@@ -566,7 +556,7 @@ class Experimental_UI(tk.LabelFrame):
 
     
     def experiment_config_button(self):
-        if isinstance(self.photon_production_config, PhotonProductionConfiguration):
+        if isinstance(self.photon_production_config, PhotonProductionConfiguration) and False:
             config_UI = Photon_production_configuration_UI(self,
                             photon_production_configuration=self.photon_production_config)
             self.winfo_toplevel().wait_window(config_UI.top)
@@ -648,7 +638,7 @@ class Experimental_UI(tk.LabelFrame):
 
     def configure_flash_channel(self):
         print("Configuring flash channel")
-        inputs = tk.simpledialog.askstring("Flash channel configuration", "Enter channel, duration (s), low value, high value, repeats (comma separated):")
+        inputs = simpledialog.askstring("Flash channel configuration", "Enter channel, duration (s), low value, high value, repeats (comma separated):")
         if inputs:
             inputs = inputs.split(',')
             if len(inputs) != 5:
@@ -685,7 +675,9 @@ class Frame_ExperimentalParam(tk.Frame):
                  is made. If no function is to be called, set action to None.
                  e.g. action = lambda entry_value: myAction(entry_value)
     '''
-    def __init__(self, parent, label, initVal=1, dataType:type=int, helpText=None, action=None, state=tk.NORMAL, **kwargs):             
+    def __init__(self, parent, label, initVal=1, dataType:type=int, helpText=None, 
+                 action=None, state:Literal['normal', 'disabled', 'readonly']=tk.NORMAL,
+                 **kwargs):             
         tk.Frame.__init__(self, parent, **kwargs)
     
         self.label = label
@@ -697,7 +689,7 @@ class Frame_ExperimentalParam(tk.Frame):
         self.value = initVal
             
         self.entryWid = tk.Entry(self, width=7)
-        self.entryWid.insert(0, self.value)
+        self.entryWid.insert(0, str(self.value))
         self.entryWid.configure(state=state)
     
         self.labelWid = tk.Label(self, width=20, text=self.label, anchor='w')
@@ -739,7 +731,7 @@ class Frame_ExperimentalParam(tk.Frame):
                 self.action(self.value)
         except (ValueError, NameError):
             self.entryWid.delete(0, tk.END)
-            self.entryWid.insert(0, self.value)
+            self.entryWid.insert(0, str(self.value))
             self.flash('red')
     
     def flash(self, col, length=500):
@@ -781,11 +773,11 @@ class Frame_ExperimentalParam(tk.Frame):
                 if ndp < 0: ndp=0
                                                     
                 self.entryWid.delete(0, tk.END)
-                self.entryWid.insert(0, self.dataType(round(float(currentValue) + iterator, ndp)))
+                self.entryWid.insert(0, str(self.dataType(round(float(currentValue) + iterator, ndp))))
                 self.validate(event)
                 self.entryWid.icursor(cursorIndex)
  
-             
+"""DEPRECATED 
 class Photon_production_configuration_UI(object):
 
     def __init__(self, parent, photon_production_configuration:PhotonProductionConfiguration):
@@ -793,7 +785,6 @@ class Photon_production_configuration_UI(object):
         copy of the Photon Production Configuration.  A flag then exists to indicate whether the user wants these
         edits to be applied or not when the window is closed.'''
         
-        self
         
         # A flag that denotes is the user confirms or cancels edits they make in this window when exiting.    
         self.apply_changes = False
@@ -1000,7 +991,7 @@ class Photon_production_configuration_UI(object):
         self.closeWindow(False)
     
     def closeWindow(self, ask_to_apply_changes = True):
-        """Close the top window."""
+        \"""Close the top window.\"""
         if ask_to_apply_changes:
             apply_on_exit = tkMessageBox.askyesnocancel('Confirm exit',\
                                                       'Would you like to apply your changes before you exit?',
@@ -1017,7 +1008,8 @@ class Photon_production_configuration_UI(object):
         for wid in self.top.winfo_children():
             wid.destroy()
         self.top.destroy()
-            
+"""
+
 class Absorbtion_imaging_configuration_UI(object):
 
     def __init__(self, parent, absorbtion_imaging_configuration, daq_controller, sequence_length, sequence_t_step):
@@ -1050,17 +1042,16 @@ class Absorbtion_imaging_configuration_UI(object):
         labels, widgets, fns_to_bind = [], [], []
         
         controller_channels = self.daq_controller.getChannels()      
-        channel_opts_dict = dict(zip([self.getChannelDropdownLabel(ch.chNum, ch.chName) for ch in sorted(controller_channels, key=lambda x: x.chNum)],
+        channel_opts_dict: Dict[Any, Any] = dict(zip([self.getChannelDropdownLabel(ch.chNum, ch.chName) for ch in sorted(controller_channels, key=lambda x: x.chNum)],
                                      [x.chNum for x in controller_channels]))
         channel_opts = sorted(channel_opts_dict.keys(), key=channel_opts_dict.__getitem__)
         
         labels.append('Camera trigger channel:')
         self.c.camera_trig_ch_var = var = tk.StringVar()
         var.set(next(key for key,value in channel_opts_dict.items() if value==self.c.camera_trig_ch))
-        camera_trig_ch_dropdown = tk.OptionMenu(frame, var, *channel_opts, 
-                                                           command=lambda x=var: self.update_camera_trig_ch(camera_trig_levs_wid,
-                                                                                                            n_bkg_wid,
-                                                                                                            next(ch for ch in controller_channels if ch.chNum == channel_opts_dict[x])))
+        camera_trig_ch_dropdown = tk.OptionMenu(
+            frame, var, *channel_opts,command=lambda x=var: self.update_camera_trig_ch(
+                camera_trig_levs_wid, n_bkg_wid, next(ch for ch in controller_channels if ch.chNum == channel_opts_dict[x])))
         widgets.append(camera_trig_ch_dropdown)
         fns_to_bind.append(None)
         
@@ -1177,7 +1168,7 @@ class Absorbtion_imaging_configuration_UI(object):
         cam_gain_entry_wid = e = tk.Entry(cam_gain_frame)
         cam_gain_slider_wid = s = tk.Scale(cam_gain_frame, from_=self.c.cam_gain_lims[0], to=self.c.cam_gain_lims[1],
                                            command = lambda value: self.cam_gain_slider_focus_out(value, cam_gain_entry_wid),
-                                           orient=tk.HORIZONTAL, showvalue=0)   
+                                           orient=tk.HORIZONTAL, showvalue=False)   
         e.bind("<FocusOut>", lambda event: self.cam_gain_entry_focus_out(event.widget, cam_gain_slider_wid))
         e.bind("<Return>", lambda event: self.cam_gain_entry_focus_out(event.widget, cam_gain_slider_wid))    
         e.insert(0, self.c.cam_gain)
@@ -1197,7 +1188,7 @@ class Absorbtion_imaging_configuration_UI(object):
         cam_exposure_entry_wid = e = tk.Entry(cam_exposure_frame)
         cam_exposure_slider_wid = s = tk.Scale(cam_exposure_frame, from_=self.c.cam_exposure_lims[1], to=self.c.cam_exposure_lims[0], 
                                            command = lambda value: self.cam_exposure_slider_focus_out(value, cam_exposure_entry_wid),
-                                           orient=tk.HORIZONTAL, showvalue=0)   
+                                           orient=tk.HORIZONTAL, showvalue=False)   
         e.bind("<FocusOut>", lambda event: self.cam_exposure_entry_focus_out(event.widget, cam_exposure_slider_wid))
         e.bind("<Return>", lambda event: self.cam_exposure_entry_focus_out(event.widget, cam_exposure_slider_wid))   
         e.insert(0, self.exposure_to_string(1/self.c.cam_exposure))
@@ -1235,7 +1226,7 @@ class Absorbtion_imaging_configuration_UI(object):
         
         labels.append('Imaging freqs ({0}):'.format(calib_units))
         abs_img_freqs_entry_wid = e = tk.Entry(frame)
-        e.insert(0, [fromVFunc(freq) for freq in self.c.abs_img_freqs])
+        e.insert(0, str([fromVFunc(freq) for freq in self.c.abs_img_freqs]))
         widgets.append(e)
         fns_to_bind.append(lambda event: self.imaging_freqs_focus_out(event.widget, next(ch for ch in controller_channels if ch.chNum == self.c.abs_img_freq_ch)))
         
@@ -1245,7 +1236,7 @@ class Absorbtion_imaging_configuration_UI(object):
             abs_img_freq_ch_dropdown.configure(state=tk.DISABLED)
             abs_img_freqs_entry_wid.configure(state=tk.DISABLED)
         
-        lab_grid_opts = {'sticky':tk.W}
+        lab_grid_opts: Dict[str, Any] = {'sticky':tk.W}
         wid_grid_opts = {'sticky':tk.E+tk.W}
         lab_config = {'font':("Helvetica", 10, "bold"), 'padx':5}
         r=0
@@ -1336,6 +1327,7 @@ class Absorbtion_imaging_configuration_UI(object):
         '''
         Handles updates to the trigger level enteries.
         '''
+        new_trig_levs = None
         
 #         print 'configured:', configured_trigger_channel
         
@@ -1360,7 +1352,8 @@ class Absorbtion_imaging_configuration_UI(object):
             flash_col = 'red'
         # Update the display text and flash the widget accordingly.
         trig_levs_widget.delete(0, tk.END)
-        trig_levs_widget.insert(0, '{0}, {1}'.format(*new_trig_levs))
+        if new_trig_levs != None:
+            trig_levs_widget.insert(0, '{0}, {1}'.format(*new_trig_levs))
         trig_levs_widget.config(bg=flash_col)
         trig_levs_widget.after(500, lambda: trig_levs_widget.configure(bg='white'))
         
@@ -1370,9 +1363,9 @@ class Absorbtion_imaging_configuration_UI(object):
         than the total sequence length.
         '''
         new_width = default_value
+        info_msg = None
         try:
             flash_col = 'green'
-            info_msg = None
             new_width = float(widget.get())
             if new_width < self.sequence_t_step:
                 info_msg = u'A step change in the sequence must be longer than the smallest time step of the sequence (currently {0}\u03bcs).'.format(self.sequence_t_step)
@@ -1402,9 +1395,9 @@ class Absorbtion_imaging_configuration_UI(object):
         '''
         Ensure that all the times request for images are valid inputs and within the length of the sequence.
         '''
+        info_msg = None
         try:
             flash_col = 'green'
-            info_msg = None
             try:
                 entered_t_imgs = list(map(float, eval(widget.get())))
             except TypeError:
@@ -1471,9 +1464,9 @@ class Absorbtion_imaging_configuration_UI(object):
         '''
         Ensure that a list of valid channel numbers is entered and that the camera trigger and imaging flash channels are not turned off.
         '''
+        info_msgs = []
         try:
             flash_col = 'green'
-            info_msgs = []
             # Try to convert the entered string into a list of channel numbers
             try:
                 entered_bkg_off_channels = list(map(int, eval(widget.get())))
@@ -1688,10 +1681,10 @@ class GenericExperimentConfigUi():
             
         icon = Image.open("icons/folder_icon.png").resize((20,20))
         icon = ImageTk.PhotoImage(icon)
-        load_config_button = tk.Button(fname_frame, image=icon,
+        load_config_button = ImageButton(fname_frame, image=icon,
                                     command = lambda wid=fname_wid : self.load_config(wid),
                                     height=16, width=16)
-        load_config_button.image = icon # store the image as a variable in the widget to prevent garbage collection.
+        load_config_button.image_ref = icon # store the image as a variable in the widget to prevent garbage collection.
         load_config_button.pack(side=tk.RIGHT)
             
             
@@ -1717,14 +1710,13 @@ class GenericExperimentConfigUi():
         return top
 
     def load_config(self, fname_wid):
-        fname = tkFileDialog.askopenfilename(master=self.top, title="Choose a config file",\
+        fname = tkFileDialog.askopenfilename(parent=self.top, title="Choose a config file",\
                                             initialdir="configs")
         
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname!= '':
             self.conf_reader = ExperimentConfigReader(fname)
-            self.experiment_config: GenericConfiguration = None
-            self.experiment_config = self.conf_reader.get_correct_config()
+            self.experiment_config:GenericConfiguration = self.conf_reader.get_correct_config()
 
             fname_wid.updateEntry(fname)
             
@@ -1784,14 +1776,14 @@ class Photon_production_live_UI(tk.Toplevel):
         # add STOP button
         icon = Image.open("icons/stop_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.stop_button = tk.Button(self, image=icon, text="Stop experiment", command=self.stop_experiment, background='red', **butt_opts)
-        self.stop_button.image = icon # prevent garbage collection
+        self.stop_button = ImageButton(self, image=icon, text="Stop experiment", command=self.stop_experiment, background='red', **butt_opts)
+        self.stop_button.image_ref = icon # prevent garbage collection
 
         # add CLOSE button
         icon = Image.open("icons/delete_icon.png").resize((30,30))
         icon = ImageTk.PhotoImage(icon)
-        self.close_button = tk.Button(self, image=icon, text="Exit", command=self.close_window, background='red', state=tk.DISABLED, **butt_opts)
-        self.close_button.image = icon # prevent garbage collection
+        self.close_button = ImageButton(self, image=icon, text="Exit", command=self.close_window, background='red', state=tk.DISABLED, **butt_opts)
+        self.close_button.image_ref = icon # prevent garbage collection
         
         # Add a completed iterations counter
         self.completed_iterations_frame = f = tk.Frame(self)
@@ -1971,7 +1963,7 @@ class Photon_production_live_UI(tk.Toplevel):
 
 class Photon_production_buffered_data_handler(object):
     
-    def __init__(self, n_hist_bins=30, t_stirap_length=800):
+    def __init__(self, n_hist_bins=30, t_stirap_length:float=800):
         
         self.data_queue = queue.Queue()      # A buffer for data to be added to waiting to be analysed.
         self.analysis_buffer = []  # A buffer for the next analysis loop to analyse.
@@ -2071,24 +2063,24 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         if img_arrs == None and bkg_arrs == None:
             raise Exception('There are no images to review')
         
-        self.image_types = []
+        self.image_types_list = []
         self.images_frames_dict = {}
         self.image_frame_opts =  {'bd':2, 'relief':tk.SUNKEN, 'font':("Helvetica", 16), 'img_dims':(480,360),'img_buffer':30}
         if img_arrs != None:
-            self.image_types.append("Processed images")
-            self.images_frames_dict[self.image_types[-1]] = self.__get_images_frame(img_arrs, labels, text=self.image_types[-1], **self.image_frame_opts)
+            self.image_types_list.append("Processed images")
+            self.images_frames_dict[self.image_types_list[-1]] = self.__get_images_frame(img_arrs, labels, text=self.image_types_list[-1], **self.image_frame_opts)
         if bkg_arrs != None:
-            self.image_types.append("Average backrounds")
-            self.images_frames_dict[self.image_types[-1]] = self.__get_images_frame(bkg_arrs, labels, text=self.image_types[-1], **self.image_frame_opts)
+            self.image_types_list.append("Average backrounds")
+            self.images_frames_dict[self.image_types_list[-1]] = self.__get_images_frame(bkg_arrs, labels, text=self.image_types_list[-1], **self.image_frame_opts)
         if raw_images != None:
-            self.image_types.append("Raw images")
-            self.images_frames_dict[self.image_types[-1]] = self.__get_images_frame(raw_images, labels, text=self.image_types[-1], **self.image_frame_opts)
+            self.image_types_list.append("Raw images")
+            self.images_frames_dict[self.image_types_list[-1]] = self.__get_images_frame(raw_images, labels, text=self.image_types_list[-1], **self.image_frame_opts)
 
-#         for image_type in self.image_types:
+#         for image_type in self.image_types_list:
 #             print image_type
 #             self.images_frames_dict[image_type] = self.__get_images_frame(img_arrs, labels, text=image_type, **self.image_frame_opts)
-#         self.images_frames_dict[self.image_types[0]] = self.__get_images_frame(img_arrs, labels, text=self.image_types[0], **self.image_frame_opts)
-#         self.images_frames_dict[self.image_types[1]] = self.__get_images_frame(bkg_arrs, labels, text=self.image_types[1], **self.image_frame_opts)
+#         self.images_frames_dict[self.image_types_list[0]] = self.__get_images_frame(img_arrs, labels, text=self.image_types_list[0], **self.image_frame_opts)
+#         self.images_frames_dict[self.image_types_list[1]] = self.__get_images_frame(bkg_arrs, labels, text=self.image_types_list[1], **self.image_frame_opts)
         
         self.images_frames_dropdown = self.__get_image_type_dropdown()
         
@@ -2098,8 +2090,8 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         
         self.image_frame_grid_opts = {'row':0,'column':0,'columnspan':3,'sticky':tk.N+tk.S+tk.E+tk.W}
         
-        self.images_frames_dict[self.image_types[0]].grid(**self.image_frame_grid_opts)
-        self.displayed_images_frame_key = self.image_types[0]
+        self.images_frames_dict[self.image_types_list[0]].grid(**self.image_frame_grid_opts)
+        self.displayed_images_frame_key = self.image_types_list[0]
         
         self.images_frames_dropdown.grid(row=1,column=0, sticky=tk.N)
         self.save_notes_frame.grid(row=1,column=1, sticky=tk.N+tk.S+tk.E+tk.W)
@@ -2171,8 +2163,12 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         Hide any widgets that are currently displayed where we want the images to be, then display the images frame.
         '''
         # Remove current frame and display selected frame
-        self.images_frames_dict.get(self.displayed_images_frame_key).grid_remove()
-        self.images_frames_dict.get(key).grid(**self.image_frame_grid_opts)
+        frame_grid = self.images_frames_dict.get(self.displayed_images_frame_key)
+        if frame_grid is not None:
+            frame_grid.grid_remove()
+        frame_no_grid = self.images_frames_dict.get(key)        
+        if frame_no_grid is not None: 
+            frame_no_grid.grid(**self.image_frame_grid_opts)
         self.displayed_images_frame_key = key
         
     def __get_save_notes_frame(self, **kwargs):
@@ -2190,7 +2186,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         '''
         buttons_frame = tk.Frame(self)
         
-        button_opts = {'width':25, 'padx':3, 'pady':3}
+        button_opts:Dict[str, Any] = {'width':25, 'padx':3, 'pady':3}
         save_button = tk.Button(buttons_frame, text='Save', command=self.save, bg='green', **button_opts)
         discard_button = tk.Button(buttons_frame, text='Discard', command=lambda: self.closeWindow(ask_to_save_images=False), bg='red', **button_opts)
         
@@ -2284,8 +2280,8 @@ class Count_rate_plot_live(tk.LabelFrame):
             line, = self.ax.plot([0], [0], label=label)
             self.lines.append(line)
             
-        self.ax.set_xlim([0,self.n_iters_update_buffer])
-        self.ax.set_ylim([0,self.y_max])
+        self.ax.set_xlim((0,self.n_iters_update_buffer))
+        self.ax.set_ylim((0,self.y_max))
 
 #         # Always cut the plot tight on the time axis and with a 10% buffer on the value axis
 #         self.ax.locator_params(axis='x', tight=True)
@@ -2304,13 +2300,13 @@ class Count_rate_plot_live(tk.LabelFrame):
         for data, line in zip(lines_data, self.lines):
             if max(data) > self.y_max:
                 self.y_max = max(data)
-                self.ax.set_ylim([0,self.y_max*1.05])
+                self.ax.set_ylim((0,self.y_max*1.05))
             
             line.set_ydata(data)
             line.set_xdata(x_data)
         
             if self.n_iters_update_counter >= self.n_iters_update_buffer:
-                self.ax.set_xlim([0,len(x_data)+self.n_iters_update_buffer])
+                self.ax.set_xlim((0,len(x_data)+self.n_iters_update_buffer))
                 self.n_iters_update_counter=0
             else:
                 self.n_iters_update_counter+=1

@@ -12,6 +12,8 @@ import re
 import time
 from PIL import Image, ImageTk
 
+from UI_classes.UI_helpers import ImageButton
+
 class Labbook_UI(tk.LabelFrame):
 
     def __init__(self, parent, labbook_dir = os.path.join(os.getcwd(),'labbook'), text="Labbook", fExt = '.txt',
@@ -25,7 +27,7 @@ class Labbook_UI(tk.LabelFrame):
         self.labbook_dir = labbook_dir
         self.fExt = fExt
         
-        r = re.compile('\d{1,2}-\d{1,2}-\d{2,4}.*' + self.fExt)
+        r = re.compile(r'\d{1,2}-\d{1,2}-\d{2,4}.*' + self.fExt)
         self.dropdownOptions = self.sortDates([y.group() for y in [r.match(x) for x in os.listdir(self.labbook_dir)] if y is not None])
         self.dropdownVar = tk.StringVar()
         
@@ -39,9 +41,9 @@ class Labbook_UI(tk.LabelFrame):
 
         icon = Image.open("icons/refresh_icon.png").resize((20,20))
         icon = ImageTk.PhotoImage(icon)
-        self.refreshButton = tk.Button(topFrame, image=icon, command=self.configureForCurrentDate, height=20, width=20)
-        self.refreshButton.image = icon # store the image as a variable in the widget to prevent garbage collection.
-        
+        self.refreshButton = ImageButton(topFrame, image=icon, command=self.configureForCurrentDate, height=20, width=20)
+        self.refreshButton.image_ref = icon 
+
         self.dropdown.pack(side=tk.LEFT)
         self.refreshButton.pack(side=tk.RIGHT)
         

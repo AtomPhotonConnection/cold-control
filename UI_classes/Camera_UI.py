@@ -6,9 +6,12 @@ Created on 25 Mar 2016
 import tkinter as tk
 from PIL import Image,ImageTk
 #import cv2
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
 from tkinter import messagebox as tkMessageBox
 import numpy as np
+
+from UI_classes.UI_helpers import ImageButton
+from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+
 
 class Camera_UI(tk.LabelFrame):
     '''
@@ -45,6 +48,8 @@ class Camera_UI(tk.LabelFrame):
         
         self.img = tk.Label(self.video_frame)
         self.img.pack(fill=tk.BOTH, expand=1)
+        self.pil_image_cache = None # store the PIL image so we can resize it if the frame dimensions are changed
+        self.tk_image_cache = None # store the TK image to prevent garbage collection
         
         self.button_frame = tk.Frame(self)
         self.startCameraButton = tk.Button(self.button_frame, text="Start camera", command=self.startCamera)
@@ -52,9 +57,9 @@ class Camera_UI(tk.LabelFrame):
         self.stopCameraButton = tk.Button(self.button_frame, text="Stop camera", command=self.stopCamera)
         self.stopCameraButton.pack(side=tk.RIGHT)
         icon = ImageTk.PhotoImage(Image.open("icons/config_icon.png").resize((30,30)))
-        self.configure_camera_button = tk.Button(self.button_frame, image=icon, width=25, height=25, command=self.cameraConfigButton)
+        self.configure_camera_button = ImageButton(self.button_frame, image=icon, width=25, height=25, command=self.cameraConfigButton)
         self.configure_camera_button.pack(side=tk.RIGHT)
-        self.configure_camera_button.image = icon # prevent garbage collection
+        self.configure_camera_button.image_ref = icon # prevent garbage collection
         
         self.video_frame.grid(row=0,column=0, sticky=tk.N+tk.S+tk.E+tk.W)
         self.button_frame.grid(row=1, column=0)
@@ -67,14 +72,15 @@ class Camera_UI(tk.LabelFrame):
                 
     def _resize_image(self, event):
         '''
-        There is nothing below the camera UI in the root UI so e only concern ourselves with making the imagea as wide as possible
-        and then correcting the height of the image to keep out pre-calcualted aspect ratio.
+        There is nothing below the camera UI in the root UI so we only concern ourselves with making the image as wide as possible
+        and then correcting the height of the image to keep our pre-calculated aspect ratio.
         ''' 
         new_width = event.width - 5 # Note the -5 is to account for the default padding when the video frame is packed into the Camera LabelFrame
         
         self.video_dims = (new_width, int(new_width/self.video_aspect_ratio))
         self.video_frame.configure(height = self.video_dims[1], width = self.video_dims[0])
-        self.updateDisplayedFrame(self.img.pil_image_cache)
+        if self.pil_image_cache is not None:
+            self.updateDisplayedFrame(self.pil_image_cache)
                 
     def startCamera(self):
         '''
@@ -129,7 +135,7 @@ class Camera_UI(tk.LabelFrame):
         self.cam.wait_til_frame_ready(cam_frame_timeout)    
         self.cam.reset_frame_ready()
         data = self.cam.get_image_data()
-        img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.FLIP_TOP_BOTTOM)
+        img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 #       
         self.updateDisplayedFrame(img)
         
@@ -142,8 +148,8 @@ class Camera_UI(tk.LabelFrame):
         '''
         x = ImageTk.PhotoImage(image.resize(self.video_dims))
         self.img.configure(image=x)
-        self.img._image_cache = x  # avoid garbage collection
-        self.img.pil_image_cache = image # store the PIL image so we can resize it if the frame dimensions are changed
+        self.tk_image_cache = x  # avoid garbage collection
+        self.pil_image_cache = image # store the PIL image so we can resize it if the frame dimensions are changed
         self.update() 
             
     def cameraConfigButton(self):
@@ -261,7 +267,7 @@ class Camera_configuration_UI(tk.Toplevel):
         entry = tk.Entry(self)
         slider =tk.Scale(self, from_=property.range[0], to=property.range[1],
                                 command = lambda value, f=scale_focus_out, prop=property, e_wid=entry, inv=inverse: f(value, prop, e_wid, inv),
-                                orient=tk.HORIZONTAL, showvalue=0, width=15)   
+                                orient=tk.HORIZONTAL, showvalue=False, width=15)   
         
         if property.auto_available:
             

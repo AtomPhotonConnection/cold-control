@@ -513,8 +513,13 @@ class PhotonProductionExperiment(GenericExperiment):
         self.data_saver:PhotonProductionDataSaver
         self.iterations = 0
         self.mot_reload_time = 0
+        self.waveform_length = 0
+        self.configure_data_queue = lambda x: x
+        self.is_live = False
+        self.set_iterations = lambda x: x
+        self.set_mot_reload_time = lambda x: x  
         pass
-"""
+r"""
     
     def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, photon_production_configuration:PhotonProductionConfiguration):
         super().__init__(daq_controller, sequence, photon_production_configuration)

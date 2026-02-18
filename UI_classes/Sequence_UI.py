@@ -1147,8 +1147,8 @@ class CalibratedValueEntry(ValueEntry):
         else:
             return self.calibrationToValFunc(float(ValueEntry.get(self)))
             
-    def insert(self, index, val):
-        ValueEntry.insert(self, index, self.calibrationFromValFunc(val))
+    def insert(self, index, string):
+        ValueEntry.insert(self, index, self.calibrationFromValFunc(string))
     
 class IntervalStyleDropdown(tk.OptionMenu):
     

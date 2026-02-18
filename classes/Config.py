@@ -178,7 +178,7 @@ class DaqReader(object):
         self.fname = fname
         self.config:Dict[str, Any] = ConfigObj(fname)
         
-    def load_DAQ_controller(self):
+    def load_DAQ_controller(self) -> DAQ_controller:
         '''Returns a DAQ controller object as configured in the config file.'''
         
         channels = []
