@@ -524,6 +524,11 @@ class ExperimentConfigReader():
                                         mod_frequency=float(v['modulation frequency']),
                                         phases=phases))
 
+            # convert the output channels from str to int
+            output_channels = []
+            for channel in config['waveform output channels']:
+                ch:str = channel.replace(" ", "")
+                output_channels.append(int(ch.lower().replace("channel", "")))
 
             # Reads the awg properties from the config object, and creates a new awg configuration with those settings        
             awg_config = AwgConfiguration(\
@@ -533,7 +538,7 @@ class ExperimentConfigReader():
                 waveform_stitch_delays=list(eval(config['waveform stitch delays'])),
                 sample_rate=float(config['sample rate']),
                 burst_count=int(config['burst count']),
-                waveform_output_channels=list(config['waveform output channels']),
+                waveform_output_channels=output_channels,
                 waveform_output_channel_lags=list(map(float, config['waveform output channel lags'])),
                 marked_channels=list(config['marked channels']),
                 marker_width=eval(config['marker width']))
@@ -548,34 +553,34 @@ class ExperimentConfigReader():
                 "sequence_config_single": None  # Default to None if not provided
             }
 
-            # Only add single configuration if config_path_single is not an empty string
-            if config_single is not None and config_path_single != "":
-                waveforms_single = []
-                for x, v in config_single['waveforms'].items():
-                    _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
-                    waveforms_single.append(Waveform(fname=v['filename'],
-                                                    mod_frequency=float(v['modulation frequency']),
-                                                    phases=_phases))
+            # # Only add single configuration if config_path_single is not an empty string
+            # if config_single is not None and config_path_single != "":
+            #     waveforms_single = []
+            #     for x, v in config_single['waveforms'].items():
+            #         _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
+            #         waveforms_single.append(Waveform(fname=v['filename'],
+            #                                         mod_frequency=float(v['modulation frequency']),
+            #                                         phases=_phases))
                     
                 
-                awg_config_single = AwgConfiguration(\
-                    waveform_sequence=list(eval(config_single['waveform sequence'])),
-                    waveforms=waveforms_single,
-                    interleave_waveforms=toBool(config_single['interleave waveforms']),
-                    waveform_stitch_delays=list(eval(config_single['waveform stitch delays'])),
-                    sample_rate=float(config_single['sample rate']),
-                    burst_count=int(config_single['burst count']),
-                    waveform_output_channels=list(config_single['waveform output channels']),
-                    waveform_output_channel_lags=list(map(float, config_single['waveform output channel lags'])),
-                    marked_channels=list(config_single['marked channels']),
-                    marker_width=eval(config_single['marker width']))
+            #     awg_config_single = AwgConfiguration(\
+            #         waveform_sequence=list(eval(config_single['waveform sequence'])),
+            #         waveforms=waveforms_single,
+            #         interleave_waveforms=toBool(config_single['interleave waveforms']),
+            #         waveform_stitch_delays=list(eval(config_single['waveform stitch delays'])),
+            #         sample_rate=float(config_single['sample rate']),
+            #         burst_count=int(config_single['burst count']),
+            #         waveform_output_channels=list(config_single['waveform output channels']),
+            #         waveform_output_channel_lags=list(map(float, config_single['waveform output channel lags'])),
+            #         marked_channels=list(config_single['marked channels']),
+            #         marker_width=eval(config_single['marker width']))
 
                 
-                awg_settings_dict["config_path_single"] = config_path_single
-                awg_settings_dict["awg_config_single"] = awg_config_single
+            #     awg_settings_dict["config_path_single"] = config_path_single
+            #     awg_settings_dict["awg_config_single"] = awg_config_single
 
-            else:
-                awg_settings_dict["config_path_single"] = None
+            # else:
+            #     awg_settings_dict["config_path_single"] = None
 
 
             metadata = self.config.get('metadata') or {}

@@ -40,11 +40,13 @@ from __future__ import annotations
 import logging
 import struct
 import time
-from typing import List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
+
+from classes.ExperimentalConfigs import AwgConfiguration
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -64,9 +66,131 @@ DAC_MID = 1 << (DAC_BITS - 1)       # 8 192
 
 logger = logging.getLogger(__name__)
 
+# ========================================================================
+# MARK:Helper functions
+# ========================================================================
+def process_waveforms(_outp_channels,
+                     _channel_lags,
+                     _waveform_sequence,
+                     _waveforms_list,
+                     _sample_rate) -> Dict[int, np.ndarray]:
+    """
+    Helper function to process waveforms from the AwgConfiguration object and prepare them for upload.
+    """
+
+    print("Processing waveforms...")
+    all_ch_data = {}
+
+    for i, ch in enumerate(_outp_channels):
+        #calculate timing offset
+        lag_us = _channel_lags[i]
+        lag_samples = int(round(lag_us * _sample_rate * 1e-6))
+        print(f"Channel {ch}: lag {lag_us} us → {lag_samples} samples")
+
+        # build full waveform from sequence
+        ch_wf_ids = _waveform_sequence[i]
+        ch_waveforms = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
+        raw_chunks = [
+            np.array(w.get(sample_rate=_sample_rate)) for w in ch_waveforms
+        ]
+        full_wf = np.concatenate(raw_chunks)
+
+        # apply lag by padding with zeros at the start
+        if lag_samples > 0:
+            full_wf = np.pad(full_wf, (lag_samples, 0), mode='constant', constant_values=0)
+            print(f"Channel {ch}: applied lag by padding with {lag_samples} zeros")
+
+        all_ch_data[ch] = full_wf
+
+
+    # Align channels to the same length and to a multiple of 16 samples
+    max_len = max(len(d) for d in all_ch_data.values())
+    if max_len % 16 != 0:
+        max_len += 16 - (max_len % 16)
+    aligned: Dict[int, np.ndarray] = {
+        ch: np.pad(d, (0, max_len - len(d)), "constant") for ch, d in all_ch_data.items()
+    }
+    print(f"Aligned all channels to {max_len} samples (multiple of 16)")
+
+    return aligned
+
+
+def validate_waveform_size(num_points):
+    """
+    Validate that waveform size meets requirements
+    
+    Requirements from manual:
+    - Minimum: 192 points
+    - Must be multiple of 16 points
+    
+    Args:
+        num_points: Number of waveform points
+        
+    Returns:
+        Validated number of points
+    """
+    if num_points < 192:
+        raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
+    
+    if num_points % 16 != 0:
+        # Round up to nearest multiple of 16
+        adjusted = ((num_points + 15) // 16) * 16
+        print(f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)")
+        return adjusted
+    
+    return num_points
+
+def normalize_waveform(waveform_data):
+    """
+    Normalize waveform data to 14-bit DAC values (0-16383)
+    
+    The WX2184C uses 14-bit DAC values:
+    - 0x0000 (0) corresponds to -2V
+    - 0x2000 (8192) corresponds to 0V  
+    - 0x3FFF (16383) corresponds to +2V
+    
+    Args:
+        waveform_data: NumPy array of float values (typically -1.0 to +1.0)
+        
+    Returns:
+        NumPy array of uint16 values (0-16383)
+    """
+    # Normalize to -1.0 to +1.0 range
+    waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
+    
+    # Scale to 0-16383 (14-bit range)
+    # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
+    dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
+    
+    # Ensure we don't exceed 14-bit range
+    dac_values = np.clip(dac_values, 0, 16383)
+    
+    return dac_values
+
+def create_binary_block_header(num_bytes):
+    """
+    Create IEEE 488.2 binary block header
+    
+    Format: #<num_digits><byte_count><data>
+    Example: #42048 means 4 digits follow, then 2048 bytes of data
+    
+    Args:
+        num_bytes: Number of bytes in the data block
+        
+    Returns:
+        Header string (e.g., '#42048')
+    """
+    byte_count_str = str(num_bytes)
+    num_digits = len(byte_count_str)
+    header = f'#{num_digits}{byte_count_str}'
+    return header
+
+
+
+
 
 # =========================================================================
-# AWGManager
+# MARK:AWGManager
 # =========================================================================
 
 class AWGManager:
@@ -349,21 +473,6 @@ class AWGManager:
         else:
             self._write(f":TRIG:SLOP {slope}")
 
-    def configure_trigger(
-        self,
-        mode: str = "EXT",
-        level: float = 1.6,
-        slope: str = "POS",
-    ) -> None:
-        """
-        Convenience: select *channel*, switch to triggered mode, and set
-        source / level / slope in one call.
-        """
-        self.set_continuous(False)              # triggered mode
-        self.set_trigger_source(mode)
-        self.set_trigger_level(level)
-        self.set_trigger_slope(slope)
-
     def set_burst_count(self, count: int = 1) -> None:
         """
         Set the burst (trigger count) for *channel*.
@@ -447,77 +556,6 @@ class AWGManager:
         self.delete_all_sequences()
 
     # ----- waveform upload ---------------------------------------------------
-    def validate_waveform_size(self, num_points):
-        """
-        Validate that waveform size meets requirements
-        
-        Requirements from manual:
-        - Minimum: 192 points
-        - Must be multiple of 16 points
-        
-        Args:
-            num_points: Number of waveform points
-            
-        Returns:
-            Validated number of points
-        """
-        if num_points < 192:
-            raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
-        
-        if num_points % 16 != 0:
-            # Round up to nearest multiple of 16
-            adjusted = ((num_points + 15) // 16) * 16
-            print(f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)")
-            return adjusted
-        
-        return num_points
-    
-    def normalize_waveform(self, waveform_data):
-        """
-        Normalize waveform data to 14-bit DAC values (0-16383)
-        
-        The WX2184C uses 14-bit DAC values:
-        - 0x0000 (0) corresponds to -2V
-        - 0x2000 (8192) corresponds to 0V  
-        - 0x3FFF (16383) corresponds to +2V
-        
-        Args:
-            waveform_data: NumPy array of float values (typically -1.0 to +1.0)
-            
-        Returns:
-            NumPy array of uint16 values (0-16383)
-        """
-        # Normalize to -1.0 to +1.0 range
-        waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
-        
-        # Scale to 0-16383 (14-bit range)
-        # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
-        dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
-        
-        # Ensure we don't exceed 14-bit range
-        dac_values = np.clip(dac_values, 0, 16383)
-        
-        return dac_values
-    
-    def create_binary_block_header(self, num_bytes):
-        """
-        Create IEEE 488.2 binary block header
-        
-        Format: #<num_digits><byte_count><data>
-        Example: #42048 means 4 digits follow, then 2048 bytes of data
-        
-        Args:
-            num_bytes: Number of bytes in the data block
-            
-        Returns:
-            Header string (e.g., '#42048')
-        """
-        byte_count_str = str(num_bytes)
-        num_digits = len(byte_count_str)
-        header = f'#{num_digits}{byte_count_str}'
-        return header
-
-
     def upload_waveform(
         self,
         waveform_data: np.ndarray,
@@ -563,7 +601,7 @@ class AWGManager:
         try:
             # Step 1: Validate and adjust waveform size
             num_points = len(waveform_data)
-            validated_points = self.validate_waveform_size(num_points)
+            validated_points = validate_waveform_size(num_points)
             
             # Pad with zeros if size was adjusted
             if validated_points > num_points:
@@ -572,7 +610,7 @@ class AWGManager:
                                       mode='constant')
             
             # Step 2: Convert to 14-bit DAC values
-            dac_values = self.normalize_waveform(waveform_data)
+            dac_values = normalize_waveform(waveform_data)
             
             # Step 3: Define segment in memory
             # CRITICAL: Must define segment BEFORE uploading data
@@ -599,7 +637,7 @@ class AWGManager:
             num_bytes = len(binary_data)
             
             # Step 6: Create IEEE 488.2 binary block header
-            header = self.create_binary_block_header(num_bytes)
+            header = create_binary_block_header(num_bytes)
             command = f':TRAC:DATA {header}'
             
             # Step 7: Upload data using binary write
@@ -631,7 +669,6 @@ class AWGManager:
             return False
         
 
-
     # ----- marker output commands --------------------------------------------
 
     def configure_marker(
@@ -639,9 +676,7 @@ class AWGManager:
         marker: int = 2,
         position: int = 0,
         width: int = 4,
-        high_level: float = 1.2,
         delay: float = 0.0,
-        source: str = "WAVE",
         channel: Optional[int] = None,
     ) -> None:
         """
@@ -660,8 +695,6 @@ class AWGManager:
             Marker high voltage (0.5 … 1.2 V).
         delay : float
             Delay from SYNC in seconds (0 … 3 ns).
-        source : str
-            ``"WAVE"`` (from waveform memory) or ``"USER"`` (user-defined).
         channel : int or None
             If given, ``select_channel`` is called first.
         """
@@ -676,17 +709,20 @@ class AWGManager:
         if width < 0:
             width = 0
 
+        high_level = 1.2
+        mark_source = "WAVE"
+
         self._write(f":MARK:SEL {marker}")
-        self._write(f":MARK:SOUR {source}")
+        self._write(f":MARK:SOUR {mark_source}")
         self._write(f":MARK:POS {position}")
         self._write(f":MARK:WIDT {width}")
-        self._write(f":MARK:VOLT:HIGH {high_level}")
+        # self._write(f":MARKer:VOLT:HIGH {high_level}")
         
         self._write(f":MARK:DEL {delay}")
         self._write(f":MARK:STAT ON")
         self._log.info(
-            "Marker %d configured: pos=%d, width=%d, high=%.2f V",
-            marker, position, width, high_level,
+            "Marker %d configured: pos=%d, width=%d",
+            marker, position, width,
         )
 
     def disable_marker(self, marker: int = 1, channel: Optional[int] = None) -> None:
@@ -731,16 +767,15 @@ class AWGManager:
         """Delete all sequences."""
         self._write(":SEQ:DEL:ALL")
 
-    # ----- convenience / compound methods ------------------------------------
+    # ----- MARK:compound methods
 
     def configure_for_triggered_output(
         self,
-        sample_rate: float,
-        channels: Sequence[int] = (1,),
-        trigger_level: float = 1.6,
-        trigger_slope: str = "POS",
-        burst_count: int = 1,
-        amplitude: float = 2.0,
+        _sample_rate: float,
+        _channels: List[int],
+        _burst_count: int,
+        _amplitudes: List[float],
+        _offsets: List[float]
     ) -> None:
         """
         One-call setup that mirrors the old ``configure_awg`` workflow:
@@ -751,87 +786,99 @@ class AWGManager:
         4. Configure trigger on each channel.
         5. (Waveforms must still be uploaded separately.)
         """
-        #self.abort()
-        #self.disable_all_channels(channels)
+        trigger_level = 1.6  # V, typical for external trigger from scope or pulse generator
+        trigger_slope = "POS"  # positive edge trigger
+        trigger_source = "EXT"  # external trigger input
+
+        self.abort()
+        for ch in _channels:
+            self.disable_channel(ch)
         self.clear_all()
 
-        self.configure_sample_rate(sample_rate)
+        self.delete_all_segments()
+
+        self.configure_sample_rate(_sample_rate)
         self.set_output_mode("USER")               # arbitrary
         self.enable_coupling()
 
-        for ch in channels:
+        for i, ch in enumerate(_channels):
             self.select_channel(ch)
-            self.configure_trigger(
-                mode="EXT",
-                level=trigger_level,
-                slope=trigger_slope,
-            )
-            self.set_burst_count(burst_count)
-            #self.set_amplitude(ch, amplitude)
+            self.set_continuous(False)
+            self.set_trigger_level(trigger_level)
+            self.set_trigger_source(trigger_source)
+            self.set_trigger_slope(trigger_slope) 
+
+            self.set_burst_count(_burst_count)
+            self.set_amplitude(ch, _amplitudes[i])
+            self.set_offset(ch, _offsets[i])
 
     def upload_and_arm(
         self,
-        waveforms: dict[int, np.ndarray],
-        sample_rate: float,
-        burst_count: int = 1,
-        trigger_level: float = 1.6,
-        amplitude: float = 2.0,
-        marker_config: Optional[dict] = None,
-    ) -> float:
+        awg_cfg: AwgConfiguration) -> None:
         """
         Full configure → upload → arm cycle used by experiment runners.
 
         Parameters
         ----------
-        waveforms : dict[int, np.ndarray]
-            Mapping of channel number (1–4) → float waveform array (−1 … +1).
-        sample_rate : float
-            Sample rate in Sa/s.
-        burst_count : int
-            Number of bursts per trigger.
-        trigger_level : float
-            Trigger threshold in volts.
-        amplitude : float
-            Output amplitude in volts (50 mV … 2 V DC path).
-        marker_config : dict or None
-            If given, keys: ``channel``, ``marker``, ``position``, ``width``,
-            ``high_level``.  Forwarded to :meth:`configure_marker`.
-
+        awg_cfg : AwgConfiguration
+            The AWG configuration object containing all necessary settings.
         Returns
         -------
-        float
-            Waveform duration in seconds (length / sample_rate).
+        None
         """
-        channels = sorted(waveforms.keys())
+        waveform_sequence = awg_cfg.waveform_sequence
+        sample_rate = awg_cfg.sample_rate
+        burst_count = awg_cfg.burst_count
+        outp_channels = awg_cfg.waveform_output_channels
+        channel_lags = awg_cfg.waveform_output_channel_lags
+        marker_width_us = awg_cfg.marker_width
+        ch_amplitudes = [1.0 for _ in outp_channels]  # TODO: get from config
+        ch_offsets = [0.0 for _ in outp_channels]     # TODO: get from config
 
-        # 1. Configure global settings
-        self.configure_for_triggered_output(
-            sample_rate=sample_rate,
-            channels=channels,
-            trigger_level=trigger_level,
-            burst_count=burst_count,
-            amplitude=amplitude,
-        )
+        waveforms_list = awg_cfg.waveforms #TODO: make a dict rather than list
 
-        # 2. Upload waveforms
-        duration_samples = 0
-        for ch in channels:
-            data = waveforms[ch]
-            self.upload_waveform(data, segment=1, channel=ch)
-            duration_samples = max(duration_samples, len(data))
+        if awg_cfg.waveform_stitch_delays is not None:
+            raise DeprecationWarning("Stitch delays are deprecated")
+        if awg_cfg.interleave_waveforms is not None:
+            raise DeprecationWarning("Interleaving waveforms is deprecated")
+        if awg_cfg.marked_channels is not None:
+            raise DeprecationWarning("Marked channels are deprecated")
 
-        # 3. Marker
-        if marker_config is not None:
-            self.configure_marker(**marker_config)
+        
+        # --- Process waveforms ---
+        all_ch_data = process_waveforms(outp_channels, channel_lags, waveform_sequence,
+                                        waveforms_list, sample_rate)
+        
+        # --- Configure the scope for triggered output ---
+        self.configure_for_triggered_output(sample_rate, outp_channels, burst_count,
+                                            ch_amplitudes, ch_offsets)
 
-        # 4. Enable outputs and arm
-        for ch in channels:
+        self.wait_opc()
+        print("AWG configured for triggered output.")
+
+        # --- Upload waveforms for each channel ---
+        for ch in outp_channels:
+            data = all_ch_data[ch]
+            success = self.upload_waveform(data, segment=1, channel=ch)
+            if not success:
+                raise RuntimeError(f"Failed to upload waveform for channel {ch}")
+            print(f"Waveform for channel {ch} uploaded successfully.")
+
+
+
+        # --- Configure markers ---
+        self.configure_marker(width=marker_width_us * sample_rate * 1e-6)
+
+        # --- Enable outputs and arm ---
+        for ch in outp_channels:
             self.enable_channel(ch)
 
         self.initiate()
         self._log.info("AWG armed and waiting for trigger.")
 
-        return duration_samples / sample_rate
+        print("AWG armed and waiting for trigger.")
+
+    
 
     # ----- context manager ---------------------------------------------------
 

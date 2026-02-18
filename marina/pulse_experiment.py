@@ -558,7 +558,7 @@ class PulseShapeExperimentRunner:
         abs_offsets = raw_offsets - raw_offsets.min()
 
         # --- Calculate stitch delays for interleaved waveforms ---------------
-        if cfg.interleave_waveforms:
+        if cfg.interleave_waveforms and cfg.waveform_stitch_delays is not None:
             stitch_delays: List[int] = []
             for direction, target_wf_ids in cfg.waveform_stitch_delays:
                 ids = target_wf_ids or []
@@ -625,8 +625,6 @@ class PulseShapeExperimentRunner:
                 awg.configure_marker(
                     marker=2,
                     width=4,
-                    high_level=1.2,
-                    source="USER",
                     delay=1e-9
                 )
                 awg.wait_opc()

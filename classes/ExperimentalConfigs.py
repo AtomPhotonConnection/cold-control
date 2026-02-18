@@ -15,7 +15,7 @@ import threading
 import csv
 import os
 import re
-from typing import List, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -709,19 +709,38 @@ class AwgConfiguration:
     output channels, timing lags, marker widths, and calibration locations.
     It also includes the waveform sequence and associated waveforms that the AWG will
     play.
+
+    Structure of the AWG configuration file:
+    waveform sequence: A list of lists. Each inner list corresponds to a channel and
+        contains the indices of the waveforms to play on that channel.
+    waveform stitch delays: DEPRECATED
+    interleave waveforms: DEPRECATED
+    sample rate: Sample rate for the AWG output in samples per second.
+    burst count: Number of times to repeat the waveform sequence in a single trigger.
+    waveform output channels: Channels on the AWG that will be used for outputting waveforms.
+    waveform output channel lags: Timing lags for each output channel to synchronize them.
+    marked channels: DEPRECATED
+    marker width: Width of the marker pulse in us. TODO switch to samples.
+
+    waveforms:
+    A list of waveform configurations, including: TODO make a dictionary instead of a list to avoid confusion about which waveform is which.
+        modulation frequency: The "carrier" frequency for the waveform
+        phases: DEPRECATED
+        filename: The path to the CSV file containing the waveform data. The CSV should
+            contain a single row of voltage values, one per column.
+
     """
     def __init__(self,
                  waveform_sequence:List[List[int]],
-                 #This should be changed to Dict[int, Waveform] later
                  waveforms:List[Waveform],
-                 interleave_waveforms: bool,
-                 waveform_stitch_delays:List[List[Any]],
                  sample_rate: float,
                  burst_count: int,
                  waveform_output_channels: List[int],
                  waveform_output_channel_lags: List[float],
-                 marked_channels: List[int],
-                 marker_width: int):
+                 marker_width: int,
+                 waveform_stitch_delays:Optional[List[List[Any]]] = None,
+                 interleave_waveforms: Optional[bool] = None,
+                 marked_channels: Optional[List[int]] = None):
 
         self._waveform_sequence = waveform_sequence
         self.waveforms = waveforms

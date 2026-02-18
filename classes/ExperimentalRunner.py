@@ -1134,7 +1134,7 @@ class MotFluoresceExperiment(GenericExperiment):
         awg.reboot()
         awg.close()
 
-        awg.configure_awg(self.awg_config)
+        awg.upload_and_arm(self.awg_config)
 
         print("AWG configured in {}s".format(time.time()-start_time))
 
