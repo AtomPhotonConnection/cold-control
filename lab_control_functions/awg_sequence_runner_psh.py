@@ -1,15 +1,15 @@
-from time import sleep
+import ast
 import os
+import re
 import time
+
+import pyvisa
+from configobj import ConfigObj
 
 from classes.Config import ConfigReader, DaqReader
 from classes.ExperimentalConfigs import AwgConfiguration, Waveform
-from configobj import ConfigObj
 from lab_control_functions.awg_control_functions_psh import run_awg
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-import pyvisa 
-import re, ast
 
 
 def toBool(string):
@@ -27,29 +27,29 @@ path_to_config_single = 'waveforms/pulse shaping exp/newPhotonProductionConfigCH
 if __name__ == '__main__':
     # Converts the specified file to a "config object"
     config = ConfigObj(path_to_config)     # permite acceder a los valores de configuración como un diccionario.
-    config_single = ConfigObj(path_to_config_single)  
+    config_single = ConfigObj(path_to_config_single)
 
     # Reads the waveforms from the config object, and creates a list of Waveforms with those properties
     waveforms = []
     for x,v in config['waveforms'].items():
-        if v['phases']: 
+        if v['phases']:
             phases_str = ' '.join(v['phases'])
             phases_str = re.sub(r'\(([^)]+) ([^)]+)\)', r'(\1, \2)', phases_str)
             phases_str = phases_str.replace(') (', '), (')
             phases = ast.literal_eval(phases_str)
         else:
-            phases = [] 
+            phases = []
         waveforms.append(Waveform(fname = v['filename'],
                                     mod_frequency= float(v['modulation frequency']),
-                                    phases = phases)) # map(float, v['phases']))) 
-         
+                                    phases = phases)) # map(float, v['phases'])))
 
-    # Reads the awg properties from the config object, and creates a new awg configuration with those settings        
+
+    # Reads the awg properties from the config object, and creates a new awg configuration with those settings
     awg_config = AwgConfiguration(\
         waveform_sequence = list(eval(config['waveform sequence'])),
         waveforms = waveforms,
         waveform_stitch_delays = list(eval(config['waveform stitch delays'])), #  Retrasos entre formas de onda.
-        interleave_waveforms = toBool(config['interleave waveforms']), 
+        interleave_waveforms = toBool(config['interleave waveforms']),
         sample_rate = float(config['AWG']['sample rate']),
         burst_count = int(config['AWG']['burst count']),
         waveform_output_channels = list(config['AWG']['waveform output channels']),
@@ -57,14 +57,14 @@ if __name__ == '__main__':
         marked_channels = list(config['AWG']['marked channels']),
         marker_width = eval(config['AWG']['marker width']))
 
-    
+
     waveforms_single = []
     for x,v in config_single['waveforms'].items():
         waveforms_single.append(Waveform(fname = v['filename'],
                                          mod_frequency= float(v['modulation frequency']),
                                          phases=list(map(float, v['phases']))))
 
-     
+
     awg_config_single = AwgConfiguration(\
         waveform_sequence = list(eval(config_single['waveform sequence'])),
         waveforms = waveforms_single,
@@ -81,15 +81,15 @@ if __name__ == '__main__':
 
 
     rm = pyvisa.ResourceManager()
-    awg = rm.open_resource("USB0::0x168C::0x1284::0000215582::0::INSTR")   
-    awg.write(":SYSTem:REBoot") 
+    awg = rm.open_resource("USB0::0x168C::0x1284::0000215582::0::INSTR")
+    awg.write(":SYSTem:REBoot")
     awg.close()
 
     awg_test=run_awg_single(awg_config_single)
-    awg_test=run_awg(awg_config) 
+    awg_test=run_awg(awg_config)
 
 
-    
+
     # Opens a new config file as a "config reader" object.
     config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
     for i in range(1,1000):

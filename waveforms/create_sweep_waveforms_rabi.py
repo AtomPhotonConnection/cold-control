@@ -1,6 +1,7 @@
-from calibrate_power import RabiFreqVoltageConverter
-import numpy as np
 import os
+
+import numpy as np
+from calibrate_power import RabiFreqVoltageConverter
 
 rabi_start=55*2*np.pi
 rabi_finish=55*2*np.pi
@@ -26,8 +27,8 @@ for rabi_freq in rabi_sweep:
     #full_save_dir = os.path.join(save_dir, f"{rounded_rabi}")
     full_save_dir = save_dir
     os.makedirs(full_save_dir, exist_ok=True)
-    stokes_save_path = os.path.join(full_save_dir, f'2_stokes.csv')
-    pump_save_path = os.path.join(full_save_dir, f'1_pump.csv')
+    stokes_save_path = os.path.join(full_save_dir, '2_stokes.csv')
+    pump_save_path = os.path.join(full_save_dir, '1_pump.csv')
 
     RabiClassStokes.rescale_csv(rabi_freq, stokes_pulse_loc, stokes_save_path)
     RabiClassPump.rescale_csv(rabi_freq, pump_pulse_loc, pump_save_path)

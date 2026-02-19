@@ -10,35 +10,39 @@ Created on 6 May 2016
 '''
 
 import os
-import serial
-import time
-import numpy as np
-from classes.Config import ConfigReader, DaqReader
-import matplotlib.pyplot as plt
 import re
+import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pyvisa as visa
+import serial
+
+from classes.Config import ConfigReader, DaqReader
 from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
-import pyvisa as visa
+
 # from sympy.physics.quantum.circuitplot import matplotlib
 '''
 Load required classes for awg driven AOM calibration
 '''
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
 from ExperimentalConfigs import Waveform
-    
+from instruments.WX218x.WX218x_awg import Channel, WX218x_awg
+from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_OutputMode
+
+
 class CalibrationException(Exception):
-    
+
     def __init__(self, message):
         # Call the base class constructor with the parameters it needs
-        super(CalibrationException, self).__init__(message)
+        super().__init__(message)
 
 def get_default_calibration_Vstep():
     '''Returns the smallest resolvable voltage step a 4096 bit digital output corresponding to -10 to 10V can make.
     i.e. the voltage resolution of the DAQ-2502 cards.'''
     f = lambda x: np.interp(x, (0,4095), (-10,10))
     return f(1) - f(0)
-    
+
 def calibrate_frequency(daq_controller, chNum_to_calibrate, calibration_V_range = (0,10),
                         calibration_V_step = get_default_calibration_Vstep(),
                         writeToQueryDelay=0.1, queryToReadDelay=0.3):
@@ -91,7 +95,7 @@ def calibrate_frequency(daq_controller, chNum_to_calibrate, calibration_V_range 
             nBadPoints += 1
             vData.pop(i - nBadPoints)
 
-    print ('Removed {0} bad data points'.format(nBadPoints))
+    print (f'Removed {nBadPoints} bad data points')
 
     # Just a hack to convert Hz to MHz as it's nicer.
     if units == 'Hz':
@@ -100,7 +104,7 @@ def calibrate_frequency(daq_controller, chNum_to_calibrate, calibration_V_range 
 
     return vData, parsedData, units
 
-def calibrate_absolute_power(daq_controller, chNum_to_calibrate, calibration_V_range = (0,10), 
+def calibrate_absolute_power(daq_controller, chNum_to_calibrate, calibration_V_range = (0,10),
                     calibration_V_step = get_default_calibration_Vstep(), writeToQueryDelay=0.1,
                     nMeasurmentCounts = 3):
     '''Creates a calibration file between the voltage given to an AOM and absolute power output.
@@ -118,7 +122,7 @@ def calibrate_absolute_power(daq_controller, chNum_to_calibrate, calibration_V_r
         print ('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     # Run through the voltages and record the TF930 output
     vData, calData = [], []
     print ('Running through voltages...might take a while...')
@@ -132,16 +136,16 @@ def calibrate_absolute_power(daq_controller, chNum_to_calibrate, calibration_V_r
 
     units = str( power_meter.sense.power.dc.unit.split('\n')[0] )
     print (type(units), repr(units))
-    # Just a hack to convert W to uW as it's nicer.    
+    # Just a hack to convert W to uW as it's nicer.
     if units == 'W':
         calData = map(lambda x: float(x) * 10**6, calData)
         units = 'uW'
-    
+
     '''Deleting the power_meter allows the garbage collector to delete the pyvisa connection.
     This way if we call get_power_meter() again (e.g. if we are recursivley creating calibration
-    files) we don't throw an error due to an already open conneciton.'''    
+    files) we don't throw an error due to an already open conneciton.'''
     del power_meter
-        
+
     return vData, calData, units
 
 
@@ -224,7 +228,7 @@ def calibrate_percentage_power(daq_controller, chNum_to_calibrate, calibration_V
         print ('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     # Run through the voltages and record the TF930 output
     vData, calData = [], []
     print ('Running through voltages...might take a while...')
@@ -237,30 +241,30 @@ def calibrate_percentage_power(daq_controller, chNum_to_calibrate, calibration_V
     print( '...finished!')
 
     absMinIndex, absMaxIndex = calData.index(min(calData)),  calData.index(max(calData))
-    
+
     calData=calData[:absMaxIndex+1]
-    
+
     indexMin = min(range(len(calData)), key=lambda i: abs(calData[i]- (min(calData) + calibration_perc_lims[0]*max(calData)) ))
     indexMax = min(range(len(calData)), key=lambda i: abs(calData[i]- (max(calData)*calibration_perc_lims[1])) )
-    
+
     vData, calData = vData[indexMin:indexMax+1], calData[indexMin:indexMax+1]
 
     def normalise(values):
         mi, ma = min(values),max(values)
         ran = ma - mi
         return [(l-mi)/ran for l in values]
-    
+
     calData = [100*x for x in normalise(calData)]
 
     units = '%'
-    
+
     '''Deleting the power_meter allows the garbage collector to delete the pyvisa connection.
     This way if we call get_power_meter() again (e.g. if we are recursivley creating calibration
-    files) we don't throw an error due to an already open conneciton.'''    
+    files) we don't throw an error due to an already open conneciton.'''
     del power_meter
-        
+
     return vData, calData, units
-    
+
 def get_power_meter():
     '''Finds a Thor Labs PM100A power_meter if one is connected and returns a ThorlabsPM100 instance
     for it.  If no power meter is found the function returns None'''
@@ -293,9 +297,9 @@ def configure_power_meter(power_meter, nMeasurmentCounts = 1):
     power_meter.sense.average.count = nMeasurmentCounts
 
 def create_calibration_file(fname, levelData, parsedData, units, level_units='V'):
-    
-    fname = '{0}.txt'.format(fname)
-    
+
+    fname = f'{fname}.txt'
+
     f = open(fname, 'a')
     print ('created: ', fname)
     lineArgs =  [('V', units)]
@@ -304,24 +308,24 @@ def create_calibration_file(fname, levelData, parsedData, units, level_units='V'
         f.write('{0}\t{1}\n'.format(*args))
     f.close()
     print ('written: ', fname)
-    
+
 def save_calibration_plot(fname, vData, calData, units, title):
-    
+
     fig = plt.figure()
-    
+
     ax = fig.add_subplot(111)
     fig.subplots_adjust(top=0.85)
     ax.set_title(title)
-    
+
     ax.set_xlabel('V')
     ax.set_ylabel(units)
-    
+
     ax.plot(vData, calData)
-    
+
     plt.savefig(fname)
     print ('saved img: ', fname)
 
-    
+
 def calibrate_awg_driven_aom_response(
                                   freqs,
                                   name,
@@ -331,7 +335,7 @@ def calibrate_awg_driven_aom_response(
                                   writeToQueryDelay=0.2,
                                   calibration_lims = (0,1),
                                   save_location = os.path.join(os.getcwd(), 'calibrations','jan/awg_driven')):
-    
+
 
 
     class testWaveform(Waveform):
@@ -346,7 +350,7 @@ def calibrate_awg_driven_aom_response(
             self.phases = []
             self.t_step = 2*np.pi/sample_rate
             self.calib(level, self.mod_frequency)
-            
+
         def calib(self, level, mod_freq):
             self.level = level
             self.data = [self.level]*800
@@ -359,78 +363,78 @@ def calibrate_awg_driven_aom_response(
     awg = WX218x_awg()
     print ('Connecting...')
     awg.open(reset=False)
-    
+
     awg.configure_operation_mode(awg_channel, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(awg_channel, 2)
-    
+
     power_meter = get_power_meter()
     if power_meter == None:
         print ('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     for freq in freqs:
         # Run through the voltages and record the TF930 output
         level = 0
         levelData, calData = [], []
         print ('Running through awg levels...might take a while...')
         while level <=1:
-            
+
             print ('Level:', level)
-            
+
             wf = testWaveform(level=level, mod_freq=freq*10**6)
             awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-             
+
             awg.enable_channel(awg_channel)
             time.sleep(writeToQueryDelay)
             levelData.append(level)
             calData.append(power_meter.read)
-            
+
             print (calData[-1])
-            
+
             awg.disable_channel(awg_channel)
             level+=level_step
-            
+
         print ('...finished taking data')
-        
+
         save_plot_location = os.path.join(save_location, 'plots')
         if not os.path.isdir(save_plot_location):
             os.makedirs(save_plot_location)
 
         #save microWatts
         calData = [x*10**6 for x in calData]
-        save_calibration_plot(os.path.join(save_plot_location,'{0}MHz_abs_power.png'.format(freq)), levelData, calData, "muW", "{0}MHz: Power vs level".format(freq))
-        create_calibration_file(os.path.join(save_location,'{0}_{1}_{2}MHz_abs'.format(name,awg_channel,freq)), levelData, calData, units='muW', level_units='level')
+        save_calibration_plot(os.path.join(save_plot_location,f'{freq}MHz_abs_power.png'), levelData, calData, "muW", f"{freq}MHz: Power vs level")
+        create_calibration_file(os.path.join(save_location,f'{name}_{awg_channel}_{freq}MHz_abs'), levelData, calData, units='muW', level_units='level')
 
-        
-        
+
+
         end_on_max = False
         while not end_on_max:
 #         indexMin, indexMax = calData.index(min(calData)), calData.index(max(calData))
             indexMin = min(range(len(calData)), key=lambda i: abs(calData[i]- (min(calData) + calibration_lims[0]*max(calData)) ))
             indexMax = min(range(len(calData)), key=lambda i: abs(calData[i]- (max(calData)*calibration_lims[1])) )
-         
+
             levelData, calData = levelData[indexMin:indexMax+1], calData[indexMin:indexMax+1]
-            
+
             if np.argmax(calData) != len(calData)-1:
                 calibration_lims = (calibration_lims[0], calibration_lims[1]-0.1)
             else:
                 end_on_max = True
-        
+
         print('Calibration limits set to ', calibration_lims, 'to avoid a maximum in the middle of the calibration range.')
-     
+
         def normalise(values):
             mi, ma = min(values),max(values)
             ran = ma - mi
             return [(l-mi)/ran for l in values]
-         
+
         calData = [100*x for x in normalise(calData)]
 
-        save_calibration_plot(os.path.join(save_location,'{0}_{1}_{2}MHz_rel_power_plot.png'.format(name,awg_channel,freq)), levelData, calData, "%", "{0}MHz: Rel Power vs level".format(freq))
-        create_calibration_file(os.path.join(save_location,'{0}_{1}_{2}MHz_rel'.format(name,awg_channel,freq)), levelData, calData, units='%', level_units='level')
-    
+        save_calibration_plot(os.path.join(save_location,f'{name}_{awg_channel}_{freq}MHz_rel_power_plot.png'), levelData, calData, "%", f"{freq}MHz: Rel Power vs level")
+        create_calibration_file(os.path.join(save_location,f'{name}_{awg_channel}_{freq}MHz_rel'), levelData, calData, units='%', level_units='level')
+
     print ('Resetting awg...',)
     awg.reset()
     print ('calibration finished.')
@@ -438,24 +442,24 @@ def calibrate_awg_driven_aom_response(
 
     '''Deleting the power_meter allows the garbage collector to delete the pyvisa connection.
     This way if we call get_power_meter() again (e.g. if we are recursivley creating calibration
-    files) we don't throw an error due to an already open conneciton.'''    
+    files) we don't throw an error due to an already open conneciton.'''
     del power_meter
- 
- 
+
+
 # def calibrate_stirap_aom_response(freqs,
 #                                   level_step=0.1,
 #                                   nMeasurmentCounts=3,
 #                                   writeToQueryDelay=0.2,
 #                                   calibration_lims = (0,0.9),
 #                                   save_location = os.path.join(os.getcwd(), 'calibrations','stirap_awg')):
-#     
+#
 #     '''
 #     Load required classes
 #     '''
 #     from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 #     from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
 #     from ExperiementalRunner import Waveform
-# 
+#
 #     class testWaveform(Waveform):
 #         '''
 #         Subclass of waveform to enable us to easily generate rf signals of different amplitudes.
@@ -468,99 +472,99 @@ def calibrate_awg_driven_aom_response(
 #             self.phases = []
 #             self.t_step = 2*np.pi/sample_rate
 #             self.calib(level, self.mod_frequency)
-#             
+#
 #         def calib(self, level, mod_freq):
 #             self.level = level
 #             self.data = [self.level]*800
 #             self.mod_frequency = mod_freq
-# 
+#
 #     # Open and configure the AWG
 #     sample_rate = 1.25*10**9
-# 
+#
 #     print 'Creating AWG instance'
 #     awg = WX218x_awg()
 #     print 'Connecting...'
 #     awg.open(reset=False)
-#     
+#
 #     awg.configure_operation_mode(Channel.CHANNEL_1, WX218x_OperationMode.CONTINUOUS)
 #     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
 #     awg.configure_sample_rate(sample_rate)
 #     awg.configure_arb_gain(Channel.CHANNEL_1, 2)
 #     awg.configure_arb_gain(Channel.CHANNEL_2, 2)
-#     
+#
 #     power_meter = get_power_meter()
 #     if power_meter == None:
 #         print 'Calibration failed - power meter could not be found'
 #         raise CalibrationException('Calibration failed - power meter could not be found')
 #     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-#     
+#
 #     for freq in freqs:
 #         # Run through the voltages and record the TF930 output
 #         level = 0
 #         levelData, calData = [], []
 #         print 'Running through awg levels...might take a while...'
 #         while level <=1:
-#             
+#
 #             print 'Level:', level
-#             
+#
 #             wf = testWaveform(level=level, mod_freq=freq*10**6)
 #             awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-#              
+#
 #             awg.enable_channel(Channel.CHANNEL_1)
 #             time.sleep(writeToQueryDelay)
 #             levelData.append(level)
 #             calData.append(power_meter.read)
-#             
+#
 #             print calData[-1]
-#             
+#
 #             awg.disable_channel(Channel.CHANNEL_1)
 #             level+=level_step
-#             
+#
 #         print '...finished!'
-#         
+#
 #         save_plot_location = os.path.join(save_location, 'plots')
 #         if not os.path.isdir(save_plot_location):
 #             os.makedirs(save_plot_location)
-#         
+#
 #         save_calibration_plot(os.path.join(save_plot_location,'{0}MHz_abs_power.png'.format(freq)), levelData, calData, "W", "{0}MHz: Power vs level".format(freq))
-#         
+#
 # #         indexMin, indexMax = calData.index(min(calData)), calData.index(max(calData))
 #         indexMin = min(range(len(calData)), key=lambda i: abs(calData[i]- (min(calData) + calibration_lims[0]*max(calData)) ))
 #         indexMax = min(range(len(calData)), key=lambda i: abs(calData[i]- (max(calData)*calibration_lims[1])) )
-#      
+#
 #         levelData, calData = levelData[indexMin:indexMax+1], calData[indexMin:indexMax+1]
-#      
+#
 #         def normalise(values):
 #             mi, ma = min(values),max(values)
 #             ran = ma - mi
 #             return [(l-mi)/ran for l in values]
-#          
+#
 #         calData = [100*x for x in normalise(calData)]
-#      
+#
 #         save_calibration_plot(os.path.join(save_location, 'plots','{0}MHz_rel_power.png'.format(freq)), levelData, calData, "%", "{0}MHz: % Power vs level".format(freq))
 #         create_calibration_file(os.path.join(save_location,'{0}MHz'.format(freq)), levelData, calData, units='%', level_units='level')
-#         
+#
 #     awg.close()
-# 
+#
 #     '''Deleting the power_meter allows the garbage collector to delete the pyvisa connection.
 #     This way if we call get_power_meter() again (e.g. if we are recursivley creating calibration
-#     files) we don't throw an error due to an already open conneciton.'''    
+#     files) we don't throw an error due to an already open conneciton.'''
 #     del power_meter
 #     print 'finished calibrations'
-# 
-#  
+#
+#
 
 def test_stirap_aom_freq_response(level=0.5,
                                   freqs=range(60,90,1),
                                   nMeasurmentCounts=3,
                                   writeToQueryDelay=0.2):
-    
+
     '''
     Load required classes
     '''
-    from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-    from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
     from ExperimentalConfigs import Waveform
+    from instruments.WX218x.WX218x_awg import Channel, WX218x_awg
+    from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_OutputMode
 
     class testWaveform(Waveform):
         '''
@@ -574,7 +578,7 @@ def test_stirap_aom_freq_response(level=0.5,
             self.phases = []
             self.t_step = 2*np.pi/sample_rate
             self.calib(level, self.mod_frequency)
-            
+
         def calib(self, level, mod_freq):
             self.level = level
             self.data = [self.level]*800
@@ -587,35 +591,35 @@ def test_stirap_aom_freq_response(level=0.5,
     awg = WX218x_awg()
     print ('Connecting...')
     awg.open(reset=False)
-    
+
     awg.configure_operation_mode(Channel.CHANNEL_1, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(Channel.CHANNEL_1, 2)
     awg.configure_arb_gain(Channel.CHANNEL_2, 2)
-    
+
     power_meter = get_power_meter()
     if power_meter == None:
         print ('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     calData = []
-    
+
     for freq in freqs:
         # Run through the voltages and record the TF930 output
-    
+
         print ('freq:', freq)
-        
+
         wf = testWaveform(level=level, mod_freq=freq*10**6)
         awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-        
+
         awg.enable_channel(Channel.CHANNEL_1)
         time.sleep(writeToQueryDelay)
         calData.append(power_meter.read)
-        
+
         print (calData[-1])
-        
+
         awg.disable_channel(Channel.CHANNEL_1)
 
     awg.reset()
@@ -623,19 +627,19 @@ def test_stirap_aom_freq_response(level=0.5,
 
     '''Deleting the power_meter allows the garbage collector to delete the pyvisa connection.
     This way if we call get_power_meter() again (e.g. if we are recursivley creating calibration
-    files) we don't throw an error due to an already open conneciton.'''    
+    files) we don't throw an error due to an already open conneciton.'''
     del power_meter
-   
+
     fig = plt.figure()
-    
+
     ax = fig.add_subplot(111)
     fig.subplots_adjust(top=0.85)
-    
+
     ax.set_xlabel('freq')
     ax.set_ylabel('W')
-    
+
     ax.plot(freqs, calData)
-    
+
 
 if __name__ == "__main__":
 
@@ -648,19 +652,19 @@ if __name__ == "__main__":
 #    need to write new calibration routine for opical pumping where I am only producing a square pulse
 
 ###################################################################
-    
+
 # DAQ AMP calib
-  
+
     def getCalibName(aom_name, freq):
-         return '{0}_amp_at_{1}MHz'.format(aom_name, freq)
-    
+         return f'{aom_name}_amp_at_{freq}MHz'
+
     # aom_name = 'vStirap_ref'
     # amp_channel = 9
     # freq_ch = 8
     #freq_v = [6.104]
     # freq_v = [6.412,6.051,5.113,4.16,3.2087]
     # aom_freqs = [76,78,80,82,84]
-      
+
 #    aom_name = 'cool_lower'
 #    amp_channel = 5
 #    freq_ch = 1
@@ -673,7 +677,7 @@ if __name__ == "__main__":
 #   freq_v = [4.141,5.089,6.017,6.383]
 #    aom_freqs = [90,95,100,102]
 #
-    
+
     aom_name = 'cool_upper'
     freq_ch = 0
     amp_channel = 4
@@ -685,15 +689,15 @@ if __name__ == "__main__":
     daq_controller.continuousOutput=True
 
     for freq, v in zip(aom_freqs,freq_v):
-        calibName = '{0}_amp_at_{1}MHz'.format(aom_name, freq)
+        calibName = f'{aom_name}_amp_at_{freq}MHz'
         daq_controller.updateChannelValue(freq_ch, v)
         time.sleep(3)
         vData, calData, units = calibrate_absolute_power(daq_controller, amp_channel, (0.2,
                                                                                        1.75),
                                                         calibration_V_step = get_default_calibration_Vstep()*5,
                                                         writeToQueryDelay = 0.5)
-        create_calibration_file(os.getcwd() + '/calibrations/jan/{0}/{1}'.format(aom_name, calibName), vData, calData, units)
-        save_calibration_plot(os.getcwd() + '/calibrations/jan/{0}/{1}_plot.png'.format(aom_name, calibName), vData, calData, units, 'freq = {0}MHz'.format(freq))
+        create_calibration_file(os.getcwd() + f'/calibrations/jan/{aom_name}/{calibName}', vData, calData, units)
+        save_calibration_plot(os.getcwd() + f'/calibrations/jan/{aom_name}/{calibName}_plot.png', vData, calData, units, f'freq = {freq}MHz')
 
 
 

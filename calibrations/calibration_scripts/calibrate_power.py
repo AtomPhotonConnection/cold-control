@@ -9,25 +9,24 @@ Compensates for flip mirror if using_flip_mirror is set to True.
 
 import os
 import sys
-import numpy as np
-from scipy.constants import c, epsilon_0, hbar
+
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
+from scipy.constants import c, epsilon_0, hbar
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))) # add parent directory to path
 
 from instruments.WX218x.WX218x_awg import Channel
+
 import lab_control_functions.calibration_functions as calibrate
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
-
 
 # general coefficients
 #gamma_d1 = 5.746*np.pi
 gamma_d2= 6*np.pi
 typical_waist_size=450 #mu m
 #d_d1 = 2.537 * 10**(-29)
-d_d2= 2.853 * 10**(-29) 
+d_d2= 2.853 * 10**(-29)
 
 # V-STIRAP re-preparation coefficients
 cg_d2_stokes = np.sqrt(1/8)
@@ -38,7 +37,7 @@ rabi_stirap_d2 = 50*2*np.pi
 # OPT PUMPING coefficients
 cg_d2_p1 = 0.32
 cg_d2_p2 = np.sqrt(1/8)# NOT USED FOR THIS SCHEME
-#rabi_p1_d1 = 34 
+#rabi_p1_d1 = 34
 rabi_p1_d2 = 50*2*np.pi
 #rabi_p2_d1 = 24
 rabi_p2_d2 = 25.5# NOT USED FOR THIS SCHEME
@@ -95,7 +94,7 @@ def default_calib(calib_tuples):
             config_save_path=r"calibrations\pulse_shaping_expt\OPT_PUMP_DL_PRO"
         else:
             raise ValueError("Channel must be 1, 2, 3 or 4")
-        
+
 
         cg_d2_map = {'stokes': cg_d2_stokes,'pump': cg_d2_pump, 'P1': cg_d2_p1,\
                       'P2': cg_d2_p2}
@@ -122,12 +121,12 @@ def default_calib(calib_tuples):
                                                             save_all=True,
                                                             results_dict=results_dict,
                                                             flip_mirror=True,)
-        
+
         if results_dict is None:
             raise ValueError("results_dict returned from finding_amplitude_from_power is None.")
         df = pd.DataFrame({'amplitude_cal': results_dict.get('level', []),\
                            'power': results_dict.get('read_value', [])})
-        
+
 
         df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(\
                                                         p * 1e3,
@@ -148,9 +147,9 @@ def default_calib(calib_tuples):
         if not os.path.exists(full_folder_path):
             os.makedirs(full_folder_path)
 
-        
 
-        output_file = os.path.join(full_folder_path, f'rabi_data.csv')
+
+        output_file = os.path.join(full_folder_path, 'rabi_data.csv')
         df.to_csv(output_file, index=False)
 
         print("Instantiating RabiFreqVoltageConverter...")
@@ -201,6 +200,6 @@ if __name__ == "__main__":
 
 
 
-        
+
 
 

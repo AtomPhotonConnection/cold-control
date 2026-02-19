@@ -7,6 +7,6 @@ from tkinter import ttk
 
 
 def configureStyles():
-    
-    s=ttk.Style()    
+
+    s=ttk.Style()
     s.configure('Files.TMenubutton',foreground='blue', font='helvetica 10')

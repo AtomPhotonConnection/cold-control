@@ -1,9 +1,11 @@
+import datetime
+import os
+import re
+
 import matplotlib.pyplot as plt
-import re, os
+import numpy as np
 import pandas as pd
 from numpy import trapz
-import numpy as np
-import datetime
 
 plotter = False
 
@@ -40,7 +42,7 @@ def get_folder_paths(directory_path):
         # Check if the entry is a directory (folder)
         if os.path.isdir(full_path):
             # Add the raw string representation of the path
-            folder_paths.append(r"{}".format(full_path))
+            folder_paths.append(rf"{full_path}")
     return folder_paths
 
 
@@ -94,7 +96,7 @@ def calculate_integrals_single_trace(data, i=0):
         ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
 
         t_start_ref = t_drop + 50e-6  # after imaging stops
-        t_end_ref = data['Time (s)'].iloc[-1] 
+        t_end_ref = data['Time (s)'].iloc[-1]
         mask_ref = (data['Time (s)'] >= t_start_ref) & (data['Time (s)'] <= t_end_ref)
         ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
         average = ch4_segment_ref['Channel 3 Voltage (V)'].mean(axis=0)
@@ -107,7 +109,7 @@ def calculate_integrals_single_trace(data, i=0):
         if drop_time is not None:
             if abs(drop_time - TARGET_TIME) <= TOLERANCE:
                 print("The drop time is close enough to the expected time")
-            
+
                 if area is not None and not np.isnan(area):
                     processed_df[f'Time (s) {i}'] = data['Time (s)']
                     processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
@@ -164,7 +166,7 @@ def single_trace_int_based_on_marker(data, i=0):
         ch4_segment_fl = data.loc[mask_fl, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
 
         t_start_ref = t_drop + 50e-6  # after imaging stops
-        t_end_ref = data['Time (s)'].iloc[-1] 
+        t_end_ref = data['Time (s)'].iloc[-1]
         mask_ref = (data['Time (s)'] >= t_start_ref) & (data['Time (s)'] <= t_end_ref)
         ch4_segment_ref = data.loc[mask_ref, ['Time (s)', 'Channel 3 Voltage (V)']].copy()
         average = ch4_segment_ref['Channel 3 Voltage (V)'].mean(axis=0)
@@ -176,7 +178,7 @@ def single_trace_int_based_on_marker(data, i=0):
         # only consider the result if the timing of the awg marker is correct
         if True:#abs(drop_time - TARGET_TIME) <= TOLERANCE:
             print("The drop time is close enough to the expected time")
-        
+
             if area is not None and not np.isnan(area):
                 processed_df[f'Time (s) {i}'] = data['Time (s)']
                 processed_df[f'Channel 1 Voltage (V) {i}'] = data['Channel 1 Voltage (V)']
@@ -195,7 +197,7 @@ def single_trace_int_based_on_marker(data, i=0):
 def plot_shot_results(folder_path):
     pattern = re.compile(r'^iteration_\d+_data\.csv$')
     files = [os.path.join(folder_path, filename) for filename in os.listdir(folder_path) if pattern.match(filename)]
-    all_measurements = [] 
+    all_measurements = []
 
     window_size = 64
     for file_path in files:
@@ -230,7 +232,7 @@ def plot_shot_results(folder_path):
         idx_ch1_1 = idx_sorted[0] # ch1 crosses 1V (trigger value)
 
         (area, average, processed_df) = calculate_integrals_single_trace(data, i)
-        
+
         if processed_df is not None:
             integrals_fl.append(area)
             ref_0.append(average)
@@ -301,7 +303,7 @@ def plot_shot_results(folder_path):
     ax2.tick_params(axis='y', labelcolor='tab:orange')
 
     ax3 = ax1.twinx()
-    ax3.spines['right'].set_position(('outward', 100)) 
+    ax3.spines['right'].set_position(('outward', 100))
     ax3.plot(mean_time, mean_ch2, linewidth = 0.5, color='green', label='Channel 2')
     ax3.set_ylabel('Imaging Marker', color='green')
     ax3.tick_params(axis='y', labelcolor='green')
@@ -327,7 +329,7 @@ def plot_shot_results(folder_path):
     ax2.tick_params(axis='y', labelcolor='tab:orange')
 
     ax3 = ax1.twinx()
-    ax3.spines['right'].set_position(('outward', 100)) 
+    ax3.spines['right'].set_position(('outward', 100))
     ax3.plot(time_val, ch2_val, linewidth = 0.5, color='green', label='Channel 2')
     ax3.set_ylabel('Imaging Marker', color='green')
     ax3.tick_params(axis='y', labelcolor='green')
@@ -376,7 +378,7 @@ def calculate_integrals(root_directory, shots_to_include=[], window_size=32,
         for root, _, file_list in os.walk(folder_path):
             if shots_to_include:
                 if not any(shot in root for shot in shots_to_include):
-                    continue  
+                    continue
             for f in file_list:
                 if pattern.match(f):
                     full_path = os.path.join(root, f)
@@ -450,7 +452,7 @@ if __name__ == "__main__":
     #     r"\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_optimized_stokes_optimized_126_80",
     #     r'\data\2025-06-09\16-08-07_low_fluoresce\sweeped_pump_zero_175_stokes_zero_175_126_80'
     # ]
-    
+
     while True:
         response = input("Plot data from a single shot (1/single) or calculate integrals (2/calc):\n")
         if response in ["0", "x", "exit", "q", "quit"]:
@@ -462,8 +464,8 @@ if __name__ == "__main__":
             calculate_integrals(path)
         else:
             print("Invalid response")
-        
 
-    
+
+
     #calculate_integrals(root_directory)
     #plot_shot_results(single_shot_path)

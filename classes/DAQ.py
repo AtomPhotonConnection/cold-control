@@ -6,11 +6,22 @@ Created on 2 Apr 2016. Revised 8 Jan 2025.
 @author: tombarrett
 '''
 
-import numpy as np
-from ctypes import c_ubyte, c_short, c_ushort, c_long, c_ulong, c_float, c_double, c_void_p,\
-      POINTER, byref, WinDLL
 import re
-from mock.mock import MagicMock
+from ctypes import (
+    POINTER,
+    WinDLL,
+    byref,
+    c_double,
+    c_float,
+    c_long,
+    c_short,
+    c_ubyte,
+    c_ulong,
+    c_ushort,
+    c_void_p,
+)
+
+import numpy as np
 import pandas as pd
 
 # Windows API data types
@@ -189,7 +200,7 @@ warning_code = {
 #ErrorResetBufferNotAllowed = -47
 #ErrorAnaTriggerLevel = -48
 #ErrorDAQEvent = -49
-#ErrorInvalidCounterValue = -50 
+#ErrorInvalidCounterValue = -50
 #ErrorOffsetCalibration = -51
 #ErrorGainCalibration = -52
 #ErrorCountOutofSDRAMSize = -53
@@ -414,7 +425,7 @@ DAQ2K_DA_WRSRC_SSI = 0x02
 DAQ2K_DA_WRSRC_AFI0 = DAQ2K_DA_WRSRC_AFI1
 DAQ2K_DA_WRSRC_PFI0 = DAQ2K_DA_WRSRC_AFI0
 
-# DA group 
+# DA group
 DA_Group_A = 0x00
 DA_Group_B = 0x04
 DA_Group_AB = 0x08
@@ -513,12 +524,12 @@ SSI_TIME = 1
 SSI_CONV = 2
 SSI_WR = 4
 SSI_ADSTART = 8
-SSI_ADTRIG = 0x20 
+SSI_ADTRIG = 0x20
 SSI_DATRIG = 0x40
 
 # signal code for GPTC
 GPTC_CLK_0 = 0x100
-GPTC_GATE_0 = 0x200 
+GPTC_GATE_0 = 0x200
 GPTC_OUT_0 = 0x300
 GPTC_CLK_1 = 0x400
 GPTC_GATE_1 = 0x500
@@ -528,7 +539,7 @@ GPTC_OUT_1 = 0x600
 PXI_CLK_10_M = 0x1000
 CLK_20_M  = 0x2000
 
-# signal code for external SMB clk 
+# signal code for external SMB clk
 SMB_CLK_IN = 0x3000
 
 # signal route lines
@@ -569,7 +580,7 @@ DATrigEvent_A = 4
 DATrigEvent_B = 5
 DATrigEvent_AB = 6
 
-# Not_Reset_Code 
+# Not_Reset_Code
 DIONotRest = 0x01
 
 #
@@ -843,53 +854,53 @@ dll.D2K_DO_GetEvent.argtypes = (U16,POINTER(HANDLE),)
 
 '''A low-level class for registering a DAQ_2502 card and performing basic read,
 write functionality.'''
-class DAQ2502(object):
+class DAQ2502:
     def __init__(self, card_number):
-        
+
         self.card = dll.D2K_Register_Card(DAQ_2502, card_number)
         self.n_samples = {}
         self.numChs = 8
-        
+
         da_ch = (U16*8)(0, 1, 2, 3, 4, 5, 6, 7)
-        
+
         if self.card < 0:
             raise Exception(warning_code[self.card])
         else:
             print('Registered card', card_number, 'as card number', self.card)
-        
+
         dll.D2K_AO_Group_Setup(self.card, DA_Group_AB, 8, da_ch)
         dll.D2K_AO_Config(self.card, DAQ2K_DA_WRSRC_Int, DAQ2K_DA_TRGSRC_SOFT | DAQ2K_DA_TRGMOD_POST, 0, 0, 0, 0)
-    
+
     def release(self):
         dll.D2K_Release_Card(self.card)
         print('Released card', self.card)
-    
+
     # Analog Output
     def write(self, digital_values):
         # AO channels are in order [0, 1, 2, 3, 4, 5, 6, 7]
         # Speed test: 512 samples in 13 ms = 40 ksps
         dll.D2K_AO_Group_Update(self.card, DA_Group_AB, digital_values.ctypes.data_as(POINTER(I16)))
-    
+
     def load(self, digital_values):
         buffer_id = U16()
-        
+
         self.digital_values = digital_values
-        
+
         n_samples, n_channels = digital_values.shape
         if n_channels != self.numChs:
             print('WARNING: Trying to load', n_channels, 'channels of data into a', self.numChs, 'channel DAQ.')
-              
+
         dll.D2K_AO_ContBufferSetup(self.card, digital_values.ctypes.data_as(c_void_p), n_samples*n_channels, byref(buffer_id))
-        
+
         self.n_samples[buffer_id.value] = n_samples
         self.last_buffer = buffer_id.value
-        
+
         return self.last_buffer
-        
+
     def play(self, update_interval=40, buffer_id=None):
         if not buffer_id: buffer_id = self.last_buffer
         dll.D2K_AO_Group_WFM_Start(self.card, DA_Group_AB,  buffer_id, 0, self.n_samples[buffer_id], 1, update_interval, 1)
-        
+
     def wait(self):
         write_finished = BOOLEAN(0)
         write_count = U32(0)
@@ -897,16 +908,16 @@ class DAQ2502(object):
         while write_finished.value == 0:
             dll.D2K_AO_Group_WFM_AsyncCheck(self.card, DA_Group_AB, write_finished, write_count)
 #         print write_finished.value
-            
+
     def stop(self):
         write_count = U32(0)
         dll.D2K_AO_Group_WFM_AsyncClear(self.card, DA_Group_AB, write_count, DAQ2K_DA_TerminateImmediate)
 #         print write_count.value, "samples written in total on card", self.card
-            
+
     def clear(self):
         dll.D2K_AO_ContBufferReset(self.card)
         self.n_samples = {}
-    
+
     # Analog Input
     def read(self):
         # I16 D2K_AI_ScanReadChannels (U16 CardNumber, U16 NumChans, U16 *Chans, U16 *Buffer)
@@ -914,7 +925,7 @@ class DAQ2502(object):
         digital_values = np.zeros([4], I16)
         dll.D2K_AI_ScanReadChannels (self.card, 4, ad_ch, digital_values.ctypes.data_as(POINTER(I16)))
         return digital_values
-    
+
     # Digital channels
 
 #     def configure_digital_line(self, port, line, direction):
@@ -922,20 +933,20 @@ class DAQ2502(object):
 #         if err != 0:
 #             print err
 #             raise Daq2502Exception('Error configuring the digital line', err)
-        
+
     def configure_digital_port(self, port, direction):
         err =  dll.D2K_DIO_PortConfig(self.card, port, direction)
         if err != 0:
             print(err)
             raise Daq2502Exception('Error configuring the digital line', err)
-    
+
     # Digital output
     def write_digital_port(self, bit_values, port):
         dll.D2K_DO_WritePort(self.card, port, bit_values)
-        
+
     def write_digital_line(self, port, line, state):
         dll.D2K_DO_WriteLine(self.card, port, line, state)
-        
+
     def read_digital_line(self, port, line, direction):
         state = U16(2)
 
@@ -943,18 +954,18 @@ class DAQ2502(object):
             dll.D2K_DO_ReadLine(self.card, port, line, byref(state))
         elif direction==INPUT_LINE:
             dll.D2K_DI_ReadLine(self.card, port, line, byref(state))
-        
+
         return state.value
 
     # Digital input
     # TODO
-    
+
     def get_card(self):
         return self.__card
 
     def get_n_samples(self):
         return self.__n_samples
-    
+
     def set_card(self, value):
         self.__card = value
 
@@ -970,23 +981,23 @@ class DAQ2502(object):
     card = property(get_card, set_card, del_card, "DAQ card ID for addressing it")
     n_samples = property(get_n_samples, set_n_samples, del_n_samples, "The (min, max) digital values the DAQ card can output on a channel")
 
-class DAQ_channel(object):
+class DAQ_channel:
     '''A simple class for the persistance of labels and settings of individual DAQ channels.'''
-    
+
     def __init__(self, chNum, chName='', chLimits=(-10,10), defaultValue=0.0, isUIVisable = True,
                  calibrationFname = ''):
-        
+
         self.chNum = chNum
-        self.chName =  chName.strip() if chName.strip() else "Ch " + str(chNum) 
+        self.chName =  chName.strip() if chName.strip() else "Ch " + str(chNum)
         self.chLimits = chLimits
         self.defaultValue = defaultValue
         self.isUIVisable = isUIVisable
-        
+
         self.isCalibrated = False
         self.calibrationUnits = ''
         if calibrationFname.strip() != '':
             self.calibrate(calibrationFname, from_csv=False)
-        
+
     def calibrate_from_txt(self, calibrationFname, reReadIn = r'([\+|\-]?[\d|\.]+)[ \t]*([\+|\-]?[\d|\.]+)'):
         """
         WARNING: THIS METHOD IS DEPRECATED. USE CALIBRATE (WHICH TAKES A CSV FILE AS INPUT) INSTEAD.
@@ -1005,19 +1016,19 @@ class DAQ_channel(object):
                 if match:
                     vData.append(float(match.group(1)))
                     calData.append(float(match.group(2)))
-                    
+
         if calData[0] <= calData[-1]:
             self.calibrationToVFunc = lambda x: np.interp(x, calData, vData)
         else:
             print(self.chName, ": calibration to Voltage being reversed...")
             self.calibrationToVFunc = lambda x: np.interp(x, [x for x in reversed(calData)], [x for x in reversed(vData)])
-            
-        if vData[0] <= vData[-1]:    
+
+        if vData[0] <= vData[-1]:
             self.calibrationFromVFunc = lambda x: np.interp(x, vData, calData)
         else:
             print(self.chName, ": calibration from Voltage being reversed...")
             self.calibrationFromVFunc = lambda x: np.interp(x, [x for x in reversed(vData)], [x for x in reversed(calData)])
-        
+
         self.isCalibrated = True
         self.calibrationFname = calibrationFname
 
@@ -1066,21 +1077,21 @@ class DAQ_channel(object):
         self.isCalibrated = True
         self.calibrationFname = calibrationFname
 
-        
+
     def removeCalibration(self):
         self.isCalibrated = False
         self.calibrationToVFunc, self.calibrationFromVFunc = None, None
         self.calibrationUnits = ''
-        
+
     def getHelpText(self):
         formatArgs = [self.chNum, self.chLimits, self.defaultValue]
         if self.isCalibrated and self.calibrationFromVFunc is not None:
-            formatArgs[2] = '{0}{1}'.format(self.calibrationFromVFunc(self.defaultValue), self.calibrationUnits)
+            formatArgs[2] = f'{self.calibrationFromVFunc(self.defaultValue)}{self.calibrationUnits}'
         return ('DAQ channel: {0}\n' + \
                 'Channel limits: {1}V\n' + \
                 'Default value: {2}\n' + \
                 self.getCalibrationText()).format(*formatArgs)
-                
+
     def getCalibrationText(self):
         if not self.isCalibrated or self.calibrationToVFunc is None or self.calibrationFromVFunc is None:
             return 'There is no calibration on this channel.'
@@ -1091,9 +1102,9 @@ class DAQ_channel(object):
                                self.calibrationToVFunc((-np.inf,np.inf)),
                                self.calibrationFromVFunc((-np.inf,np.inf)),
                                self.calibrationUnits))
- 
+
 class DAQ_dio:
-     
+
     def __init__(self, dio_name, dio_num, port, line, direction, enabled_state):
         self.dio_name: str = dio_name
         self.dio_num: int = dio_num
@@ -1101,50 +1112,50 @@ class DAQ_dio:
         self.line: int = line
         self.direction: int = direction
         self.enabled_state: int = enabled_state
-        
+
         self.write_fn, self.read_fn = None, None
-        
+
     def register_write_fn(self, write_fn):
         self.write_fn = write_fn
-        
+
     def register_read_fn(self, read_fn):
         self.read_fn = read_fn
-        
+
     def write(self, value):
         if self.write_fn is None:
             raise Exception('No write function has been registered for this digital IO.')
         return self.write_fn(value)
-        
+
     def read(self):
         if self.read_fn is None:
             raise Exception('No read function has been registered for this digital IO.')
         return self.read_fn()
-    
+
     def toggle_state(self, return_state=False):
         self.write(1 if self.read()==0 else 0)
         if return_state:
             return self.read()
-    
+
     def get_help_text(self):
         direction = 'output' if self.direction==OUTPUT_LINE else \
                     'input' if self.direction==INPUT_LINE else \
                     'unknown'
-                    
+
         return ('Digital {0} channel registered on digital channel {1}.\n' +\
                 'Enabled state is {2}.\n' +\
                 '(Technical details: port {3},  line {4}).').\
                     format(direction, self.dio_num, 'HIGH' if self.enabled_state==1 else 'LOW', self.port, self.line)
-    
+
     def get_state(self):
         return self.read()
-    
+
 class DAQ_card(DAQ2502):
     '''A subclass of DAQ2502 to extend it's functionality to be more user friendly.  In particular the conversion of
     sequences from a user friendly format (arrays of voltages on channel in numeric order) to the form expected by the
     DAQ card is handled at this level.'''
-    
+
     def __init__(self, card_number, channels=[], dios=[]):
-        DAQ2502.__init__(self, card_number) 
+        DAQ2502.__init__(self, card_number)
         # Hard-coded limits - there are exactly 8 channels on the DAC card, each capable of outputting digital
         # values from 0 to 4095.<--> -/+10V.
         # When passing a full sequence to the DAQ card as an array the n-th channel sequence doesn't necessarily correspond
@@ -1165,12 +1176,12 @@ class DAQ_card(DAQ2502):
         self.clock_speed = 40*10**6
         self.useInternalTimeBasis = True
         self.updateIntervalLimits = (40, 16777215) if self.useInternalTimeBasis else (8, 16777215)
-        
+
         # Perform some basic validation on the channels provided and sort them by channel number
         self.channels = self.validateAndSortChannels(channels)
-        
+
         self.dios = self.validateAndRegisterDigitalIos(dios)
-        
+
     def arrayToDigitalValues(self, sequenceArray, reqChOrder=None):
         '''Takes a numpy array denoting the desired voltages on each DAQ channel of the form:
             [[Ch0_t0,Ch0_t1,Ch0_t2, ...],
@@ -1182,34 +1193,34 @@ class DAQ_card(DAQ2502):
         numChs, numSamps = sequenceArray.shape
         if numChs != self.numChs:
             print('WARNING: the sequence being loaded is for', numChs, 'but DAQ card', self.card, 'has', self.numChs, 'channels.')
-        
+
         # The digital values representing the sequence that will be put to the card (note the data type is predetermined as uint16).
         digital_values = np.zeros((numChs, numSamps), dtype=np.uint16)
-        
+
         # Populate the digital_values array. Three things are done here
         #   1. The sequence is clipped according to the user set limits on the DAC channel output.
         #   2. The channel values are scaled to be digital values within the limits of the DAQ card...
         #   3. The order the channels as listed in the array is changed to match that expected by the dll.D2K_AO_Group_WFM_Start function on the card.
         if reqChOrder == None:
             # Don't reorder the channels of no order was provided
-            reqChOrder = range(0,numChs) 
+            reqChOrder = range(0,numChs)
         for i in range(0,numChs):
             digital_values[reqChOrder.index(i)] = \
                 np.interp(np.clip(sequenceArray[i], self.channels[i].chLimits[0], self.channels[i].chLimits[1]),
                           self.chVoltageLimits, self.chDigitalLimits)
-            
+
         # NOTE: The following was the old way of ensuring the array was in the right format for the DAQ card
         # # I think the DAQ card expects the matrix shape to be (numSamps, numChs) so let's correct for that -
         # # however, .transpose only changes the representation of the data (i.e. for the user/validation)m
         # # to change the order the card access the array data we set order='c'. (Thanks Dustin!)
         # digital_values= digital_values.transpose()
         # return digital_values.astype(np.uint16, order='c')
-        
+
         # NOTE: Transpose, force C-contiguous layout, and set data type to uint16
         digital_values = digital_values.T
         digital_values = np.ascontiguousarray(digital_values, dtype=np.uint16)
         return digital_values
-    
+
     def play(self, update_interval=1, buffer_id=None):
         '''Note update_interval is in microseconds for DAQ_card (converted to clock ticks internally)'''
         update_interval_ticks = int(round(update_interval*10**-6 * self.clock_speed))
@@ -1217,21 +1228,21 @@ class DAQ_card(DAQ2502):
             raise DaqPlayException('Error on DAQ card {0}: update interval of {1} is not between card limits of {2} to {3}.'.\
                                    format(self.card, update_interval_ticks, *self.updateIntervalLimits))
         DAQ2502.play(self, update_interval=update_interval_ticks, buffer_id=buffer_id)
-        
+
     def write(self, digital_values):
         """NOTE: digital_values isn't actually an array of digital values. It must be converted."""
         return DAQ2502.write(self, self.arrayToDigitalValues(digital_values, [0,1,2,3,4,5,6,7]))
-        
+
     def load(self, digital_values):
         """NOTE: digital_values isn't actually an array of digital values. It must be converted."""
         return DAQ2502.load(self, self.arrayToDigitalValues(digital_values, self.expectedChOrderForSeq))
-        
+
     def validateAndSortChannels(self, channels):
         ''' Check the right number of channels are registered and attempt to fix it if they are not.'''
         for ch in channels:
             if type(ch) is not DAQ_channel:
                 raise TypeError("Only DAQ_channel objects can registered channels on a DAQ_card")
-        
+
         # Check we have the right number of channels registered
         regChs = len(channels)
         if self.numChs < regChs:
@@ -1240,14 +1251,14 @@ class DAQ_card(DAQ2502):
         elif self.numChs > regChs:
             print("WARNING: fewer DAQ channels were registered than are available. Unassigned channels will use default labelling and values.")
             channels += [DAQ_channel(i) for i in range(regChs,self.numChs)]
-        
+
         # Sort channels by number and check that we have the expected channel numbers (e.g. 0,1,2,...) registered.
         # Note that for slaves the first channel number might be, e.g., 8 which would correspond to ch 0 on the card
-        channels = sorted(channels, key= lambda ch : ch.chNum)   
+        channels = sorted(channels, key= lambda ch : ch.chNum)
         if [ch.chNum for ch in channels] != [i for i in range(channels[0].chNum , channels[0].chNum + self.numChs)]:
             raise Exception("Unexpected channels registered.\nRegistered channel numbers: "+ str([ch.chNum for ch in channels]) +
                             "\nExpected channel numbers: " + str([i for i in range(channels[0].chNum, self.numChs)]))
-                            
+
         return channels
 
     def validateAndRegisterDigitalIos(self, dios):
@@ -1264,7 +1275,7 @@ class DAQ_card(DAQ2502):
                     dio.register_write_fn(lambda state,
                                                  card=self,
                                                  port=dio.port,
-                                                 line=dio.line: 
+                                                 line=dio.line:
                                                     DAQ2502.write_digital_line(card, port, line, state))
                 # TODO: register read functions
                 dio.register_read_fn(lambda card=self,
@@ -1272,45 +1283,44 @@ class DAQ_card(DAQ2502):
                                             line=dio.line,
                                             direction=dio.direction:
                                                 DAQ2502.read_digital_line(card, port, line, direction))
-                
-                registered_lines.append(dio)  
-                
-            except Daq2502Exception as err:
-                print('Error configuring digital line (\'{0}\') on card {0}, port {1}, line {2}.  Not registering line.'.format(
-                        dio.dio_name, self.card, dio.port, dio.line))
-            
+
+                registered_lines.append(dio)
+
+            except Daq2502Exception:
+                print(f'Error configuring digital line (\'{dio.dio_name}\') on card {dio.dio_name}, port {self.card}, line {dio.port}.  Not registering line.')
+
         return registered_lines
-            
-class DAQ_controller(object):
+
+class DAQ_controller:
     '''A class for controlling one or more DAQ_2502 cards.  For multiple cards, all timings synchronised to a chosen 'master' card.
     The aim is for this to be the lowest level for the user control the DAQ cards - i.e. the DAQ cards act like one giant card through
     this interface.'''
-    
+
     def __init__(self, master, slaves=[], continuousOutput=False):
         '''Initialise the DAQ_controller with:
             master : a DAQ2502/DAQ_card instance
             slaves : one or more DAQ2502/DAQ_card instances, slaves = myDAQ or slaves=[myDAQ1, myDAQ2...]'''
-        
+
 #         check that master is one DAQ card, slave is list of DAQ cards
         if type(slaves) is not list:
             slaves = [slaves]
 #         for card in slaves + [master]:
 #             if not isinstance(card, DAQ2502):
 #                 raise TypeError("Only DAQ2502 objects can be passed to the DAQ_controller")
-            
+
         self.master = master
         self.slaves = slaves
-        
+
 #         Enslave all the slave cards to the master
         for slave in self.slaves:
             self.enslave(slave)
 
         self.continuousOutput = continuousOutput
-            
+
         self.channelValues = {ch.chNum: ch.defaultValue for ch in self.getChannels()}
         if continuousOutput:
             self.writeChannelValues()
-    
+
     def updateChannelValue(self, chNum, newValue):
         self.channelValues[chNum] = newValue
         if self.continuousOutput:
@@ -1331,25 +1341,25 @@ class DAQ_controller(object):
                     raise RuntimeError(f"Failed to write DIO {dio_num}: {e}")
                 return
         raise ValueError(f"No DIO found with dio_num={dio_num}")
-    
+
     def writeChannelValues(self):
         #TODO : WHY DO I NEED THIS HACK???
             self.__writeChannelValues()
             self.__writeChannelValues()
-            
+
     def __writeChannelValues(self):
         self.write( np.array([[v] for _,v in sorted(self.channelValues.items())]) )
-        
+
     def getChannelValues(self):
         return np.array([[v] for _,v in sorted(self.channelValues.items())])
-        
+
     def toggleContinuousOutput(self):
         self.continuousOutput = not self.continuousOutput
         if self.continuousOutput:
             self.write( np.array([[v] for _,v in sorted(self.channelValues.items())]) )
         else:
             self.write( np.zeros((len(self.getChannels()), 1 )) )
-            
+
     def validateAndCorrectControlArray(self, controlArray):
         '''Ensure the control array has for the correct number of channels.'''
         seqChs, numSamps = controlArray.shape
@@ -1358,37 +1368,37 @@ class DAQ_controller(object):
             print('WARNING: Attempting to load an array for', seqChs, 'channels when there are', totChs, 'channels available. Extra channels will be set to zero.')
             controlArray = np.vstack([controlArray, np.zeros([totChs-seqChs, numSamps])])
         elif seqChs > totChs:
-            print('WARNING: Attempting to load an array for', seqChs, 'channels when there are', totChs, 'channels available. Extra channels will be ignored.')       
+            print('WARNING: Attempting to load an array for', seqChs, 'channels when there are', totChs, 'channels available. Extra channels will be ignored.')
             controlArray = controlArray[:totChs]
-            
+
         return controlArray
-        
-    def write(self, valueArray):      
+
+    def write(self, valueArray):
         '''Write a value array into the DAQ cards. Note the expected ordering of the array is that the first n1 channels correspond
         to the n1 channels on the master card, the next n2 channels to the channels on the first listed slave card, the next n3 to the
         second listed slave card and so on.  The order of the slave cards is defined by there order in the list with which the controller
         was initialised.'''
         valueArray = self.validateAndCorrectControlArray(valueArray)
         # Now it is the right size, split the value array between the DAQ cards. (Note - write to the master last so the update
-        # signal is sent to the salves after the values are updated).   
+        # signal is sent to the salves after the values are updated).
         for card in reversed([self.master] + self.slaves):
             vals = valueArray[-card.numChs:]
             valueArray = valueArray[:-card.numChs]
 #             time.sleep(0.1)
-            card.write(vals)  
-                              
+            card.write(vals)
+
     def load(self, sequenceArray):
         '''Load a sequence into the DAQ cards. Note the expected ordering of the sequence is that the first n1 channels correspond
         to the n1 channels on the master card, the next n2 channels to the channels on the first listed slave card, the next n3 to the
         second liste slave card and so on.  The order of the slave cards is defined by there order in the list with which the controller
         was initialised.'''
         sequenceArray = self.validateAndCorrectControlArray(sequenceArray)
-        # Now it is the right size, split the sequence between the DAQ cards.    
+        # Now it is the right size, split the sequence between the DAQ cards.
         nChsLoaded = 0
         for card in [self.master] + self.slaves:
             card.load(sequenceArray[nChsLoaded:nChsLoaded+card.numChs])
             nChsLoaded += card.numChs
-            
+
     def play(self, t_step=1.0, clearCards=True, buffer_id=None):
         '''
         Note t_step is in microseconds
@@ -1413,53 +1423,53 @@ class DAQ_controller(object):
             slave.stop()
         if clearCards:
             self.clearCards()
-                
+
     def clearCards(self):
         '''
         Clear all the cards redy for a new sequence to be loaded.
         '''
         for card in [self.master] + self.slaves:
-            card.clear()       
-        
+            card.clear()
+
     def enslave(self, slave):
         '''Enslave a card to the master'''
-        print('Enslaved card {0} to card {1}'.format(slave.card, self.master.card))
+        print(f'Enslaved card {slave.card} to card {self.master.card}')
 #         dll.D2K_AO_Config(slave.card, DAQ2K_DA_WRSRC_SSI, DAQ2K_DA_TRSRC_SSI | DAQ2K_DA_TRGMOD_POST, 0, 0, 0, 0) # OLD and depricated by Tom 1/9/16
         dll.D2K_AO_Config(slave.card, DAQ2K_DA_WRSRC_SSI | DA_Group_AB, DAQ2K_DA_TRSRC_SSI | DAQ2K_DA_TRGMOD_POST, 0, 0, 0, 0)
         dll.D2K_SSI_SourceConn(self.master.card, SSI_WR | SSI_DATRIG)
-            
+
     def emancipate(self, slave):
         '''Free a card from the master'''
-        print('Freed card {0} from card {1}'.format(slave.card, self.master.card))
+        print(f'Freed card {slave.card} from card {self.master.card}')
         # Should the second argument be DAQ2K_DA_WRSRC_Int | DA_Group_AB for consistancy with enslave()?
         dll.D2K_AO_Config(slave.card, DAQ2K_DA_WRSRC_Int, DAQ2K_DA_TRGSRC_SOFT | DAQ2K_DA_TRGMOD_POST, 0, 0, 0, 0)
         dll.D2K_SSI_SourceClear(self.master.card)
-    
+
     def releaseAll(self):
         for card in self.slaves + [self.master]:
-            card.release() 
-                
+            card.release()
+
     def getChannels(self, onlyVisable = False) -> list[DAQ_channel]:
         '''Returns a list of all the DAQ_channel objects registered with the controller.'''
         channels = sum([card.channels for card in [self.master] + self.slaves],[])
-        if onlyVisable: 
+        if onlyVisable:
             channels = [ch for ch in channels if ch.isUIVisable]
-        return channels        
-    
+        return channels
+
     def getDIOs(self) -> list[DAQ_dio]:
         '''Returns a list of all the DAQ_dio (digital in/out) objects registered with the controller.'''
         return sum([card.dios for card in [self.master] + self.slaves],[])
-        
-    def getChannelNumberNameDict(self, onlyVisable = False):      
+
+    def getChannelNumberNameDict(self, onlyVisable = False):
         '''Returns a list of all the DAQ_channel in a dict. of the form {chNum: chName}.'''
         return dict([(ch.chNum,ch.chName) for ch in self.getChannels(onlyVisable)])
-            
+
     def getChannelCalibrationDict(self):
         '''Returns a dictonary of all calibrated channels of the form
             {channel number:(calibrationUnits, calibrationToVFunc, calibrationFromVFunc)}.'''
         return dict([(ch.chNum, (ch.calibrationUnits, ch.calibrationToVFunc, ch.calibrationFromVFunc))
                      for ch in self.getChannels(onlyVisable=False) if ch.isCalibrated])
-            
+
     def get_master(self):
         return self.__master
 
@@ -1477,18 +1487,18 @@ class DAQ_controller(object):
 
     def del_slaves(self):
         del self.__slaves
-        
+
     master = property(get_master, set_master, del_master, "The master DAQ card")
     slaves = property(get_slaves, set_slaves, del_slaves, "The list of slaves that get there timings from the master DAQ card")
 
 class DaqPlayException(Exception):
     def __init__(self, message, errors=[]):
         # Call the base class constructor with the parameters it needs
-        super(DaqPlayException, self).__init__(message)
+        super().__init__(message)
         self.errors = errors
-        
+
 class Daq2502Exception(Exception):
     def __init__(self, message, errors=[]):
         # Call the base class constructor with the parameters it needs
-        super(Daq2502Exception, self).__init__(message)
+        super().__init__(message)
         self.errors = errors

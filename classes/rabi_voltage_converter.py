@@ -7,13 +7,12 @@ Date: 23 June 2025
 """
 
 import os
-import numpy as np
-from typing import cast, Any
-import pandas as pd
+from typing import Any, cast
+
 import matplotlib.pylab as plt
+import numpy as np
+import pandas as pd
 from scipy.interpolate import interp1d
-
-
 
 
 class RabiFreqVoltageConverter:
@@ -102,7 +101,7 @@ class RabiFreqVoltageConverter:
         if not (self.min_rabi <= rabi <= self.max_rabi):
             raise ValueError(f"Rabi frequency {rabi} out of bounds ({self.min_rabi} - {self.max_rabi})")
         return float(self._rabi_to_volt_interp(rabi))
-    
+
 
     def rescale_csv(self, rabi, csv_in, csv_out, normalised = True):
         """
@@ -144,7 +143,7 @@ class RabiFreqVoltageConverter:
         act_min = np.abs(self.min_rabi*self.cg)/(2*np.pi)
 
         if print_info:
-            print(f"The maximum and minimum values for the transition normalised Rabi frequency are: ")
+            print("The maximum and minimum values for the transition normalised Rabi frequency are: ")
             print(f"Max: {self.max_rabi}, Min: {self.min_rabi}")
 
             print("This corresponds to actual Rabi frequencies of:")

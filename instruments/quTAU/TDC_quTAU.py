@@ -4,59 +4,62 @@ Created on 22 Sep 2016
 @author: Tom Barrett
 '''
 
-from instruments.quTAU.TDC_BaseDLL import TDC_BaseDLL, TDC_SimType, TDC_DevType, TDC_FileFormat, TDC_SignalCond
-from instruments.quTAU.TDC_Exception import TDC_Exception
 from ctypes import *
+
 import numpy as np
 
-class TDC_quTAU(object):
+from instruments.quTAU.TDC_BaseDLL import TDC_BaseDLL
+from instruments.quTAU.TDC_Exception import TDC_Exception
+
+
+class TDC_quTAU:
     '''
     todo
     '''
-    
-    INPUT_CHANNELS = 8;
-    
+
+    INPUT_CHANNELS = 8
+
     def __init__(self, deviceId=-1):
         '''
         The deviceId is the unique id of the TDC device.  -1 will connect to the first
         device found.
         '''
         self.deviceId = deviceId
-        
+
     def open(self):
         err = TDC_BaseDLL.init(self.deviceId)
         if err != 0:
             tdc_err = TDC_Exception(err)
             print('Error opening TDC with message:', tdc_err.message)
             raise tdc_err
-        
+
     def close(self):
         TDC_BaseDLL.deInit()
-        
+
     def get_version(self):
         return TDC_BaseDLL.getVersion()
-    
+
     def get_timebase(self):
         '''Returns the timebase of the TDC in seconds. This timebase is used as the
         time unit in many other functions.
         '''
         return TDC_BaseDLL.getTimebase()
-    
+
     def get_dev_type(self):
         return TDC_BaseDLL.getDevType()
-    
+
     def get_device_params(self):
         channelMask, coincWin, expTime = c_int32(), c_int32(), c_int32()
         err = TDC_BaseDLL.getDeviceParams(byref(channelMask), byref(coincWin), byref(expTime))
         if err != 0:
             raise TDC_Exception(err)
         return (channelMask.value, coincWin.value, expTime.value)
-    
+
     def enable_tdc_input(self, enabled):
         err = TDC_BaseDLL.enableTdcInput(enabled)
         if err != 0:
             raise TDC_Exception(err)
-        
+
     def set_enabled_channels(self, channels):
         '''
         Sets the channels that are enabled.  Channels is a list of channel
@@ -73,11 +76,11 @@ class TDC_quTAU(object):
                     bitstring = '0' + bitstring
         else:
             bitstring = '0'
-            
+
         err = TDC_BaseDLL.enableChannels(int(bitstring, 2))
         if err != 0:
             raise TDC_Exception(err)
-        
+
     def set_timestamp_buffer_size(self, size=1000000):
         '''
         Sets the size of the ring buffer (note the buffer is cleared when
@@ -91,14 +94,14 @@ class TDC_quTAU(object):
         err = TDC_BaseDLL.setTimestampBufferSize(size)
         if err != 0:
                 raise TDC_Exception(err)
-            
+
     def get_timestamp_buffer_size(self):
         size = c_int32()
         err = TDC_BaseDLL.getTimestampBufferSize(byref(size))
         if err != 0:
                 raise TDC_Exception(err)
         return size.value
-    
+
     def set_exposure_time(self, exposure_time=1000):
         '''
         Sets the exposure time (or integration time) of the internal
@@ -108,24 +111,24 @@ class TDC_quTAU(object):
         err = TDC_BaseDLL.setExposureTime(exposure_time)
         if err != 0:
                 raise TDC_Exception(err)
-        
+
     def get_timestamps(self, reset_buffer=True):
         '''
         Get the timestamps in the buffer. The reset_buffer boolean determines
         whether the buffer should be cleared once the timestamps have been retrieved.
         '''
         buffer_size = self.get_timestamp_buffer_size()
-        
+
         timestamps, channels, valid = (np.array([-1]*buffer_size, c_int64),
                                        np.array([-1]*buffer_size, c_int8),
                                        c_int32())
-        
+
         TDC_BaseDLL.getLastTimestamps(reset_buffer,
                                       timestamps.ctypes.data_as(POINTER(c_int64)),
                                       channels.ctypes.data_as(POINTER(c_int8)),
                                       byref(valid))
         return timestamps, channels, valid.value
-    
+
     def freeze_buffers(self, freeze_buffers):
         '''
         The function can be used to freeze the internal buffers, allowing to
@@ -136,10 +139,10 @@ class TDC_quTAU(object):
         calculated by software are affected.
         '''
         TDC_BaseDLL.freezeBuffers(freeze_buffers)
-    
+
     def clear_buffer(self):
         self.get_timestamps(reset_buffer=True)
-    
+
     def generate_timestamps(self, sim_type, par, count):
         '''
         Auto-generates timestamps for testing purposes. At least one channel has to be enabled!
@@ -154,7 +157,7 @@ class TDC_quTAU(object):
         err = TDC_BaseDLL.generateTimestamps(sim_type, array.astype(c_double).ctypes.data_as(POINTER(c_double)), count)
         if err != 0:
             raise TDC_Exception(err)
-    
+
     def input_timestamps(self, timestamps, channels, count):
         '''
         Input timestamps for testing purposes. At least one channel has to be enabled!
@@ -173,7 +176,7 @@ class TDC_quTAU(object):
         if err != 0:
             print(err)
             raise TDC_Exception(err)
-        
+
     def switch_termination(self, termination_on):
         '''
         Switches the 50 Ohm termination of input lines on or off. The function
@@ -184,7 +187,7 @@ class TDC_quTAU(object):
         err = TDC_BaseDLL.switchTermination(termination_on)
         if err != 0:
             raise TDC_Exception(err)
-        
+
     def configure_signal_conditioning(self, channel, conditioning, edge, term, threshold):
         '''
         Configures a channel's signal conditioning. The availability of signal
@@ -210,6 +213,6 @@ class TDC_quTAU(object):
             threshold    Voltage threshold that is used to identify events, in
                          V. Allowed range is -2 ... 3V; internal resolution is 1.2mV
         '''
-        err = TDC_BaseDLL.configure_signal_conditioning(channel, conditioning, edge, term, threshold)        
+        err = TDC_BaseDLL.configure_signal_conditioning(channel, conditioning, edge, term, threshold)
         if err != 0:
             raise TDC_Exception(err)

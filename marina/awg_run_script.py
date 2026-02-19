@@ -14,7 +14,6 @@ NLMS, Wiener, gradient descent, etc.  The experiment runner is agnostic.
 
 import os
 import sys
-import numpy as np
 
 # Ensure the parent directory is on the path so imports resolve
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -54,9 +53,9 @@ def main():
             title="Baseline — theoretical waveform sent directly",
         )
 
-       
+
         baseline.save_to_csv(os.path.join(cfg.output_dir, "baseline_measured_signal.csv"), to_save="measured")
-    
+
     finally:
         runner.close()
 

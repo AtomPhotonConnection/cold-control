@@ -38,9 +38,8 @@ Authors: Marina Llanero Pinero, Matt King (refactored from DLL-based driver)
 from __future__ import annotations
 
 import logging
-import struct
 import time
-from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, List, Optional, cast
 
 import numpy as np
 import pyvisa as visa
@@ -131,13 +130,13 @@ def validate_waveform_size(num_points):
     """
     if num_points < 192:
         raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
-    
+
     if num_points % 16 != 0:
         # Round up to nearest multiple of 16
         adjusted = ((num_points + 15) // 16) * 16
         print(f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)")
         return adjusted
-    
+
     return num_points
 
 def normalize_waveform(waveform_data):
@@ -157,14 +156,14 @@ def normalize_waveform(waveform_data):
     """
     # Normalize to -1.0 to +1.0 range
     waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
-    
+
     # Scale to 0-16383 (14-bit range)
     # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
     dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
-    
+
     # Ensure we don't exceed 14-bit range
     dac_values = np.clip(dac_values, 0, 16383)
-    
+
     return dac_values
 
 def create_binary_block_header(num_bytes):
@@ -225,7 +224,7 @@ class AWGManager:
         self._log.info("Opening AWG: %s", resource_id)
         instrument = self.rm.open_resource(resource_id)
         self.inst = cast(MessageBasedResource, instrument)
-        
+
         self.inst.timeout = timeout_ms
         self.inst.read_termination = "\n"
         self.inst.write_termination = "\n"
@@ -270,7 +269,7 @@ class AWGManager:
                     time.sleep(RETRY_DELAY_SEC)
         raise last_exc  # type: ignore[misc]
 
-    
+
     # ----- error helpers ----------------------------------------------------
 
     def clear_error_queue(self) -> list:
@@ -300,7 +299,7 @@ class AWGManager:
             return True
         except Exception:
             return False
-        
+
     def check_errors(self):
         """Check for instrument errors"""
         try:
@@ -341,7 +340,7 @@ class AWGManager:
             self.rm.close()
         except Exception as exc:
             self._log.warning("Error closing resource manager: %s", exc)
-    
+
 
     # ----- run control (abort / initiate / enable) --------------------------
 
@@ -468,7 +467,7 @@ class AWGManager:
 
     def set_trigger_slope(self, slope: str = "POS") -> None:
         """Set trigger edge: ``"POS"``, ``"NEG"`` or ``"EITH"``."""
-        if not slope in ("POS", "NEG", "EITH"):
+        if slope not in ("POS", "NEG", "EITH"):
             raise ValueError(f"Invalid slope {slope}. Must be 'POS', 'NEG' or 'EITH'.")
         else:
             self._write(f":TRIG:SLOP {slope}")
@@ -510,7 +509,7 @@ class AWGManager:
         """Configure a standard sine wave on *channel* with given frequency and amplitude."""
         self.select_channel(channel)
         self.set_output_mode("FIX")
-        self._write(f":FUNC:SHAP SIN")
+        self._write(":FUNC:SHAP SIN")
         self._write(f":FREQ {frequency}")
         self._write(f":VOLT {amplitude}")
 
@@ -601,7 +600,7 @@ class AWGManager:
             self.select_channel(channel)
         else:
             raise ValueError("Channel must be specified for waveform upload.")
-        
+
         self.set_trace_mode("SING")  # ensure single-channel upload mode
 
 
@@ -610,72 +609,72 @@ class AWGManager:
             # Step 1: Validate and adjust waveform size
             num_points = len(waveform_data)
             validated_points = validate_waveform_size(num_points)
-            
+
             # Pad with zeros if size was adjusted
             if validated_points > num_points:
-                waveform_data = np.pad(waveform_data, 
-                                      (0, validated_points - num_points), 
+                waveform_data = np.pad(waveform_data,
+                                      (0, validated_points - num_points),
                                       mode='constant')
-            
+
             # Step 2: Convert to 14-bit DAC values
             dac_values = normalize_waveform(waveform_data)
-            
+
             # Step 3: Define segment in memory
             # CRITICAL: Must define segment BEFORE uploading data
             print(f"Defining segment {segment} with {validated_points} points...")
             self.inst.write(f':TRAC:DEF {segment},{validated_points}')
             time.sleep(0.05)  # Small delay after defining
-            
+
             if not self.check_errors():
                 print("Error defining segment!")
                 return False
-            
+
             # Step 4: Select the segment
             print(f"Selecting segment {segment}...")
             self.inst.write(f':TRAC:SEL {segment}')
             time.sleep(0.05)
-            
+
             if not self.check_errors():
                 print("Error selecting segment!")
                 return False
-            
+
             # Step 5: Prepare binary data
             # Each point is 2 bytes (16-bit word, but only 14 bits used)
             binary_data = dac_values.astype('<u2').tobytes()  # Little-endian uint16
             num_bytes = len(binary_data)
-            
+
             # Step 6: Create IEEE 488.2 binary block header
             header = create_binary_block_header(num_bytes)
             command = f':TRAC:DATA {header}'
-            
+
             # Step 7: Upload data using binary write
             print(f"Uploading {validated_points} points ({num_bytes} bytes)...")
-            
+
             # Write command header
             self.inst.write_raw(command.encode('ascii'))
-            
+
             # Write binary data
             self.inst.write_raw(binary_data)
-            
+
             # Write termination
             self.inst.write_raw(b'\n')
-            
+
             # Wait for operation to complete
             self.inst.query('*OPC?')
             time.sleep(0.1)
-            
+
             # Step 8: Verify no errors occurred
             if not self.check_errors():
                 print("Error during waveform upload!")
                 return False
-            
+
             print(f"Successfully uploaded waveform to segment {segment}")
             return True
-            
+
         except Exception as e:
             print(f"Error uploading waveform: {e}")
             return False
-        
+
 
     # ----- marker output commands --------------------------------------------
 
@@ -725,9 +724,9 @@ class AWGManager:
         self._write(f":MARK:POS {position}")
         self._write(f":MARK:WIDT {width}")
         # self._write(f":MARKer:VOLT:HIGH {high_level}")
-        
+
         self._write(f":MARK:DEL {delay}")
-        self._write(f":MARK:STAT ON")
+        self._write(":MARK:STAT ON")
         self._log.info(
             "Marker %d configured: pos=%d, width=%d",
             marker, position, width,
@@ -814,7 +813,7 @@ class AWGManager:
             self.set_continuous(False)
             self.set_trigger_level(trigger_level)
             self.set_trigger_source(trigger_source)
-            self.set_trigger_slope(trigger_slope) 
+            self.set_trigger_slope(trigger_slope)
 
             self.set_burst_count(_burst_count)
             self.set_amplitude(ch, _amplitudes[i])
@@ -852,11 +851,11 @@ class AWGManager:
         if awg_cfg.marked_channels is not None:
             raise DeprecationWarning("Marked channels are deprecated")
 
-        
+
         # --- Process waveforms ---
         all_ch_data = process_waveforms(outp_channels, channel_lags, waveform_sequence,
                                         waveforms_list, sample_rate)
-        
+
         # --- Configure the scope for triggered output ---
         self.configure_for_triggered_output(sample_rate, outp_channels, burst_count,
                                             ch_amplitudes, ch_offsets)
@@ -886,11 +885,11 @@ class AWGManager:
 
         print("AWG armed and waiting for trigger.")
 
-    
+
 
     # ----- context manager ---------------------------------------------------
 
-    def __enter__(self) -> "AWGManager":
+    def __enter__(self) -> AWGManager:
         return self
 
     def __exit__(self, *exc) -> None:

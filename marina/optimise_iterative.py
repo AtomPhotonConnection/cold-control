@@ -19,14 +19,15 @@ Usage::
 import os
 import sys
 from typing import Optional
+
 import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from marina.pulse_experiment import (
     PulseShapeConfig,
-    PulseShapeExperimentRunner,
     PulseShapeExperimentResult,
+    PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 

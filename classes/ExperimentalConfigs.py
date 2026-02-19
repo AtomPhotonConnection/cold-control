@@ -9,18 +9,21 @@ created: 2025-05-30
 
 """
 from __future__ import annotations
-import shutil
-import numpy as np
+
 import csv
 import os
 import re
-from typing import List, Optional, Tuple, Dict, Any
+import shutil
 from copy import deepcopy
 from datetime import datetime
 from itertools import product
+from typing import Any, Dict, List, Optional, Tuple
 
-from classes.Sequence import Sequence
+import numpy as np
+
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
+from classes.Sequence import Sequence
+
 
 def toBool(string):
     GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
@@ -165,7 +168,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
 class MotFluoresceConfigurationSweep:
 
-    def __init__(self, base_config: 'MotFluoresceConfiguration', base_sequence: Sequence,
+    def __init__(self, base_config: MotFluoresceConfiguration, base_sequence: Sequence,
                  sweep_type: str, num_shots:int, sweep_params: Dict[Any, Any]):
 
         self.base_config = base_config
@@ -179,7 +182,7 @@ class MotFluoresceConfigurationSweep:
         self.current_time = now.strftime("%H-%M-%S")
         print(f"[DEBUG] date: {self.current_date}")
         print(f"[DEBUG] time: {self.current_time}")
-        
+
         self.configs:List[MotFluoresceConfiguration] = []
         self.sequences:List[Sequence] = []
         print("Creating all MOT fluorescence configurations for the sweep...")
@@ -193,7 +196,7 @@ class MotFluoresceConfigurationSweep:
             all_sweeps = self.sweep_params["sweeps"]
             self.__configure_awg_sweep(wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
                                        calib_paths, all_sweeps)
-        
+
         elif sweep_type == "mot_imaging":
             # all these parameters need to be extracted from the config file
             _beam_powers: List[float] = self.sweep_params["beam_powers"]
@@ -205,7 +208,7 @@ class MotFluoresceConfigurationSweep:
 
         else:
             raise ValueError("Sweep type not supported")
-        
+
         assert len(self.configs) == len(self.sequences), \
         "configs and sequences must have the same length"
 
@@ -220,7 +223,7 @@ class MotFluoresceConfigurationSweep:
 
     def __len__(self):
         return len(self.configs)
-    
+
 
     def __configure_awg_sweep(self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
                               calib_paths, all_sweeps):
@@ -230,13 +233,13 @@ class MotFluoresceConfigurationSweep:
         MOTFluoresceConfiguration objects so that the AWG configs are different, allowing
         for experiments with different pulse shapes.
         """
-        
+
         # Delete the temp folder and its contents if it exists, then recreate it
         temp_root = "temp"
         if os.path.exists(temp_root):
             shutil.rmtree(temp_root)
         os.makedirs(temp_root, exist_ok=True)
-        
+
         for shot in range(self.num_shots):
             for sweep_dict in all_sweeps:
                 sweep_title = sweep_dict["title"]
@@ -253,15 +256,15 @@ class MotFluoresceConfigurationSweep:
                         new_paths[idx] = waves[j]  # No rescaling needed
                     else:
                         pulse_path = f"temp/{sweep_title}/{idx}.csv"
-                        
+
                         if not os.path.exists(pulse_path):
                             os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
                             calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
                             rabi_converter = RabiFreqVoltageConverter(calib_path)
-                        
+
                             rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
                                                         pulse_path, normalised=False)
-                        
+
                         new_paths[idx] = pulse_path
 
                 # Clone and modify base configuration
@@ -291,7 +294,7 @@ class MotFluoresceConfigurationSweep:
                 # Ensure the directory exists
                 save_dir = os.path.dirname(new_config.save_location)
                 os.makedirs(save_dir, exist_ok=True)
-                
+
                 self.configs.append(new_config)
                 self.sequences.append(new_sequence)
 
@@ -313,7 +316,7 @@ class MotFluoresceConfigurationSweep:
                 # Clone and modify the base sequence and config
                 new_config = deepcopy(self.base_config)
                 new_sequence = deepcopy(self.base_sequence)
-                
+
                 # Create unique filename suffix based on swept parameters
                 file_text = ""
                 for param in to_sweep:
@@ -365,7 +368,7 @@ class MotFluoresceConfigurationSweep:
 
 
 
-    
+
     @staticmethod
     def modify_awg_sequence_config(*, base_config: AwgConfiguration,
                                 waveform_csvs: Dict[int, str],
@@ -379,7 +382,7 @@ class MotFluoresceConfigurationSweep:
                 wf.mod_frequency = mod_freqs[idx]
 
         return new_config
-    
+
 
     #this can be used as follows:
     # base_config = MotFluoresceConfiguration(...)
@@ -393,7 +396,7 @@ class MotFluoresceConfigurationSweep:
     # for config in sweep:
 
 
-class AWGSequenceConfiguration():
+class AWGSequenceConfiguration:
     """
     AWGSequenceConfiguration stores all configuration parameters
     required for a photon production experiment.
@@ -599,7 +602,7 @@ class Waveform:
 
     def __load_data(self) -> List[float]:
         """Loads waveform data from a CSV file."""
-        with open(self.__fname, 'rt') as csvfile:
+        with open(self.__fname) as csvfile:
             print('Loading waveform:', self.__fname)
             reader = csv.reader(csvfile, delimiter=',')
             data = []
@@ -611,7 +614,7 @@ class Waveform:
 
         if len(data) == 0:
             raise ValueError(f"Waveform file {self.__fname} is empty or invalid.")
-        
+
         return data
 
     def get(self, sample_rate: float, calibration_function=lambda level: level,

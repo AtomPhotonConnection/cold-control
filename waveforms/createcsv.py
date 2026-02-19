@@ -1,28 +1,21 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.special import erf
 import csv
-import pandas as pd
-from scipy.ndimage import gaussian_filter
-from scipy.interpolate import interp1d
-import os
 
 # def gaussian_rise_fall(t, t_rise, t_flat, amplitude):
-#     sigma = t_rise / (2 * np.sqrt(2 * np.log(10))) 
+#     sigma = t_rise / (2 * np.sqrt(2 * np.log(10)))
 #     t_fall_start = t_rise + t_flat
 #     rise = amplitude * np.exp(-(t - t_rise)**2 / (2 * sigma**2))
 #     flat = amplitude * (t >= t_rise) * (t < t_fall_start)
 #     fall = amplitude * np.exp(-(t - t_fall_start)**2 / (2 * sigma**2))
 #     signal = rise * (t < t_rise) + flat + fall * (t >= t_fall_start)
-    
+
 #     return signal
 
 
 # rise_time = 41.02e-9  # (41.02e-9=16.12 ns entre 10 i 90%, 60.61e-9=23.82 ns entre 10 i 90%)
-# flat_time = 20e-9     
-# amplitude = 0.2       
-# t_total = 100e-9      
-# dt = 1e-9           
+# flat_time = 20e-9
+# amplitude = 0.2
+# t_total = 100e-9
+# dt = 1e-9
 # t = np.arange(0, t_total, dt)
 
 # signal = gaussian_rise_fall(t, rise_time, flat_time, amplitude)
@@ -34,7 +27,7 @@ import os
 
 # with open('flat_20_gaussian_ch4.csv', 'w', newline='') as csvfile:
 #     writer = csv.writer(csvfile)
-#     writer.writerow(signal) 
+#     writer.writerow(signal)
 
 # plt.plot(t, signal)
 # plt.show()
@@ -57,9 +50,9 @@ import os
 #     T = N / f
 #     t_new = np.arange(0, T, 1/fs)
 #     new = np.sin(2 * np.pi * f * t_new)
-    
+
 #     if np.isclose(new[-1], 0, atol=1e-12):
-#         break    
+#         break
 #     N += 0.001
 
 
@@ -119,7 +112,7 @@ final = start + x + end
 
 with open(f'flatg_{amplitude}_ch4_50us.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow(final) 
+    writer.writerow(final)
 
 #########################################################
 # # Convert feather files to csv

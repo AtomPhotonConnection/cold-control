@@ -7,27 +7,26 @@ Refactored 09/12/2024
 '''
 
 import os
-import serial
-import time
-import numpy as np
-import matplotlib.pyplot as plt
 import re
+import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import serial
 
 from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
-import pyvisa as visa
+
 '''
 Load required classes for awg driven AOM calibration
 '''
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
-from classes.ExperimentalConfigs import Waveform
+from instruments.WX218x.WX218x_awg import Channel, WX218x_awg
+from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_OutputMode
+
 from classes.DAQ import DAQ_controller
 
 # helper functions in a separate file
 from lab_control_functions.calibration_helper_functions import *
-
-
 
 CALIB_CSV = r"calibrations\miscellaneous\flip_mirror_calib.csv"
 
@@ -78,7 +77,7 @@ def daq_driven_aom_response(daq_controller:DAQ_controller, frequency_channel:int
 
         units = str(power_meter.sense.power.dc.unit.split('\n')[0])
         #print(type(units), repr(units))
-        # Just a hack to convert W to uW as it's nicer.    
+        # Just a hack to convert W to uW as it's nicer.
         if units == 'W':
             amp_data = amp_data * 10**6
             units = 'uW'
@@ -89,15 +88,15 @@ def daq_driven_aom_response(daq_controller:DAQ_controller, frequency_channel:int
         save_plot(os.path.join(file_path, f"{calib_name}_plot.png"), voltage_data, amp_data, units, f"freq = {freq}MHz")
 
     inst.close()
-        
 
 
 
 
-    
+
+
 def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, delay=0.2,\
                             calibration_lims = (0,1), save_folder = "unfiled_data"):
-    
+
     """Creates a calibration file detailing the dependence of the power through the aom depending on the
     voltage level of the awg waveform.
     
@@ -124,7 +123,7 @@ def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, d
     awg = WX218x_awg()
     print ('Connecting...')
     awg.open(reset=False)
-    
+
     awg.configure_operation_mode(awg_channel, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
@@ -133,7 +132,7 @@ def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, d
     inst, power_meter = get_power_meter()
     power_meter:ThorlabsPM100 = power_meter #declare the type for easier editing
     configure_power_meter(power_meter, nMeasurmentCounts=repeats)
-    
+
     for freq in freqs:
         # Run through the voltages and record the TF930 output
         levelData = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
@@ -145,17 +144,17 @@ def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, d
 
             wf = testWaveform(sample_rate, level=level, mod_freq=freq*10**6)
             awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-             
+
             awg.enable_channel(awg_channel)
             time.sleep(delay)
             calData[i] = (power_meter.read)
-            
+
             print(calData[i])
-            
+
             awg.disable_channel(awg_channel)
-            
+
         print ('...finished taking data')
-        
+
         save_plot_location = os.path.join(save_location, 'plots')
         if not os.path.isdir(save_plot_location):
             os.makedirs(save_plot_location)
@@ -165,39 +164,39 @@ def awg_driven_aom_response(freqs, name, awg_channel, n_steps = 20, repeats=3, d
         save_plot(os.path.join(save_plot_location,f"{freq}MHz_abs_power.png"), levelData, calData, "uW", f"{freq}MHz: Power vs level")
         create_file(os.path.join(save_location,f"{name}_{awg_channel}_{freq}MHz_abs"), levelData, calData, 'uW', level_units='level')
 
-        
-        
+
+
         end_on_max = False
         while not end_on_max:
 #         indexMin, indexMax = calData.index(min(calData)), calData.index(max(calData))
             indexMin = min(range(len(calData)), key=lambda i: abs(calData[i]- (min(calData) + calibration_lims[0]*max(calData)) ))
             indexMax = min(range(len(calData)), key=lambda i: abs(calData[i]- (max(calData)*calibration_lims[1])) )
-         
+
             levelData, calData = levelData[indexMin:indexMax+1], calData[indexMin:indexMax+1]
-            
+
             if np.argmax(calData) != len(calData)-1:
                 calibration_lims = (calibration_lims[0], calibration_lims[1]-0.1)
             else:
                 end_on_max = True
-        
+
         print(f'Calibration limits set to {calibration_lims} to avoid a maximum in the middle of the calibration range.')
-     
+
         def normalise(values):
             mi, ma = np.min(values),np.max(values)
             return (values - mi)/(ma - mi)
-         
+
         calData = 100 * normalise(calData)
 
         save_plot(os.path.join(save_location,f"{name}_{awg_channel}_{freq}MHz_rel_power_plot.png"), levelData, calData, "%", f"{freq}MHz: Rel Power vs level")
         create_file(os.path.join(save_location,f"{name}_{awg_channel}_{freq}MHz_rel"), levelData, calData, '%', level_units='level')
-    
+
     print ('Resetting awg...',)
     awg.reset()
     print ('calibration finished.')
     awg.close()
 
     inst.close()
- 
+
 
 
 
@@ -260,7 +259,7 @@ def calibrate_frequency(daq_controller, chNum_to_calibrate, calibration_V_range 
             nBadPoints += 1
             vData.pop(i - nBadPoints)
 
-    print ('Removed {0} bad data points'.format(nBadPoints))
+    print (f'Removed {nBadPoints} bad data points')
 
     # Just a hack to convert Hz to MHz as it's nicer.
     if units == 'Hz':
@@ -363,7 +362,7 @@ def percentage_power(daq_controller, chNum_to_calibrate, calibration_V_range = (
     # Find and configure a power meter connected to the computer
     inst, power_meter = get_power_meter()
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     # Run through the voltages and record the TF930 output
     vData, calData = [], []
     print ('Running through voltages...might take a while...')
@@ -376,27 +375,27 @@ def percentage_power(daq_controller, chNum_to_calibrate, calibration_V_range = (
     print( '...finished!')
 
     absMinIndex, absMaxIndex = calData.index(min(calData)),  calData.index(max(calData))
-    
+
     calData=calData[:absMaxIndex+1]
-    
+
     indexMin = min(range(len(calData)), key=lambda i: abs(calData[i]- (min(calData) + calibration_perc_lims[0]*max(calData)) ))
     indexMax = min(range(len(calData)), key=lambda i: abs(calData[i]- (max(calData)*calibration_perc_lims[1])) )
-    
+
     vData, calData = vData[indexMin:indexMax+1], calData[indexMin:indexMax+1]
 
     def normalise(values):
         mi, ma = min(values),max(values)
         ran = ma - mi
         return [(l-mi)/ran for l in values]
-    
+
     calData = [100*x for x in normalise(calData)]
 
     units = '%'
-    
+
     inst.close()
-        
+
     return vData, calData, units
-    
+
 
 
 
@@ -416,49 +415,49 @@ def test_stirap_aom_freq_response(level=0.5,
     awg = WX218x_awg()
     print ('Connecting...')
     awg.open(reset=False)
-    
+
     awg.configure_operation_mode(Channel.CHANNEL_1, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(Channel.CHANNEL_1, 2)
     awg.configure_arb_gain(Channel.CHANNEL_2, 2)
-    
+
     inst, power_meter = get_power_meter()
     configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
-    
+
     calData = []
-    
+
     for freq in freqs:
         # Run through the voltages and record the TF930 output
-    
+
         print ('freq:', freq)
-        
+
         wf = testWaveform(sample_rate, level=level, mod_freq=freq*10**6)
         awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-        
+
         awg.enable_channel(Channel.CHANNEL_1)
         time.sleep(writeToQueryDelay)
         calData.append(power_meter.read)
-        
+
         print (calData[-1])
-        
+
         awg.disable_channel(Channel.CHANNEL_1)
 
     awg.reset()
     awg.close()
 
     inst.close()
-   
+
     fig = plt.figure()
-    
+
     ax = fig.add_subplot(111)
     fig.subplots_adjust(top=0.85)
-    
+
     ax.set_xlabel('freq')
     ax.set_ylabel('W')
-    
+
     ax.plot(freqs, calData)
-    
+
 
 
 def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, repeats=3, delay=0.2,
@@ -491,13 +490,13 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
             #print("Compensating for flip mirror: ", a, b)
 
             return a * power + b
-        
+
     sample_rate = 1.25 * 10**9
     print('Creating AWG instance')
     awg = WX218x_awg()
     print('Connecting...')
     awg.open(reset=False)
-    
+
     awg.configure_operation_mode(awg_channel, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
@@ -506,7 +505,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
     configure_power_meter(power_meter, nMeasurmentCounts=repeats)
-    
+
     closest_level = None
     closest_diff = float('inf')
     last_read_Value = None
@@ -524,7 +523,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
         for i, level in enumerate(levelData):
             wf = testWaveform(sample_rate, level=level, mod_freq=freq * 10**6)
             awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-             
+
             awg.enable_channel(awg_channel)
             time.sleep(delay)
             read_value = float(power_meter.read) # type: ignore
@@ -533,7 +532,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
             print(f'{level}V, {read_value*1e3}mW')
 
             calData[i] = read_value
-            
+
             awg.disable_channel(awg_channel)
 
             diff = abs(read_value - target_power)
@@ -552,7 +551,7 @@ def finding_amplitude_from_power(freqs, target_power, awg_channel, n_steps=20, r
                 awg.close()
                 inst.close()
                 return level, diff, read_value, results_dict
-        
+
         print('...finished taking data')
 
     print('Resetting awg...')

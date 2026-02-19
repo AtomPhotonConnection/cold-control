@@ -1,0 +1,32 @@
+[project]
+name = "cold-control"
+version = "0.1.0"
+requires-python = ">=3.9"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade (modernization)
+    "B",   # flake8-bugbear (logic guardrails)
+    "N",   # pep8-naming
+    "I",   # import sorting
+]
+
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+]
+
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true

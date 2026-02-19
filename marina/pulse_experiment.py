@@ -38,12 +38,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyvisa as visa
 from configobj import ConfigObj
 
+from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 from instruments.WX218x.awg_manager import AWGManager
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -602,7 +601,7 @@ class PulseShapeExperimentRunner:
         #awg.configure_trigger(mode="EXT", level=1.6, slope="POS")
         #print(f"Setting burst count to {cfg.burst_count}")
         #awg.set_burst_count(cfg.burst_count)
-        
+
         # --- Upload waveforms and configure per-channel settings --------------
         for ch_int, data in zip(ch_ints, aligned):
             print(f"Uploading to channel {ch_int} (length {len(data)} samples)")
@@ -670,11 +669,11 @@ class PulseShapeExperimentRunner:
             },
         )
         return acq
-    
+
     def _timebase_align(self, measured_voltage: np.ndarray, measured_std: Optional[np.ndarray],
                      theoretical_signal: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        
-        
+
+
         start_time = time.time()
         # begin by interpolating so scope and AWG have the same sample rate
         awg_sr = self.awg_config_obj.sample_rate # type: ignore[union-attr]
@@ -683,7 +682,7 @@ class PulseShapeExperimentRunner:
 
         theoretical_points = len(theoretical_signal)
         theoretical_duration = theoretical_points / awg_sr
-        
+
         scope_points = len(measured_voltage)
         scope_duration = scope_points / scope_sr
 
@@ -697,7 +696,7 @@ class PulseShapeExperimentRunner:
             # Create time axes for interpolation
             t_scope_sr = np.linspace(0, scope_duration, int(scope_duration*scope_sr))
             t_awg_sr = np.linspace(0, scope_duration, int(scope_duration*awg_sr))
-            
+
             voltage_interp = np.interp(t_awg_sr, t_scope_sr, measured_voltage)
             if measured_std is not None:
                 std_interp = np.interp(t_awg_sr, t_scope_sr, measured_std)
@@ -706,7 +705,7 @@ class PulseShapeExperimentRunner:
         else:
             voltage_interp = measured_voltage
             std_interp = measured_std
-        
+
         # We want the measured signal to have the same number of points as the theoretical signal, and to be aligned in time.
         points_difference = len(voltage_interp) - theoretical_points
         print(f"Scope duration: {scope_duration*1e6:.2f} µs, AWG duration: {awg_duration*1e6:.2f} µs, theoretical duration: {theoretical_duration*1e6:.2f} µs.")
@@ -718,7 +717,7 @@ class PulseShapeExperimentRunner:
         # if points_difference > theoretical_points*2:
         #     raise ValueError(f"The scope has {points_difference} more points than the target length, which is excessive. "
         #                      f"Check the scope timebase settings and sampling rate.")
-        
+
         # find the optimal cropping location that minimises the MSE between the cropped measured signal and the theoretical signal
         if points_difference > 0:
             print("points_difference:", points_difference)
@@ -734,7 +733,7 @@ class PulseShapeExperimentRunner:
                     best_mse = mse
                     best_start_idx = start_idx
 
-            
+
             voltage_crop = voltage_interp[best_start_idx:best_start_idx + theoretical_points]
             if std_interp is not None:
                 std_crop = std_interp[best_start_idx:best_start_idx + theoretical_points]
@@ -745,7 +744,7 @@ class PulseShapeExperimentRunner:
             print("Measured signal has the same number of points as the theoretical signal, no cropping needed.")
             voltage_crop = voltage_interp
             std_crop = std_interp
-            
+
         else:
             raise ValueError(f"Measured signal has {abs(points_difference)} fewer points than the theoretical signal, which is unexpected. ")
 

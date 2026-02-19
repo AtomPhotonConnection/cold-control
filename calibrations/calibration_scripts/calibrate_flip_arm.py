@@ -11,24 +11,23 @@ Two main functions:
 
 Minimal and editable — intended for occasional use.
 """
-import sys
 import os
-import csv
+import sys
 import time
-from typing import Callable, Iterable, Optional, Tuple
+from collections.abc import Iterable
+from typing import Callable, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from scipy.interpolate import interp1d
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 
 from classes.DAQ import DAQ_controller
-from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
 from lab_control_functions.calibration_helper_functions import *
+
 
 # -------------------------
 # Measurement loop (always overwrites existing CSV)
@@ -57,7 +56,7 @@ def measure_loop(
       repeats: how many times to repeat whole sweep (useful for averaging)
       delay: seconds to wait after setting voltage or flipping before reading
     """
-    
+
     data = []  # list to hold all measurements
 
     header = ["voltage", "power_flip", "power_target", "timestamp"]
@@ -170,7 +169,7 @@ if __name__ == "__main__":
     daq:DAQ_controller = daq_reader.load_DAQ_controller()
     daq.continuousOutput=True
 
-    
+
 
     freq_channel = 3
     daq.updateChannelValue(int(freq_channel), 3.7409093554844883)# need to set correct freq
@@ -207,7 +206,7 @@ if __name__ == "__main__":
 
     if pm_target is None or pm_flip is None:
         raise Exception("One of the power meters was not found, cannot continue.")
-    
+
     configure_power_meter(pm_flip, nMeasurmentCounts=3)
     configure_power_meter(pm_target, nMeasurmentCounts=3)
 
@@ -220,7 +219,7 @@ if __name__ == "__main__":
             daq.update_dio(flip_channel, False)
         else:
             raise ValueError("flip position must be 'up' or 'down'")
-        
+
     read_fn_target = lambda: float(pm_target.read) # type: ignore
     read_fn_flip = lambda: float(pm_flip.read) # type: ignore
 
@@ -229,7 +228,7 @@ if __name__ == "__main__":
                   flip_fn, read_fn_target, voltages=voltages_list, repeats=2)
 
     # After measuring you can fit:
-    pred, info = fit_and_interpolate(r"calibrations\miscellaneous\flip_mirror_calib.csv", 
+    pred, info = fit_and_interpolate(r"calibrations\miscellaneous\flip_mirror_calib.csv",
                                      out_png=r"calibrations\miscellaneous\calib_plot.png")
     print(info)
 
@@ -245,5 +244,5 @@ if __name__ == "__main__":
             pm_flip_res.close()
         except Exception:
             pass
-    
+
     daq.releaseAll()

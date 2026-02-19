@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #import exceptions
 
 class IC_Exception(Exception):
@@ -14,11 +13,11 @@ class IC_Exception(Exception):
     @property
     def message(self):
         return self._error_codes[self.warning_code]
-            
+
     @property
     def warning_code(self):
         return self._error_code
-        
+
     _error_codes = {    # IC errors
                         1   :   'IC SUCCESS',
                         0   :   'IC ERROR',
@@ -28,7 +27,7 @@ class IC_Exception(Exception):
                        -4   :   'IC PROPERTY ITEM NOT AVAILABLE',
                        -5   :   'IC PROPERTY ELEMENT NOT AVAILABLE',
                        -6   :   'IC PROPERTY ELEMENT WRONG INTERFACE',
-                       
+
                         # other errors
                      -100   :   'UNKNOWN ERROR',
                      -101   :   'UNKNOWN DEVICE FEATURE',
@@ -37,9 +36,9 @@ class IC_Exception(Exception):
                      -104   :   'VIDEO NORM RETURNED NULL TYPE',
                      -105   :   'VIDEO FORMAT RETURNED NULL TYPE',
                      -106   :   'DEVICE NAME NOT FOUND'
-                     
+
                    }
-    
+
     def __init__(self, warning_code):
         # if error code does not match expected codes then assign invalid code
         if warning_code in self._error_codes:

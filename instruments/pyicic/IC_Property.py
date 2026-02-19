@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 from ctypes import *
 
-from .IC_GrabberDLL import IC_GrabberDLL
 from .IC_Exception import IC_Exception
+from .IC_GrabberDLL import IC_GrabberDLL
 
-class IC_Property(object):
+
+class IC_Property:
 
     @property
     def available(self):
@@ -16,7 +16,7 @@ class IC_Property(object):
         iav = self._avail_funcs[self._prop_type](self._handle,
                                                  c_int(self._prop_index))
         return bool(iav)
-    
+
     @property
     def auto_available(self):
         """
@@ -43,25 +43,25 @@ class IC_Property(object):
             raise IC_Exception(err)
         else:
             return (rmin.value, rmax.value)
-        
+
     @property
     def min(self):
         """
         """
         return self.range[0]
-    
+
     @property
     def max(self):
         """
-        """    
+        """
         return self.range[1]
-    
+
     @property
     def value(self):
         """
         """
         val = c_long()
-        
+
         err = self._get_value_funcs[self._prop_type](self._handle,
                                                      c_int(self._prop_index),
                                                      byref(val))
@@ -69,29 +69,29 @@ class IC_Property(object):
             raise IC_Exception(err)
         else:
             return val.value
-            
+
     @value.setter
     def value(self, val):
         """
         """
-        
+
         # turn off auto first TOM EDIT: if auto is available
         if self.auto_available:
             self.auto = False
-        
+
         # set value
         err = self._set_value_funcs[self._prop_type](self._handle,
                                                      c_int(self._prop_index),
                                                      c_long(val))
         if err != 1:
             raise IC_Exception(err)
-        
+
     @property
     def auto(self):
         """
         """
         aut = c_int()
-        
+
         err = self._get_auto_funcs[self._prop_type](self._handle,
                                                     c_int(self._prop_index),
                                                     byref(aut))
@@ -99,7 +99,7 @@ class IC_Property(object):
             raise IC_Exception(err)
         else:
             return bool(aut.value)
-    
+
     @auto.setter
     def auto(self, aut):
         """
@@ -109,13 +109,13 @@ class IC_Property(object):
                                                     c_long(int(aut)))
         if err != 1:
             raise IC_Exception(err)
-    
+
     @property
     def type(self):
         """
         """
         return self._prop_type
-    
+
     @staticmethod
     def get_video_property_names():
         """
@@ -130,7 +130,7 @@ class IC_Property(object):
                 'whitebalance',
                 'blacklightcompensation',
                 'gain']
-    
+
     @staticmethod
     def get_camera_property_names():
         """
@@ -142,36 +142,36 @@ class IC_Property(object):
                 'exposure',
                 'iris',
                 'focus']
-    
+
     @staticmethod
     def get_all_property_names():
         """
         """
         return IC_Property.get_video_property_names() + IC_Property.get_camera_property_names()
-    
+
     def __init__(self, handle, name):
-     
+
         self._handle = handle
         self._prop_name = name
-        
-        self._avail_funcs = {       'video'    :   IC_GrabberDLL.is_video_property_available,       
-                                    'camera'   :   IC_GrabberDLL.is_camera_property_available}      
-        self._auto_avail_funcs = {  'video'    :   IC_GrabberDLL.is_video_property_auto_available,  
-                                    'camera'   :   IC_GrabberDLL.is_camera_property_auto_available} 
-        self._range_funcs = {       'video'    :   IC_GrabberDLL.video_property_get_range,          
-                                    'camera'   :   IC_GrabberDLL.camera_property_get_range}         
-        self._get_value_funcs = {   'video'    :   IC_GrabberDLL.get_video_property,                
-                                    'camera'   :   IC_GrabberDLL.get_camera_property}               
-        self._set_value_funcs = {   'video'    :   IC_GrabberDLL.set_video_property,                
-                                    'camera'   :   IC_GrabberDLL.set_camera_property}               
-        self._get_auto_funcs = {    'video'    :   IC_GrabberDLL.get_auto_video_property,           
-                                    'camera'   :   IC_GrabberDLL.get_auto_camera_property}          
-        self._set_auto_funcs = {    'video'    :   IC_GrabberDLL.enable_auto_video_property,              
-                                    'camera'   :   IC_GrabberDLL.enable_auto_camera_property}          
-        
+
+        self._avail_funcs = {       'video'    :   IC_GrabberDLL.is_video_property_available,
+                                    'camera'   :   IC_GrabberDLL.is_camera_property_available}
+        self._auto_avail_funcs = {  'video'    :   IC_GrabberDLL.is_video_property_auto_available,
+                                    'camera'   :   IC_GrabberDLL.is_camera_property_auto_available}
+        self._range_funcs = {       'video'    :   IC_GrabberDLL.video_property_get_range,
+                                    'camera'   :   IC_GrabberDLL.camera_property_get_range}
+        self._get_value_funcs = {   'video'    :   IC_GrabberDLL.get_video_property,
+                                    'camera'   :   IC_GrabberDLL.get_camera_property}
+        self._set_value_funcs = {   'video'    :   IC_GrabberDLL.set_video_property,
+                                    'camera'   :   IC_GrabberDLL.set_camera_property}
+        self._get_auto_funcs = {    'video'    :   IC_GrabberDLL.get_auto_video_property,
+                                    'camera'   :   IC_GrabberDLL.get_auto_camera_property}
+        self._set_auto_funcs = {    'video'    :   IC_GrabberDLL.enable_auto_video_property,
+                                    'camera'   :   IC_GrabberDLL.enable_auto_camera_property}
+
         vid_props = IC_Property.get_video_property_names()
         cam_props = IC_Property.get_camera_property_names()
-        
+
         if name in vid_props:
             self._prop_type = 'video'
             self._prop_index = vid_props.index(name)
@@ -183,8 +183,8 @@ class IC_Property(object):
 
 
 
-    
-    
-    
-    
-        
+
+
+
+
+

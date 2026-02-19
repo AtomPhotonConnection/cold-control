@@ -5,17 +5,17 @@ Created on 06/02/2026.
 @description: This script contains the OscilloscopeManager class, updated to manage
 the connection to and data acquisition from an Agilent Infiniium 9000 Series Oscilloscope.
 """
-from datetime import datetime
+import logging
 import os
 import time
-import logging
+from datetime import datetime
 from typing import cast
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
-import pandas as pd
-import matplotlib.pyplot as plt
 
 # Robustness: retries and delays for flaky USB/SCPI
 DEFAULT_WRITE_QUERY_RETRIES = 3
@@ -26,7 +26,7 @@ DEFAULT_TIMEOUT_MS = 10e3  # 10 s for long acquisitions
 
 class OscilloscopeManager:
 
-    def __init__(self, scope_id="USB0::0x0957::0x9009::MY12345678::0::INSTR", read_speed=False): 
+    def __init__(self, scope_id="USB0::0x0957::0x9009::MY12345678::0::INSTR", read_speed=False):
         # Note: Default ID is a placeholder for 9000 series. Update with your specific address.
         self.scope_id = scope_id
         self.read_speed = read_speed
@@ -44,7 +44,7 @@ class OscilloscopeManager:
 
             # Clear interface and buffer
             self.scope.clear()
-            
+
             _ = self._query_with_retry("*IDN?")
             print("Connected to the scope: ", _)
 
@@ -147,7 +147,7 @@ class OscilloscopeManager:
 
         # Ensure the new directory exists
         directory = os.path.join("data", current_date)
-        os.makedirs(directory, exist_ok=True) 
+        os.makedirs(directory, exist_ok=True)
 
         # Creates full file name including time and parent folders
         full_name = f"{window}_{current_time}_{filename}"
@@ -182,19 +182,19 @@ class OscilloscopeManager:
     def process_scope_data(filename):
         # Read the CSV file into a DataFrame
         df = pd.read_csv(filename)
-        
+
         # Display basic information about the data
         print("Data Overview:")
         print(df.head())
         print("\nSummary Statistics:")
         print(df.describe())
-        
+
         # Plot each channel's voltage data over time
         plt.figure(figsize=(10, 6))
         for column in df.columns:
             if "Voltage (V)" in column:
                 plt.plot(df['Time (s)'], df[column], label=column)
-        
+
         # Customize the plot
         plt.title("Oscilloscope Data")
         plt.xlabel("Time (s)")
@@ -218,8 +218,8 @@ class OscilloscopeManager:
         """
         print("configuring the scope settings")
         self.clear_error_queue()
-        
-        self._write_with_retry(':ACQuire:MODE HRESolution') 
+
+        self._write_with_retry(':ACQuire:MODE HRESolution')
 
         # set timebase
         t_start, t_stop = timebase_range
@@ -257,7 +257,7 @@ class OscilloscopeManager:
             # Voltage Range/Scale
             v_range = upper - lower
             self._write_with_retry(f":CHANnel{channel}:RANGe {v_range}")
-            
+
             v_offset = (upper + lower) / 2
             self._write_with_retry(f":CHANnel{channel}:OFFSet {v_offset}")
 
@@ -284,7 +284,7 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
-    
+
     def set_to_digitize(self, channels=[1, 2]):
         """
         Function to set the scope to digitize mode. 
@@ -294,7 +294,7 @@ class OscilloscopeManager:
         chan_str = ",".join([f"CHANnel{c}" for c in channels])
         cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
         # cmd = ":DIGitize"
-        
+
         #print(f"Digitizing channels {channels}...")
         print("Digitizing displayed channels...")
         # Use *OPC? to wait for digitize to finish
@@ -336,7 +336,7 @@ class OscilloscopeManager:
         print("Oscilloscope cleared.")
 
 
-    def read_slow_return_data(self, channels):   
+    def read_slow_return_data(self, channels):
         """
         Function to read data from multiple channels after acquisition is complete.
         Adapted for Agilent/Keysight 9000 Series.
@@ -349,7 +349,7 @@ class OscilloscopeManager:
         """
         collected_data = None
         self.clear_error_queue()
-        
+
         # Waveform transfer setup for 9000 series
         self._write_with_retry(':WAVeform:FORMat WORD')       # 16-bit integers
         self._write_with_retry(':WAVeform:BYTeorder LSBFirst')
@@ -362,16 +362,16 @@ class OscilloscopeManager:
             self._write_with_retry(f':WAVeform:SOURCe CHANnel{channel}')
 
             print(f"Collecting data from channel {channel}...")
-            
+
             errs = self.clear_error_queue()
             if errs:
                 for code, msg in errs:
                     print(f"  Scope error (pre-read): {code}, {msg}")
-            
+
             # Preamble: format, type, points, count, xinc, xorg, xref, yinc, yorg, yref
             preamble = cast(str, self._query_with_retry(':WAVeform:PREamble?'))
             pre = preamble.split(',')
-            
+
             num_points = int(pre[2])
             x_incr = float(pre[4])
             x_orig = float(pre[5])
@@ -433,7 +433,7 @@ class OscilloscopeManager:
 
 
         return collected_data
-        
+
 
     def read_slow_return_data_avgd(self, channels, averages=16):
         """
@@ -479,7 +479,7 @@ class OscilloscopeManager:
         return self.read_slow_return_data(channels)
 
 
-    def acquire_slow_save_data(self, channels, window=00):   
+    def acquire_slow_save_data(self, channels, window=00):
         """
         Wrapper to acquire and save data.
         """
@@ -489,7 +489,7 @@ class OscilloscopeManager:
         channels_str = "_".join(map(str, channels))
         filename = self.save_data(collected_data, f"channels_{channels_str}_data", window)
         return filename
-    
+
 
     def arm_scope(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
         """
@@ -501,7 +501,7 @@ class OscilloscopeManager:
         # Poll :AER? (Arm Event Register) [cite: 1563]
         print("Waiting for oscilloscope to arm...")
         start_time = time.perf_counter()
-        
+
         while (time.perf_counter() - start_time) <= max_acq_wait_sec:
             time.sleep(poll_interval_sec)
             try:
@@ -516,7 +516,7 @@ class OscilloscopeManager:
 
         print("Oscilloscope did not arm within timeout.")
         return False
-    
+
 
     def wait_for_acquisition(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
         """

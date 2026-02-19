@@ -9,15 +9,10 @@ Generated CSV format: time, Omega_P_norm, Omega_S_norm
 - Omega values are normalized so max(Omega_P) = max(Omega_S) = 1 for each file separately.
 """
 
-from pathlib import Path
-from typing import Dict
-import numpy as np
-import pandas as pd
 import math
-import csv
+from typing import Dict
 
-import scipy.special as sc
-
+import numpy as np
 
 # ----------------- GLOBAL VARIABLES (edit these) -----------------
 PULSE_LENGTHS = [0.5]   # list of pulse durations (T) to generate files for, in us
@@ -92,8 +87,8 @@ def pump2(t, T):
 def export_to_csv(array, filepath, filename):
     try:
         full_path = f"{filepath}/{filename}"
-        
-        rescaled_arr=np.zeros((len(array)))
+
+        rescaled_arr=np.zeros(len(array))
         for i, el in enumerate(array):
             if abs(el)<10**(-9):
                 rescaled_arr[i]=0
@@ -122,7 +117,7 @@ def export_to_csv(array, filepath, filename):
 
 def generate_rabi(T, shape='standard', sample_rate=1000, output_dir='.',
                   options:Dict = {}):
-    
+
     # time axis
     N = int(T * sample_rate)
     t = np.linspace(0, T, N)
@@ -166,7 +161,7 @@ def generate_rabi(T, shape='standard', sample_rate=1000, output_dir='.',
     export_to_csv(Omega_P_norm, output_dir, filename_prefix + '_pump.csv')
     export_to_csv(Omega_S_norm, output_dir, filename_prefix + '_stokes.csv')
 
-    
+
     return str(filename_prefix)
 
 

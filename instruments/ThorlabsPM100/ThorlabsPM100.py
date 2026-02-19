@@ -1,7 +1,14 @@
-# -*- coding: utf-8 -*-
-from .VISA_wrapper_metaclass import (Group, IndexedGroup, InstrumentMetaclass,
-Argument, GenericCommandClass, GenericGetCommandClass, GenericSetCommandClass,
-GenericGetSetCommandClass, InstrumentCommand)
+from .VISA_wrapper_metaclass import (
+    Argument,
+    GenericCommandClass,
+    GenericGetCommandClass,
+    GenericGetSetCommandClass,
+    GenericSetCommandClass,
+    Group,
+    IndexedGroup,
+    InstrumentCommand,
+    InstrumentMetaclass,
+)
 
 IndexedGroup.var = '<n>'
 
@@ -9,7 +16,7 @@ def with_metaclass(meta, *bases):
     """Create a base class with a metaclass."""
     return meta("NewBase", bases, {})
 
-class Generic(object):
+class Generic:
     def __init__(self, inst, verbose=False):
         self._verbose = verbose
         self._inst = inst

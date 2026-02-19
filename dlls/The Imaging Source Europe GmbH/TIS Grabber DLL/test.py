@@ -1,5 +1,5 @@
+
 from pyicic.IC_ImagingControl import *
-import time
 
 # open lib
 ic_ic = IC_ImagingControl()

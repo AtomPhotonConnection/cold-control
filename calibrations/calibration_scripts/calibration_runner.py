@@ -7,18 +7,17 @@ Refactored 09/12/2024
 '''
 
 import os
-import time
-from classes.Config import ConfigReader, DaqReader
+
 from instruments.WX218x.WX218x_awg import Channel
 
 import lab_control_functions.calibration_functions as calibrate
-
+from classes.Config import ConfigReader, DaqReader
 
 # Select the type of calibration script to run.
 CALIB_TYPE = "stirap_aom_response" # options are "absolute_power", "stirap_aom_response", "another one"
 
 
-    
+
 
 if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
     """
@@ -40,7 +39,7 @@ if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
     # FREQ_V = [6.104]
     # FREQ_V = [6.412,6.051,5.113,4.16,3.2087]
     # AOM_FREQS = [76,78,80,82,84]
-        
+
     # AOM_NAME = 'cool_lower'
     # AMP_CHAN = 5
     # FREQ_CHAN = 1

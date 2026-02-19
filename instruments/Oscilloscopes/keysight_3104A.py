@@ -6,17 +6,17 @@ Created on 22/05/2025.
 @description: This script contains the OscilloscopeManager class, which is used to manage
 the connection to and data acquisition from an oscilloscope (Keysight 3104A / InfiniiVision 3000T).
 """
-from datetime import datetime
+import logging
 import os
 import time
-import logging
+from datetime import datetime
 from typing import cast
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
-import pandas as pd
-import matplotlib.pyplot as plt
 
 # Robustness: retries and delays for flaky USB/SCPI
 DEFAULT_WRITE_QUERY_RETRIES = 3
@@ -148,7 +148,7 @@ class OscilloscopeManager:
 
         # Ensure the new directory exists
         directory = os.path.join("data", current_date)
-        os.makedirs(directory, exist_ok=True) 
+        os.makedirs(directory, exist_ok=True)
 
         # Creates full file name including time and parent folders
         full_name = f"{window}_{current_time}_{filename}"
@@ -187,19 +187,19 @@ class OscilloscopeManager:
     def process_scope_data(filename):
         # Read the CSV file into a DataFrame
         df = pd.read_csv(filename)
-        
+
         # Display basic information about the data
         print("Data Overview:")
         print(df.head())
         print("\nSummary Statistics:")
         print(df.describe())
-        
+
         # Plot each channel's voltage data over time
         plt.figure(figsize=(10, 6))
         for column in df.columns:
             if "Voltage (V)" in column:
                 plt.plot(df['Time (s)'], df[column], label=column)
-        
+
         # Customize the plot
         plt.title("Oscilloscope Data")
         plt.xlabel("Time (s)")
@@ -207,7 +207,7 @@ class OscilloscopeManager:
         plt.legend()
         plt.grid()
         plt.tight_layout()
-        
+
         # Show the plot
         plt.show()
 
@@ -293,7 +293,7 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
-    
+
 
     def set_to_digitize(self, channels=[1, 2]):
         """
@@ -339,7 +339,7 @@ class OscilloscopeManager:
 
 
 
-    def read_slow_return_data(self, channels):   
+    def read_slow_return_data(self, channels):
         """
         Function to sample data from multiple channels when a trigger has been manually 
         set on the oscilloscope. This is a slower method of acquiring data, and is used
@@ -377,7 +377,7 @@ class OscilloscopeManager:
             preamble = cast(str, self._query_with_retry('WAVEFORM:PREAMBLE?'))
             pre = preamble.split(',')
             print(f"Preamble info: {pre}")
-            num_points = int(pre[2])    
+            num_points = int(pre[2])
             x_incr = float(pre[4])  # XINCREMENT is at index 4
             x_orig = float(pre[5])  # XORIGIN is at index 5
             y_incr = float(pre[7])  # YINCREMENT is at index 7
@@ -400,7 +400,7 @@ class OscilloscopeManager:
                     self._log.warning("WAVEFORM:DATA? attempt %d failed: %s", attempt + 1, e)
                     time.sleep(RETRY_DELAY_SEC)
 
-            
+
 
             raw_data = cast(np.ndarray, raw_data)
             y_data = (raw_data-y_ref) * y_incr + y_orig
@@ -415,9 +415,9 @@ class OscilloscopeManager:
             collected_data[f'Channel {channel} Voltage (V)'] = y_data
 
         return collected_data
-        
 
-    def acquire_slow_save_data(self, channels, window=00):   
+
+    def acquire_slow_save_data(self, channels, window=00):
         """
         Function to sample data from multiple channels when a trigger has been manually 
         set on the oscilloscope. This is a slower method of acquiring data, and is used
@@ -441,7 +441,7 @@ class OscilloscopeManager:
         channels_str = "_".join(map(str, channels))
         filename = self.save_data(collected_data, f"channels_{channels_str}_data", window)
         return filename
-    
+
 
 
 
@@ -485,7 +485,7 @@ class OscilloscopeManager:
 
         print("Oscilloscope is armed and ready for trigger!")
         return True
-    
+
 
     def wait_for_acquisition(self, max_acq_wait_sec=1, poll_interval_sec=0.01):
         """

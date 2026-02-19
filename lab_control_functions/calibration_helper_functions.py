@@ -5,30 +5,27 @@ Helper functions for the calibration functions.
 '''
 
 import os
-import serial
-import time
-import numpy as np
-from classes.Config import ConfigReader, DaqReader
+
 import matplotlib.pyplot as plt
-import re
-from instruments.TF930 import TF930
-from instruments.ThorlabsPM100 import ThorlabsPM100
-import pyvisa as visa
+import numpy as np
 import pandas as pd
+import pyvisa as visa
+
+from instruments.ThorlabsPM100 import ThorlabsPM100
+
 '''
 Load required classes for awg driven AOM calibration
 '''
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
-from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_Waveform, WX218x_OutputMode
 from classes.ExperimentalConfigs import Waveform
-    
+
+
 class CalibrationException(Exception):
-    
+
     def __init__(self, message):
         # Call the base class constructor with the parameters it needs
-        super(CalibrationException, self).__init__(message)
+        super().__init__(message)
 
-  
+
 
 class testWaveform(Waveform):
     '''
@@ -47,7 +44,7 @@ class testWaveform(Waveform):
         self.phases = []
         self.t_step = 2*np.pi/samp_rate
         self.calib(level, self.mod_frequency)
-        
+
     def calib(self, level, mod_freq):
         self.level = level
         self.data = [self.level]*800
@@ -56,7 +53,7 @@ class testWaveform(Waveform):
 
 
 def getCalibName(aom_name, freq):
-        return '{0}_amp_at_{1}MHz'.format(aom_name, freq)
+        return f'{aom_name}_amp_at_{freq}MHz'
 
 
 def default_v_step():
@@ -103,11 +100,11 @@ def get_power_meter(debug_mode = False):
             if debug_mode:
                 print(f"error message: {e}")
 
-    
+
     if power_meter == None:
         print('Calibration failed - power meter could not be found')
         raise CalibrationException('Calibration failed - power meter could not be found')
-    
+
     return inst, power_meter
 
 
@@ -125,7 +122,7 @@ def configure_power_meter(power_meter:ThorlabsPM100, nMeasurmentCounts = 1):
     power_meter.sense.power.dc.range.auto = 'ON'
     power_meter.sense.power.dc.unit = 'W'
     power_meter.sense.average.count = nMeasurmentCounts
-    
+
 
 
 
@@ -134,8 +131,8 @@ def create_file_txt(fname, levelData, parsedData, units):
     """
     Saves a .txt file containing the voltage levels and the calibration data. DEPRECATED.
     """
-    fname = '{0}.txt'.format(fname)
-    
+    fname = f'{fname}.txt'
+
     f = open(fname, 'a')
     print('created: ', fname)
     lineArgs =  [('V', units)]
@@ -160,22 +157,22 @@ def create_file(fname, levelData, parsedData, calib_units, level_units = "Voltag
         None
     """
     if level_units == "Voltage (V)":
-        df = pd.DataFrame({"Voltage (V)": levelData, 
+        df = pd.DataFrame({"Voltage (V)": levelData,
                        f"Calibration Data ({calib_units})": parsedData})
     else:
-        df = pd.DataFrame({f"{level_units}": levelData, 
+        df = pd.DataFrame({f"{level_units}": levelData,
                        f"Calibration Data ({calib_units})": parsedData})
-        
+
     # Get the directory path from the filename
-    directory = os.path.dirname(fname) 
+    directory = os.path.dirname(fname)
 
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)  # Create directory if it doesn't exist
 
-    df.to_csv(f"{fname}.csv", index=False) 
-    print(f"created: {fname}.csv") 
+    df.to_csv(f"{fname}.csv", index=False)
+    print(f"created: {fname}.csv")
 
-    
+
 
 
 def save_plot(fname, vData, calData, units, title, level_units = "Voltage (V)"):
@@ -183,22 +180,22 @@ def save_plot(fname, vData, calData, units, title, level_units = "Voltage (V)"):
     Saves a plot of voltage against calibration data.
     """
     fig = plt.figure()
-    
+
     ax = fig.add_subplot(111)
     fig.subplots_adjust(top=0.85)
     ax.set_title(title)
-    
+
     ax.set_xlabel(f'{level_units}')
     ax.set_ylabel(f"Calibration data ({units})")
     #ax.set_ylabel("test")
-    
+
     ax.plot(vData, calData)
 
     # Get the directory path from the filename
-    directory = os.path.dirname(fname) 
+    directory = os.path.dirname(fname)
 
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)  # Create directory if it doesn't exist
-    
+
     plt.savefig(fname)
     print ('saved img: ', fname)

@@ -1,19 +1,17 @@
 #!/usr/bin/python
 
+import os
 import tkinter as tk
 from tkinter import messagebox as tkMessageBox
-import os
-import typing
-
 
 import classes.Styles as Styles
 from classes.Config import ConfigReader
-
-from UI_classes.DAQ_UI import DAQ_UI
-from UI_classes.Sequence_UI import Sequence_UI
 from UI_classes.Camera_UI import Camera_UI
+from UI_classes.DAQ_UI import DAQ_UI
 from UI_classes.Experimental_UI import Experimental_UI
 from UI_classes.Labbook_UI import Labbook_UI
+from UI_classes.Sequence_UI import Sequence_UI
+
 
 class ColdControl_UI(tk.Frame):
     '''
@@ -36,38 +34,38 @@ class ColdControl_UI(tk.Frame):
         tk.Frame.__init__(self, parent)
 
         self.master: tk.Misc = parent
-        
+
         self.config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
         self.development_mode = self.config_reader.is_development_mode()
-        
+
         self.master.wm_title("Cold Control Heavy")
         self.addMenu()
         self.title = tk.Label(self, text="Cold Control Heavy", font=("Helvetica", 24))
 
         '''Load DAQ channels and cards from the config file.  Set up the DAQ_controller with these.'''
-        self.daq_config_fname = self.config_reader.get_daq_config_fname()   
+        self.daq_config_fname = self.config_reader.get_daq_config_fname()
         self.daq_UI = DAQ_UI(self, self.daq_config_fname, development_mode=self.development_mode)
 
         '''Load a sequence and start the sequence UI (though it is hidden by default)'''
         self.sequence_fname = self.config_reader.get_sequence_fname()
         self.sequence_ui = Sequence_UI(self, self.sequence_fname, self.daq_UI.daq_controller.getChannelNumberNameDict(onlyVisable=False),
                                        self.daq_UI.daq_controller.getChannelCalibrationDict(), hidden=True)
-        
-        
+
+
         '''Start up the camera UI.'''
         self.camera_UI = Camera_UI(self, ic_imaging_control = None)
         self.camera_live = self.camera_UI.is_live # monitors status of camera to prevent taking photos while camera is live
-        
+
         '''Set up the experimental UI with pre-configured defaults from the appropriate config files.'''
         self.absorbtion_imaging_config_fname = self.config_reader.get_absorbtion_imaging_config_fname()
         self.photon_production_config_fname = self.config_reader.get_photon_production_config_fname()
         self.experimental_UI = Experimental_UI(self,
                                                self.daq_UI,
-                                               self.sequence_ui, 
+                                               self.sequence_ui,
                                                self.photon_production_config_fname,
                                                self.absorbtion_imaging_config_fname,
                                                ic_imaging_control=self.camera_UI.ic_ic)
-        
+
         '''Initialise the labook UI'''
         self.labbook_UI = Labbook_UI(self)
 
@@ -76,18 +74,18 @@ class ColdControl_UI(tk.Frame):
         self.grid_columnconfigure(1, weight=1, pad=3, uniform='cols')
         self.grid_columnconfigure(2, weight=1, pad=3, uniform='cols')
         self.grid_columnconfigure(3, weight=1, pad=3, uniform='cols')
-        
+
         gridOpts = {'padx': 10, 'pady':10}
-        
+
         self.title.grid(row=0,column=0,columnspan=3, **gridOpts) # type: ignore
         self.daq_UI.grid(row=1,column=1,columnspan=2, sticky=tk.N+tk.E+tk.W, **gridOpts) # type: ignore
         self.experimental_UI.grid(row=2,column=1,columnspan=2, sticky=tk.N)
         self.camera_UI.grid(row=1,column=0, sticky=tk.N+tk.E+tk.W)
         self.labbook_UI.grid(row=1, column=3, sticky=tk.N+tk.E+tk.W)
-               
+
         '''Bind closing the app to a clean up method.'''
         root.protocol( "WM_DELETE_WINDOW", self.onExit)
-    
+
     def addMenu(self):
         '''Create a pulldown menu, and add it to the menu bar'''
         menubar = tk.Menu(self.master)
@@ -98,18 +96,18 @@ class ColdControl_UI(tk.Frame):
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.onExit)
         menubar.add_cascade(label="File", menu=filemenu)
-    
+
         self.master.config(menu=menubar) # type: ignore
-        
+
     def onExit(self):
         '''
         Called on closing ColdControl.  Confirms the exit and safely closes the various UI's.
         '''
-        
+
         exitConfirmation = tkMessageBox.askquestion("Please confirm exit",\
                                                     "Are you sure you want to close Cold Control?\nThis will release all DAQ cards and exit the program - unsaved information will be lost?",
                                                     icon='warning')
-        if exitConfirmation == 'yes':            
+        if exitConfirmation == 'yes':
             print("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
             print('Closing camera connections...')
@@ -123,9 +121,9 @@ class ColdControl_UI(tk.Frame):
             print('...labbook saved')
             root.destroy()
             print('Cold Control closed - bye!')
- 
+
 if __name__ == "__main__":
-    
+
     root = tk.Tk()
     root.geometry("1600x800")
     Styles.configureStyles()

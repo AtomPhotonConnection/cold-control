@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """This module convert VISA command to methods
 
 For example, from a command like "BEGin:End VALue" the programm
@@ -8,11 +7,11 @@ begin_end using those methods.
 There is a full example at the end of this file
 
 """
-import re
 import numbers
+import re
 
 
-class TestValue(object):
+class TestValue:
     """Class use to test the paramters
 
     This class implement the test method the return
@@ -87,7 +86,7 @@ class TestValueBoundNumber(TestValue):
         self.maximum = maximum
 
     def condition(self, value):
-        return isinstance(value, numbers.Number) and value>=self.minimum and value<=self.maximum 
+        return isinstance(value, numbers.Number) and value>=self.minimum and value<=self.maximum
 
     def __repr__(self):
         return 'in between %s and %s' % (self.minimum, self.maximum)
@@ -230,7 +229,7 @@ def _generic_set_command(cmd_name, in_test=None, doc=None):
     return set_val
 
 
-class GenericCommandClass(object):
+class GenericCommandClass:
     @classmethod
     def get_argument_list(cls):
         out = []
@@ -327,7 +326,7 @@ class GenericGetCommandClass(GenericCommandClass):
         args = cls.get_argument_list_name()
         if set(args) != set(['value']) and not len(args) == 0:
             out += "**Property value (read-only) :** "+','.join(args)+"\n\n"
-        out += "**Initial SCPI command :** {0}\n\n".format(cls.cmd)
+        out += f"**Initial SCPI command :** {cls.cmd}\n\n"
         return _make_doc(out, title)
 
 
@@ -350,7 +349,7 @@ class GenericSetCommandClass(GenericCommandClass):
 #            out += "**Property value (write-only) :** "+','.join(args)+"\n\n"
         out += "**Property value (write-only) :** "+','\
                .join(map(str, args[0].list_test_value))+"\n\n"
-        out += "**Initial SCPI command :** {0}\n\n".format(cls.cmd)
+        out += f"**Initial SCPI command :** {cls.cmd}\n\n"
         return _make_doc(out, title)
 
 
@@ -375,11 +374,11 @@ class GenericGetSetCommandClass(GenericCommandClass):
         args = cls.get_argument_list()
         out += "**Property value :** "+','\
                .join(map(str, args[0].list_test_value))+"\n\n"
-        out += "**Initial SCPI command :** {0}\n\n".format(cls.cmd)
+        out += f"**Initial SCPI command :** {cls.cmd}\n\n"
         return _make_doc(out, title)
 
 
-class Argument(object):
+class Argument:
     def __init__(self, ordre, list_value, default=None):
         self.ordre = ordre
         self.list_value = list_value
@@ -415,7 +414,7 @@ class Argument(object):
                          % (value,  ' or '.join(map(str, list_test_value))))
 
 
-class GroupProperty(object):
+class GroupProperty:
     def __init__(self, cls):
         self._cls = cls
 
@@ -438,7 +437,7 @@ class InstrumentMetaclass(type):
         attrs = dict((name, value) for name, value in dct.items() if type(value) == type and issubclass(value, GenericCommandClass))
         attrsbis = dict((name, value) for name, value in dct.items() if type(value) == InstrumentMetaclass and issubclass(value, Group))
 
-#        out =  dict((name, value) for name, value in dct.items() if not name.startswith('__'))       
+#        out =  dict((name, value) for name, value in dct.items() if not name.startswith('__'))
         out = dct
         for (name, value) in attrs.items():
             out.update(value.to_dict(name))
@@ -453,7 +452,7 @@ class InstrumentMetaclass(type):
         return final_object
 
 
-class InstrumentCommand(object):
+class InstrumentCommand:
     def _get_cmd_name(self, cmd_name):
         return cmd_name
 
@@ -469,7 +468,7 @@ class InstrumentCommand(object):
         return out
 
 
-class Group(object):
+class Group:
     """ This class is used to group command
 
     For example, if we want to use the command scope.Acquisition.StartTime,

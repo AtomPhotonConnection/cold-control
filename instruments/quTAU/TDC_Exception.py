@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 class TDC_Exception(Exception):
     """
@@ -10,12 +9,12 @@ class TDC_Exception(Exception):
     @property
     def message(self):
         return self._error_codes[self.error_code]
-            
+
     @property
     def error_code(self):
         return self._error_code
-        
-    _error_codes = {    
+
+    _error_codes = {
                     0   :   'SUCCESS',
                    -1   :   'UNSPECIFIED ERROR',
                     1   :   'RECEIVE TIMED OUT',
@@ -29,10 +28,10 @@ class TDC_Exception(Exception):
                     12  :   'LIBRARY HAS NOT BEEN INITIALIZED',
                     13  :   'REQUESTED FEATURE IS NOT ENABLED',
                     14  :   'REQUESTED FEATURE IS NOT AVAILABLE',
-    
+
                     -100:   'ERROR CODE NOT SPECIFIED IN DOCUMENTATION'
                    }
-    
+
     def __init__(self, error_code):
         # if error code does not match expected codes then assign invalid code
         if error_code in self._error_codes:

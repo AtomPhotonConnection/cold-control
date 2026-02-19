@@ -1,11 +1,10 @@
-from typing import Optional
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from pathlib import Path
-import numpy as np
+from typing import Optional
 
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 DATA_CH = 3  # Channel to plot (e.g., fluorescence channel)
 
@@ -21,7 +20,7 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     shot_path = Path(shot_folder)
     files = sorted(shot_path.glob("iteration_*_data.csv"))
     avg_file = shot_path / f"{shot_path.name}{suffix}"
-    
+
     # Plot all raw iterations
     plt.figure(figsize=(10, 6))
     for file in files:

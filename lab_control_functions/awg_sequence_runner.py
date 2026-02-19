@@ -1,12 +1,16 @@
-from time import sleep
 import os
 import time
 
-from classes.Config import ConfigReader, DaqReader
-from ExperimentalConfigs import PhotonProductionConfiguration, AwgConfiguration, TdcConfiguration, Waveform
 from configobj import ConfigObj
-from lab_control_functions.awg_control_functions import run_awg
+from ExperimentalConfigs import (
+    AwgConfiguration,
+    PhotonProductionConfiguration,
+    TdcConfiguration,
+    Waveform,
+)
 
+from classes.Config import ConfigReader, DaqReader
+from lab_control_functions.awg_control_functions import run_awg
 
 path_to_config = r'configs\photon production\newPhotonProductionConfigJan'
 
@@ -18,10 +22,10 @@ if __name__ == '__main__':
 
     def toBool(string):
         return string.lower() in GLOB_TRUE_BOOL_STRINGS
-    
+
     # Converts the specified file to a "config object"
     config = ConfigObj(path_to_config)
-    # Reads the awg properties from the config object, and creates a new awg configuration with those settings        
+    # Reads the awg properties from the config object, and creates a new awg configuration with those settings
     awg_config = AwgConfiguration(sample_rate = float(config['AWG']['sample rate']),
                                     burst_count = int(config['AWG']['burst count']),
                                     waveform_output_channels = list(config['AWG']['waveform output channels']),
@@ -32,14 +36,14 @@ if __name__ == '__main__':
     tdc_config = TdcConfiguration(counter_channels = map(eval, config['TDC']['counter channels']),
                                     marker_channel = int(config['TDC']['marker channel']),
                                     timestamp_buffer_size = int(config['TDC']['timestamp buffer size']))
-    
+
     # Reads the waveforms from the config object, and creates a list of Waveforms with those properties
     waveforms = []
     for x,v in config['waveforms'].items():
         waveforms.append(Waveform(fname = v['filename'],
                                     mod_frequency= float(v['modulation frequency']),
                                     phases=map(float, v['phases'])))
-        
+
 
     # Sets the general settings for the whole process as a photon production configuration
     photon_production_config = PhotonProductionConfiguration(save_location = config['save location'],
@@ -51,7 +55,7 @@ if __name__ == '__main__':
                                                                 interleave_waveforms = toBool(config['interleave waveforms']),
                                                                 awg_configuration = awg_config,
                                                                 tdc_configuration = tdc_config)
-    
+
 
     # Calls the configure_awg function with the values extracted from the config object
     # This function used to be called "configure_awg"

@@ -1,7 +1,7 @@
 import os
 
 
-class USBTMC(object):
+class USBTMC:
     """Simple implementation of a USBTMC device driver, in the style of visa.h
     """
 

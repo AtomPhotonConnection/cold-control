@@ -1,11 +1,12 @@
-import serial
-import time
-import numpy as np
-from classes.Config import ConfigReader, DaqReader
-import matplotlib.pyplot as plt
 import re
+import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import serial
+
 from instruments.TF930 import TF930
-import pyvisa as visa
+
 # from sympy.physics.quantum.circuitplot import matplotlib
 
 
@@ -56,7 +57,7 @@ def frequency_timeseries_mx(t_max,
             nBadPoints += 1
             t_data.pop(i - nBadPoints)
 
-    print ('Removed {0} bad data points'.format(nBadPoints))
+    print (f'Removed {nBadPoints} bad data points')
 
     # Just a hack to convert Hz to MHz as it's nicer.
     if units == 'Hz':

@@ -6,7 +6,8 @@ Created on 10 Apr 2016
 
 import tkinter as tk
 
-class ToolTip(object):
+
+class ToolTip:
 
     def __init__(self, widget, text, openDelay=2000):
         self.widget = widget
@@ -15,10 +16,10 @@ class ToolTip(object):
         self.text = text
         self.openDelay = openDelay
         self.x = self.y = 0
-        
+
     def updateText(self, text):
         self.text=text
-        
+
     def spawntip(self):
         self.id = self.widget.after(self.openDelay, self.showtip)
 
@@ -54,7 +55,7 @@ class ToolTip(object):
             if tw:
                 tw.destroy()
 
-  
+
 def createToolTip(widget, text, openDelay=1000):
         toolTip = ToolTip(widget, text, openDelay)
         def enter(event):

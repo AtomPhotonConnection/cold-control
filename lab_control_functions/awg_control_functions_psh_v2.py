@@ -9,17 +9,19 @@ with improved error handling, clearer logic, and better separation of concerns.
 @date: 2025-12-01
 """
 
-import numpy as np
-from typing import Any, List, Tuple, Optional
 from time import sleep
+from typing import Any, List, Optional, Tuple
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+import numpy as np
+from instruments.WX218x.WX218x_awg import WX218x_awg
 from instruments.WX218x.WX218x_DLL import (
-    WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode, 
-    WX218x_TriggerSlope, WX218x_TraceMode
+    WX218x_OperationMode,
+    WX218x_OutputMode,
+    WX218x_TriggerMode,
+    WX218x_TriggerSlope,
 )
 
+from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 
 # ============================================================================
 # Constants for Marker Configuration
@@ -97,16 +99,16 @@ def configure_awg_general(awg: WX218x_awg, awg_config: AwgConfiguration) -> None
     print("\n" + "="*60)
     print("Configuring General AWG Settings")
     print("="*60)
-    
+
     print(f"Sample rate: {awg_config.sample_rate / 1e6:.1f} MHz")
     awg.configure_sample_rate(awg_config.sample_rate)
-    
+
     print("Output mode: ARBITRARY")
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
-    
+
     print("Channel coupling: ENABLED")
     awg.configure_couple_enabled(True)
-    
+
     print("General configuration complete")
 
 
@@ -121,13 +123,13 @@ def configure_triggers(awg: WX218x_awg, awg_config: AwgConfiguration) -> None:
     print("\n" + "="*60)
     print("Configuring Trigger Settings")
     print("="*60)
-    
+
     channels = awg_config.waveform_output_channels
     burst_count = awg_config.burst_count
-    
+
     print(f"Channels to configure: {channels}")
     print(f"Burst count: {burst_count}")
-    
+
     # Configure triggers for even-indexed channels (typically the main channels)
     for i, channel in enumerate(channels):
         if i % 2 == 0:
@@ -138,7 +140,7 @@ def configure_triggers(awg: WX218x_awg, awg_config: AwgConfiguration) -> None:
             awg.configure_trigger_source(channel, WX218x_TriggerMode.EXTERNAL)
             awg.configure_trigger_level(channel, 2.0)
             awg.configure_trigger_slope(channel, WX218x_TriggerSlope.POSITIVE)
-    
+
     print("\n Trigger configuration complete")
 
 
@@ -147,7 +149,7 @@ def configure_triggers(awg: WX218x_awg, awg_config: AwgConfiguration) -> None:
 # ============================================================================
 
 def calculate_channel_offsets(
-    channel_lags: List[float], 
+    channel_lags: List[float],
     sample_rate: float
 ) -> Tuple[List[int], List[int]]:
     """
@@ -164,13 +166,13 @@ def calculate_channel_offsets(
         Tuple of (absolute_offsets, relative_offsets) in samples
     """
     # Convert time-based lags to sample-based offsets
-    absolute_offsets = [int(np.rint(lag * US_TO_S * sample_rate)) 
+    absolute_offsets = [int(np.rint(lag * US_TO_S * sample_rate))
                         for lag in channel_lags]
-    
+
     # Relative offsets are computed such that the channel with max offset is 0
     max_offset = max(absolute_offsets) if absolute_offsets else 0
     relative_offsets = [max_offset - offset for offset in absolute_offsets]
-    
+
     print("\n" + "="*60)
     print("Channel Offset Calculation")
     print("="*60)
@@ -179,7 +181,7 @@ def calculate_channel_offsets(
     print("\nChannel offsets (in AWG samples):")
     for i, (abs_off, rel_off) in enumerate(zip(absolute_offsets, relative_offsets)):
         print(f"  Ch{i+1}: absolute={abs_off:6d}, relative={rel_off:6d}")
-    
+
     return absolute_offsets, relative_offsets
 
 
@@ -209,7 +211,7 @@ def get_waveform_data(
     """
     if calibration_function is None:
         calibration_function = lambda x: x
-    
+
     return waveform.get(
         sample_rate=sample_rate,
         calibration_function=calibration_function,
@@ -240,25 +242,25 @@ def stitch_waveforms_for_channel(
     """
     if calibration_function is None:
         calibration_function = lambda x: x
-    
+
     stitched_data = []
 
     # NOTE: STILL NEED TO ADD STITCH DELAY HANDLING
-    
+
     for wf in channel_waveforms:
         wf_data = get_waveform_data(
-            wf, 
-            sample_rate, 
+            wf,
+            sample_rate,
             calibration_function,
             constant_voltage=False
         )
         print(f"  Waveform '{wf.fname}': {len(wf_data)} samples")
         stitched_data.extend(wf_data)
-    
+
     # Add padding if requested
     if pad_length > 0:
         stitched_data.extend([0.0] * pad_length)
-    
+
     return np.array(stitched_data)
 
 
@@ -286,17 +288,17 @@ def create_marker_waveform(
     """
     total_length = n_pad_left + waveform_length + n_pad_right
     data = np.full(total_length, marker_levels[0], dtype=float)
-    
+
     for pos in marker_positions:
         pos_int = int(pos) + n_pad_left
         if 0 <= pos_int < total_length:
             end_pos = min(pos_int + int(marker_width), total_length)
             data[pos_int:end_pos] = marker_levels[1]
-    
+
     # Fix for high-start issue: if first element is high, set it low
     if len(data) > 0 and data[0] == marker_levels[1]:
         data[0] = marker_levels[0]
-    
+
     return data.tolist()
 
 
@@ -312,13 +314,13 @@ def find_marker_positions(marker_data: List[float]) -> List[int]:
     """
     if len(marker_data) < 2:
         return []
-    
+
     positions = []
     for i in range(1, len(marker_data)):
         # Detect transition from low (0) to high (1)
         if marker_data[i-1] == 0 and marker_data[i] > 0:
             positions.append(i)
-    
+
     return positions
 
 
@@ -346,30 +348,30 @@ def ensure_alignment(
     """
     # Find maximum length
     max_length = max([len(wf) for wf in waveform_data] + [len(marker_data)])
-    
+
     # Pad to multiple of align_to
     if max_length % align_to != 0:
         max_length = max_length + (align_to - max_length % align_to)
-    
+
     # Pad all waveforms to max length
     aligned_waveforms = []
     for wf in waveform_data:
         padded = np.pad(np.array(wf), (0, max_length - len(wf)), mode='constant')
         aligned_waveforms.append(padded)
-    
+
     # Pad marker data
     aligned_marker = np.pad(
-        np.array(marker_data), 
-        (0, max_length - len(marker_data)), 
+        np.array(marker_data),
+        (0, max_length - len(marker_data)),
         mode='constant'
     )
-    
-    print(f"\n Data alignment:")
+
+    print("\n Data alignment:")
     print(f"  Max waveform length: {max_length} samples (aligned to {align_to})")
     for i, wf in enumerate(aligned_waveforms):
         print(f"  Channel {i+1}: {len(wf)} samples")
     print(f"  Marker: {len(aligned_marker)} samples")
-    
+
     return aligned_waveforms, aligned_marker.tolist()
 
 
@@ -398,28 +400,28 @@ def write_waveforms_to_awg(
     print("\n" + "="*60)
     print("Writing Waveforms to AWG")
     print("="*60)
-    
+
     if len(channels) != len(waveform_data) or len(channels) != len(relative_offsets):
         raise ValueError(
             f"Channel count mismatch: {len(channels)} channels, "
             f"{len(waveform_data)} waveforms, {len(relative_offsets)} offsets"
         )
-    
+
     for ch_idx, (channel, data, offset) in enumerate(
         zip(channels, waveform_data, relative_offsets)
     ):
         print(f"\n  Channel {ch_idx + 1}: {channel}")
         print(f"    Samples: {len(data)}")
         print(f"    Offset: {offset} samples")
-        
+
         # Apply time-domain offset (circular shift)
         if offset != 0:
             data = np.roll(np.array(data), offset).tolist()
-        
+
         # Set active channel and create waveform
         awg.set_active_channel(channel)
         waveform_handle = awg.create_arbitrary_waveform(data)
-        
+
         print(f"    Waveform handle: {waveform_handle}")
 
 
@@ -447,25 +449,25 @@ def write_markers_to_awg(
     print("\n" + "="*60)
     print("Configuring Markers")
     print("="*60)
-    
+
     # Find marker pulse positions
     marker_positions = find_marker_positions(marker_data)
-    
+
     if not marker_positions:
         print("  ℹ No markers detected in marker waveform")
         return
-    
+
     if len(marker_positions) > 2:
         print(f" {len(marker_positions)} marker positions requested, "
               f"but AWG only supports 2 markers. Using first 2.")
         marker_positions = marker_positions[:2]
-    
+
     print(f"  Marker positions: {marker_positions}")
     print(f"  Marker width: {marker_width} µs")
-    
+
     # Convert marker width from microseconds to AWG sample units
     marker_width_samples = int(marker_width * US_TO_S * sample_rate)
-    
+
     # Assign markers to channels
     for marker_idx, (marker_pos, channel) in enumerate(
         zip(marker_positions, marked_channels[:len(marker_positions)])
@@ -474,7 +476,7 @@ def write_markers_to_awg(
         print(f"    Channel: {channel}")
         print(f"    Position: {marker_pos}")
         print(f"    Width: {marker_width_samples} samples")
-        
+
         awg.configure_marker(
             channel,
             index=marker_idx + 1,
@@ -496,12 +498,12 @@ def enable_awg_outputs(awg: WX218x_awg, channels: List[str], gain: float = 2.0) 
     print("\n" + "="*60)
     print("Enabling AWG Outputs")
     print("="*60)
-    
+
     for channel in channels:
         print(f"  {channel}: gain={gain}")
         awg.enable_channel(channel)
         awg.configure_arb_gain(channel, gain)
-    
+
     print("All outputs enabled")
 
 
@@ -531,9 +533,9 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
     print("\n" + "#"*60)
     print("# AWG Configuration and Control")
     print("#"*60)
-    
+
     awg = None
-    
+
     try:
         # Connect to hardware (skip in development mode)
         if not dev_mode:
@@ -542,18 +544,18 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
             configure_triggers(awg, awg_config)
         else:
             print("\n  Development mode: skipping hardware connection")
-        
+
         # Calculate channel offsets
         abs_offsets, rel_offsets = calculate_channel_offsets(
             awg_config.waveform_output_channel_lags,
             awg_config.sample_rate
         )
-        
+
         # Process waveforms
         print("\n" + "="*60)
         print("Processing Waveforms")
         print("="*60)
-        
+
         # Build waveform data for each channel
         waveform_data = []
         for channel_waveforms in awg_config.waveform_sequence:
@@ -566,7 +568,7 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
             )
             waveform_data.append(stitched)
             print(f"  Channel waveform: {len(stitched)} samples")
-        
+
         # Create marker waveform
         marker_waveform = create_marker_waveform(
             waveform_length=len(waveform_data[0]) if waveform_data else 0,
@@ -574,13 +576,13 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
             marker_levels=MARKER_LEVS,
             marker_width=int(awg_config.marker_width * US_TO_S * awg_config.sample_rate)
         )
-        
+
         # Ensure data alignment
         waveform_data, marker_waveform = ensure_alignment(
             waveform_data,
             marker_waveform
         )
-        
+
         # Write to AWG (skip in development mode)
         if not dev_mode and awg:
             print(waveform_data[0])
@@ -591,7 +593,7 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
                 waveform_data,
                 rel_offsets,
             )
-            
+
             write_markers_to_awg(
                 awg,
                 awg_config.marked_channels,
@@ -599,18 +601,18 @@ def run_awg(awg_config: AwgConfiguration, dev_mode: bool = False) -> Optional[WX
                 awg_config.marker_width,
                 awg_config.sample_rate
             )
-            
+
             enable_awg_outputs(
                 awg,
                 awg_config.waveform_output_channels
             )
-            
+
             print("\nAWG configuration complete")
         else:
             print("\n  Development mode: skipping hardware writes")
-        
+
         return awg
-    
+
     except Exception as e:
         print(f"\n Error during AWG configuration: {e}")
         if awg:

@@ -7,20 +7,23 @@ Refactored 09/12/2024
 '''
 
 import time
-import numpy as np
-from scipy.constants import c, epsilon_0, hbar
-import numpy as np
-import pandas as pd
+
 import matplotlib.pylab as plt
-from scipy.interpolate import interp1d
-import csv
-import pyvisa as visa
+import numpy as np
 import oscilloscope_manager as osc
-from classes.ExperimentalConfigs import PhotonProductionConfiguration, AwgConfiguration, TdcConfiguration, Waveform
-from cold_control_files.awg_control_functions import run_awg
-from configobj import ConfigObj        
-from sklearn.metrics import mean_squared_error
+import pandas as pd
+import pyvisa as visa
 import scipy.integrate as spi
+from cold_control_files.awg_control_functions import run_awg
+from configobj import ConfigObj
+
+from classes.ExperimentalConfigs import (
+    AwgConfiguration,
+    PhotonProductionConfiguration,
+    TdcConfiguration,
+    Waveform,
+)
+
 
 def to_bool(string):
     return string.lower() in ['true', 't', 'yes', 'y']
@@ -30,15 +33,15 @@ def setup_awg(config):
     awg_config = AwgConfiguration(sample_rate = float(config['AWG']['sample rate']),
                                     burst_count = int(config['AWG']['burst count']),
                                     waveform_output_channels = list(config['AWG']['waveform output channels']),
-                                    waveform_output_channel_lags = map(float, config['AWG']['waveform output channel lags']),  
+                                    waveform_output_channel_lags = map(float, config['AWG']['waveform output channel lags']),
                                     marked_channels = list(config['AWG']['marked channels']),
                                     marker_width = eval(config['AWG']['marker width']),
                                     waveform_aom_calibrations_locations = list(config['AWG']['waveform aom calibrations locations']))
-    
+
     tdc_config = TdcConfiguration(counter_channels = map(eval, config['TDC']['counter channels']),
                                     marker_channel = int(config['TDC']['marker channel']),
-                                    timestamp_buffer_size = int(config['TDC']['timestamp buffer size'])) 
-    
+                                    timestamp_buffer_size = int(config['TDC']['timestamp buffer size']))
+
     waveforms = []
     for x,v in config['waveforms'].items():
         waveforms.append(Waveform(fname = v['filename'],
@@ -50,8 +53,8 @@ def setup_awg(config):
                                                                 iterations = int(config['iterations']),
                                                                 waveform_sequence = list(eval(config['waveform sequence'])),
                                                                 waveforms = waveforms,
-                                                                waveform_stitch_delays = list(eval(config['waveform stitch delays'])), 
-                                                                interleave_waveforms = to_bool(config['interleave waveforms']),  
+                                                                waveform_stitch_delays = list(eval(config['waveform stitch delays'])),
+                                                                interleave_waveforms = to_bool(config['interleave waveforms']),
                                                                 awg_configuration = awg_config,
                                                                 tdc_configuration = tdc_config)
 
@@ -59,17 +62,17 @@ def setup_awg(config):
 
 def measure_signal(osc_manager, num_measurements=50, samp_rate=1e9, timebase_range=3e-6):
     """ Performs measurements using the oscilloscope and returns the mean acquired signal. """
-    all_stokes = [] 
-    all_pump = [] 
+    all_stokes = []
+    all_pump = []
     for _ in range(num_measurements):
 
-        data_stokes = osc_manager.acquire_with_trigger(4, samp_rate=samp_rate, timebase_range=timebase_range) 
-        data_pump = osc_manager.acquire_with_trigger(1, samp_rate=samp_rate, timebase_range=timebase_range) 
-        
+        data_stokes = osc_manager.acquire_with_trigger(4, samp_rate=samp_rate, timebase_range=timebase_range)
+        data_pump = osc_manager.acquire_with_trigger(1, samp_rate=samp_rate, timebase_range=timebase_range)
+
         all_stokes.append(data_stokes)
         all_pump.append(data_pump)
-        time.sleep(0.2) 
-    
+        time.sleep(0.2)
+
     meas_stokes= pd.DataFrame()
     meas_pump= pd.DataFrame()
 
@@ -79,29 +82,29 @@ def measure_signal(osc_manager, num_measurements=50, samp_rate=1e9, timebase_ran
         meas_pump[f'Time (s) {i}'] = data_pump['Time (s)']
         meas_pump[f'Voltage (V) {i}'] = data_pump['Voltage (V)']
 
-    meas_stokes = meas_stokes [(meas_stokes.filter(like='Time (s)').iloc[:, 0] >= 0.822e-6) & (meas_stokes.filter(like='Time (s)').iloc[:, 0] <= 1.022e-6)].copy()  
-    meas_pump = meas_stokes [(meas_stokes .filter(like='Time (s)').iloc[:, 0] >= 0.822e-6) & (meas_stokes.filter(like='Time (s)').iloc[:, 0] <= 1.022e-6)].copy() 
+    meas_stokes = meas_stokes [(meas_stokes.filter(like='Time (s)').iloc[:, 0] >= 0.822e-6) & (meas_stokes.filter(like='Time (s)').iloc[:, 0] <= 1.022e-6)].copy()
+    meas_pump = meas_stokes [(meas_stokes .filter(like='Time (s)').iloc[:, 0] >= 0.822e-6) & (meas_stokes.filter(like='Time (s)').iloc[:, 0] <= 1.022e-6)].copy()
     meas_stokes.loc[:, meas_stokes .filter(like='Time (s)').columns] -= meas_stokes.filter(like='Time (s)').iloc[0, 0]
     meas_pump.loc[:, meas_pump.filter(like='Time (s)').columns] -= meas_pump.filter(like='Time (s)').iloc[0, 0]
 
-    sqrt_volt_stokes = np.sqrt(meas_stokes.filter(like='Voltage (V)').clip(lower=0)) 
-    sqrt_volt_pump = np.sqrt(meas_pump.filter(like='Voltage (V)').clip(lower=0)) 
+    sqrt_volt_stokes = np.sqrt(meas_stokes.filter(like='Voltage (V)').clip(lower=0))
+    sqrt_volt_pump = np.sqrt(meas_pump.filter(like='Voltage (V)').clip(lower=0))
 
-    sqrt_volt_pump -= abs(sqrt_volt_pump.min())  
+    sqrt_volt_pump -= abs(sqrt_volt_pump.min())
 
     mean_time_stokes = meas_stokes.filter(like='Time (s)').mean(axis=1)
     mean_time_pump = meas_pump .filter(like='Time (s)').mean(axis=1)
     mean_voltage_stokes = sqrt_volt_stokes.mean(axis=1)
     mean_voltage_pump = sqrt_volt_pump .mean(axis=1)
     std_voltage_stokes = sqrt_volt_stokes.std(axis=1)
-    std_voltage_pump = sqrt_volt_pump .std(axis=1)    
+    std_voltage_pump = sqrt_volt_pump .std(axis=1)
 
     mean_data_stokes  = pd.DataFrame({'Time (s)': mean_time_stokes ,'Voltage (V)': mean_voltage_stokes })
     mean_data_pump  = pd.DataFrame({'Time (s)': mean_time_pump ,'Voltage (V)': mean_voltage_pump })
     std_data_stokes  = pd.DataFrame({'Time (s)': mean_time_stokes , 'Voltage (V)': std_voltage_stokes })
     std_data_pump  = pd.DataFrame({'Time (s)': mean_time_pump , 'Voltage (V)': std_voltage_pump })
 
-    return mean_data_stokes, std_data_stokes, mean_data_pump , std_data_pump 
+    return mean_data_stokes, std_data_stokes, mean_data_pump , std_data_pump
 
 
 ##############################################################
@@ -128,10 +131,10 @@ opt_stokes = r'c:\Users\apc\Documents\marina\03_mar\06-03\0.25\stokes\x_optimize
 opt_pump = r'c:\Users\apc\Documents\marina\03_mar\06-03\0.1\pump\x_optimized_1.csv'
 waveform_stokes = pd.read_csv(opt_stokes, header=None)
 waveform_pump = pd.read_csv(opt_pump, header=None)
-config['waveforms']['1']['filename'] = waveform_stokes  
-config['waveforms']['2']['filename'] = waveform_pump  
+config['waveforms']['1']['filename'] = waveform_stokes
+config['waveforms']['2']['filename'] = waveform_pump
 config.write()
-awg_config, photon_production_config = setup_awg(config)       
+awg_config, photon_production_config = setup_awg(config)
 awg_test=run_awg(awg_config, photon_production_config)
 
 rm = visa.ResourceManager('@py')

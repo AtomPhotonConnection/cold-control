@@ -3,36 +3,36 @@ Created on 25 Mar 2016
 
 @author: tombarrett
 '''
-import tkinter as tk
-from tkinter import ttk
-from tkinter import scrolledtext
-from tkinter.scrolledtext import ScrolledText
 import os
 import re
 import time
+import tkinter as tk
+from tkinter import scrolledtext, ttk
+
 from PIL import Image, ImageTk
 
 from UI_classes.UI_helpers import ImageButton
+
 
 class Labbook_UI(tk.LabelFrame):
 
     def __init__(self, parent, labbook_dir = os.path.join(os.getcwd(),'labbook'), text="Labbook", fExt = '.txt',
                  font=("Helvetica", 16), **kwargs):
         tk.LabelFrame.__init__(self, parent, text=text, font=font, **kwargs)
-        
+
         self.parent = parent
-        
+
         self.textWid = scrolledtext.ScrolledText(self)
-        
+
         self.labbook_dir = labbook_dir
         self.fExt = fExt
-        
+
         r = re.compile(r'\d{1,2}-\d{1,2}-\d{2,4}.*' + self.fExt)
         self.dropdownOptions = self.sortDates([y.group() for y in [r.match(x) for x in os.listdir(self.labbook_dir)] if y is not None])
         self.dropdownVar = tk.StringVar()
-        
+
         self.configureForCurrentDate()
-        
+
         topFrame = tk.Frame(self)
 
         self.dropdown = ttk.OptionMenu(topFrame, self.dropdownVar, self.dropdownVar.get(), *self.dropdownOptions,
@@ -42,14 +42,14 @@ class Labbook_UI(tk.LabelFrame):
         icon = Image.open("icons/refresh_icon.png").resize((20,20))
         icon = ImageTk.PhotoImage(icon)
         self.refreshButton = ImageButton(topFrame, image=icon, command=self.configureForCurrentDate, height=20, width=20)
-        self.refreshButton.image_ref = icon 
+        self.refreshButton.image_ref = icon
 
         self.dropdown.pack(side=tk.LEFT)
         self.refreshButton.pack(side=tk.RIGHT)
-        
+
         topFrame.pack(side=tk.TOP, fill=tk.X, padx=15, pady=5)
         self.textWid.pack(expand=1)
-        
+
     def configureForCurrentDate(self):
         self.fname = ''
         for fname in [time.strftime("%d-%m-%y") + self.fExt, time.strftime("%d-%m-%Y") + self.fExt]:
@@ -63,17 +63,17 @@ class Labbook_UI(tk.LabelFrame):
             self.fname = os.path.join(self.labbook_dir, time.strftime("%d-%m-%y") + self.fExt)
             # File doesn't exist so let's make it!
             open(self.fname, 'a').close()
-            
+
         self.open()
         self.autosave()
-        
+
     def labbookSelected(self, dropdownVar):
         self.write()
         self.fname = os.path.join(self.labbook_dir, dropdownVar.get())
         self.open()
-        
+
     def open(self):
-        f = open(self.fname, 'r')
+        f = open(self.fname)
         print('open: ', self.fname)
         self.textWid.delete(1.0, tk.END)
         self.textWid.insert(tk.END, f.read())
@@ -84,12 +84,12 @@ class Labbook_UI(tk.LabelFrame):
         print('write: ', self.fname)
         f.write(self.textWid.get('1.0', tk.END))
         f.close()
-        
+
     def autosave(self):
         '''Register a write event to save the labbook every 5 minutes'''
         self.write()
         self.after(300000, self.autosave)
-        
+
     def sortDates(self, dateFiles):
         '''Takes a list of date files as strings of the form dd-mm-yy.txt or dd-mm-yyyy.txt
            and sorts them (earliest to latest)'''
