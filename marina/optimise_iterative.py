@@ -18,14 +18,16 @@ Usage::
 
 import os
 import sys
+from typing import Optional
+
 import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from marina.pulse_experiment import (
     PulseShapeConfig,
-    PulseShapeExperimentRunner,
     PulseShapeExperimentResult,
+    PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 
@@ -39,21 +41,19 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
     Returns the final :class:`PulseShapeExperimentResult`.
     """
     # Load and normalise the theoretical waveform
-    theoretical = load_signal_from_path(
-        cfg.get_theoretical_signal_path(), cfg.amplitude
-    )
+    theoretical = load_signal_from_path(cfg.get_theoretical_signal_path(), cfg.amplitude)
 
     waveform = theoretical.copy()
     runner = PulseShapeExperimentRunner(cfg, waveform)
 
-    best_result: PulseShapeExperimentResult | None = None
+    best_result: Optional[PulseShapeExperimentResult] = None
     best_mse = float("inf")
 
     try:
         for iteration in range(1, cfg.max_iterations + 1):
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"  Iteration {iteration}/{cfg.max_iterations}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             # Update the runner's waveform
             runner.waveform = waveform
@@ -67,9 +67,7 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
             result.plot(
                 output_dir=str(cfg.output_dir),
                 filename=f"iteration_{iteration:03d}.png",
-                title=(
-                    f"Iteration {iteration} — MSE = {result.mse:.4e}"
-                ),
+                title=(f"Iteration {iteration} — MSE = {result.mse:.4e}"),
             )
 
             # Save normalised waveform CSV
@@ -122,8 +120,10 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
 
 
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        SCRIPT_DIR, "config_pulse_experiment.ini"
+    config_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else os.path.join(SCRIPT_DIR, "config_pulse_experiment.ini")
     )
     print(f"Loading config: {config_path}")
     cfg = PulseShapeConfig(config_path)

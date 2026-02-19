@@ -1,54 +1,94 @@
-'''
+"""
 Created on 22 Apr 2016
 
 @author: Tom Barrett, Jan Ole Ernst, Matt King, and others
-'''
+"""
+
 from copy import deepcopy
 from configobj import ConfigObj
 import time
 import os
+import re
+import time
 import warnings
-from importlib_metadata import metadata
-import numpy as np
-import glob
-import re, ast
-from typing import Dict, List, Any, Tuple, Optional
+import ast
+from typing import Any, Optional
+from unittest.mock import patch
 
-from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
-      INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
+import numpy as np
+from configobj import ConfigObj
+
+from classes.DAQ import (
+    INPUT_LINE,
+    OUTPUT_LINE,
+    Channel_P1A,
+    Channel_P1B,
+    Channel_P1C,
+    Channel_P1CH,
+    Channel_P1CL,
+    DAQ_card,
+    DAQ_channel,
+    DAQ_controller,
+    DAQ_dio,
+)
+from classes.ExperimentalConfigs import (
+    AbsorbtionImagingConfiguration,
+    AwgConfiguration,
+    ExperimentSessionConfig,
+    MotFluoresceConfiguration,
+    PhotonProductionConfiguration,
+    SingleExperimentConfig,
+    TdcConfiguration,
+    Waveform,
+)
+
+# from instruments.WX218x.WX218x_awg import Channel
+from classes.DAQ import (
+    DAQ_controller,
+    DAQ_card,
+    DAQ_channel,
+    DAQ_dio,
+    OUTPUT_LINE,
+    INPUT_LINE,
+    Channel_P1A,
+    Channel_P1B,
+    Channel_P1C,
+    Channel_P1CL,
+    Channel_P1CH,
+)
+
 
 def _env_flag_true(name: str, default: str = "0") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in ("1", "true", "t", "yes", "y")
+
 
 try:
     if _env_flag_true("COLD_CONTROL_DEVELOPMENT_MODE"):
         raise ImportError("Skipping AWG import in development mode")
     from instruments.WX218x.WX218x_awg import Channel
 except Exception:
+
     class Channel:
-        CHANNEL_1 = 'channel1'
-        CHANNEL_2 = 'channel2'
-        CHANNEL_3 = 'channel3'
-        CHANNEL_4 = 'channel4'
+        CHANNEL_1 = "channel1"
+        CHANNEL_2 = "channel2"
+        CHANNEL_3 = "channel3"
+        CHANNEL_4 = "channel4"
+
 
 from classes.Sequence import Sequence
-from classes.ExperimentalConfigs import AbsorbtionImagingConfiguration, PhotonProductionConfiguration,\
-      AwgConfiguration, TdcConfiguration, Waveform, ExperimentSessionConfig, SingleExperimentConfig,\
-      MotFluoresceConfiguration, MotFluoresceConfigurationSweep, ScopeConfiguration, SweepConfiguration,\
-      CameraConfiguration
 
-GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
+GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
 
 def get_config_root() -> str:
     """Return the directory used as the base for resolving relative config paths.
     Uses environment variable COLD_CONTROL_CONFIG_ROOT if set, otherwise os.getcwd()."""
-    return os.environ.get('COLD_CONTROL_CONFIG_ROOT', os.getcwd())
+    return os.environ.get("COLD_CONTROL_CONFIG_ROOT", os.getcwd())
 
 
 def resolve_config_path(path: str, base: Optional[str] = None) -> str:
     """Resolve a config path. If path is relative, join with base (default get_config_root())."""
-    if path is None or path == '':
+    if path is None or path == "":
         return path
     path = str(path).strip()
     if base is None:
@@ -61,107 +101,125 @@ def resolve_config_path(path: str, base: Optional[str] = None) -> str:
 def toBool(string):
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
 
+
 def toIntList(arg):
     if arg is None:
         return None
     else:
-        return list(map(int,arg))
-    
+        return list(map(int, arg))
+
+
 def toFloatTuple(arg):
     return tuple(toFloatList(arg))
 
+
 def toIntTuple(arg):
-    return tuple(map(int,arg))
+    return tuple(map(int, arg))
+
 
 def toFloatList(arg):
     if isinstance(arg, str):
         Warning("toFloatList received a string input. This may lead to unexpected behavior.")
         return [float(arg)]
-    return list(map(float,arg))
+    return list(map(float, arg))
+
+    # def toFloatList(arg):
+    #     if arg is None:
+    #         return None
+    #     if isinstance(arg, list):
+    #         return list(map(float, arg))
+    #     elif isinstance(arg, (int, float)):
+    #         return [float(arg)]
+    #     elif isinstance(arg, str):
+    #         items = [x.strip() for x in arg.replace(',', '\n').split('\n') if x.strip()]
+    #         try:
+    #             return list(map(float, items))
+    #         except ValueError as e:
+    #             raise ValueError(f"Could not convert one of the entries to float: {items}") from e
+    #     else:
+    #         raise TypeError(f"Unsupported input type for toFloatList: {type(arg)}")
 
 
-        # def toFloatList(arg):
-        #     if arg is None:
-        #         return None
-        #     if isinstance(arg, list):
-        #         return list(map(float, arg))
-        #     elif isinstance(arg, (int, float)):
-        #         return [float(arg)]
-        #     elif isinstance(arg, str):
-        #         items = [x.strip() for x in arg.replace(',', '\n').split('\n') if x.strip()]
-        #         try:
-        #             return list(map(float, items))
-        #         except ValueError as e:
-        #             raise ValueError(f"Could not convert one of the entries to float: {items}") from e
-        #     else:
-        #         raise TypeError(f"Unsupported input type for toFloatList: {type(arg)}")
-
-class ConfigReader(object):
-    
+class ConfigReader:
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
         self._config_dir = os.path.dirname(os.path.abspath(fname))
-        
+
     def _resolve(self, path):
-        if path is None or path == '':
+        if path is None or path == "":
             return path
         return resolve_config_path(path.strip(), get_config_root())
-        
+
     def get_sequence_fname(self):
-        return self._resolve(self.config['sequence_filename'])
-    
+        return self._resolve(self.config["sequence_filename"])
+
     def get_daq_config_fname(self):
-        return self._resolve(self.config['daq_config_filename'])
-    
+        return self._resolve(self.config["daq_config_filename"])
+
     def get_absorbtion_imaging_config_fname(self):
-        return self._resolve(self.config['absorbtion_images_config_filename'])
-    
+        return self._resolve(self.config["absorbtion_images_config_filename"])
+
     def get_experiment_config_fname(self):
         """Preferred: returns experiment config path (experiment_config_filename with fallback to photon_production_config_filename)."""
-        path = self.config.get('experiment_config_filename') or self.config.get('photon_production_config_filename')
+        path = self.config.get("experiment_config_filename") or self.config.get(
+            "photon_production_config_filename"
+        )
         if path is None:
-            raise KeyError("Neither 'experiment_config_filename' nor 'photon_production_config_filename' found in root config.")
-        if 'photon_production_config_filename' in self.config and 'experiment_config_filename' not in self.config:
+            raise KeyError(
+                "Neither 'experiment_config_filename' nor 'photon_production_config_filename' found in root config."
+            )
+        if (
+            "photon_production_config_filename" in self.config
+            and "experiment_config_filename" not in self.config
+        ):
             warnings.warn(
                 "photon_production_config_filename is deprecated; use experiment_config_filename in root config.",
                 DeprecationWarning,
                 stacklevel=2,
             )
         return self._resolve(path)
-    
+
     def get_photon_production_config_fname(self):
         """Returns experiment config path. Prefer get_experiment_config_fname(). Backward compatible: reads experiment_config_filename or photon_production_config_filename."""
         return self.get_experiment_config_fname()
-    
+
     def is_development_mode(self):
-        mode = self.config.as_bool('development_mode')
-        os.environ['COLD_CONTROL_DEVELOPMENT_MODE'] = '1' if mode else '0'
+        mode = self.config.as_bool("development_mode")
+        os.environ["COLD_CONTROL_DEVELOPMENT_MODE"] = "1" if mode else "0"
         return mode
-    
+
+
 class ConfigWriter(object):
-    
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
-    
-    def save(self, sequence_fname, daq_config_fname, absorbtion_imaging_config_fname, photon_production_config_fname):
-            
-        self.config['date'] = time.strftime("%d/%m/%y")
-        self.config['time'] = time.strftime("%H:%M:%S")
-        
-        self.config['sequence_filename'] = sequence_fname
-        self.config['daq_config_filename'] = daq_config_fname
-        self.config['absorbtion_images_config_filename'] = absorbtion_imaging_config_fname
-        self.config['photon_production_config_filename'] = photon_production_config_fname
-        self.config['experiment_config_filename'] = photon_production_config_fname
+
+    def save(
+        self,
+        sequence_fname,
+        daq_config_fname,
+        absorbtion_imaging_config_fname,
+        photon_production_config_fname,
+    ):
+
+        self.config["date"] = time.strftime("%d/%m/%y")
+        self.config["time"] = time.strftime("%H:%M:%S")
+
+        self.config["sequence_filename"] = sequence_fname
+        self.config["daq_config_filename"] = daq_config_fname
+        self.config["absorbtion_images_config_filename"] = absorbtion_imaging_config_fname
+        self.config["photon_production_config_filename"] = photon_production_config_fname
+        self.config["experiment_config_filename"] = photon_production_config_fname
 
         self.config.write()
+
 
 class MyConfig:
     """
     Simple wrapper around ConfigObj to provide dictionary-like access and additional methods.
     """
+
     def __init__(self, fname: str):
         self._cfg = ConfigObj(fname)
 
@@ -176,7 +234,7 @@ class MyConfig:
 
     def __contains__(self, key: str) -> bool:
         return key in self._cfg
-    
+
     @property
     def filename(self) -> str:
         if self._cfg.filename is None:
@@ -186,69 +244,109 @@ class MyConfig:
     def write(self) -> None:
         self._cfg.write()
 
-class DaqReader(object):
 
+class DaqReader:
     def __init__(self, fname):
         self.fname = fname
-        self.config:Dict[str, Any] = ConfigObj(fname)
-        
-    def load_DAQ_controller(self):
-        '''Returns a DAQ controller object as configured in the config file.'''
-        
+        self.config: dict[str, Any] = ConfigObj(fname)
+
+    def load_DAQ_controller(self) -> DAQ_controller:
+        """Returns a DAQ controller object as configured in the config file."""
+
         channels = []
-        for _,v in self.config['DAQ channels'].items():
-            channelArgs: Tuple[int, str, tuple[float, float], float, bool, str] = (
-                int(v['chNum']),                                              # chNum (int)
-                str(v['chName']),                                            # chName (str)
-                (float(v['chLimits'][0]), float(v['chLimits'][1])),           # chLimits (tuple[float,float])
-                float(v['default value']),                                    # default value (float)
-                bool(v['UIvisible']),                                          # UIvisible (bool) or use v['UIvisible'] if already bool
-                str(v['calibrationFname']),                                   # calibrationFname (str)
+        for _, v in self.config["DAQ channels"].items():
+            channelArgs: tuple[int, str, tuple[float, float], float, bool, str] = (
+                int(v["chNum"]),  # chNum (int)
+                str(v["chName"]),  # chName (str)
+                (float(v["chLimits"][0]), float(v["chLimits"][1])),  # chLimits (tuple[float,float])
+                float(v["default value"]),  # default value (float)
+                bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
+                str(v["calibrationFname"]),  # calibrationFname (str)
             )
             channels.append(DAQ_channel(*channelArgs))
 
         dios = []
-        for _,v in self.config['DIOs'].items():
-            dio_name = str(v['dioName'])
-            dio_num = int(v['dioNum'])
-            
-            if v['port'].upper() in [Channel_P1A, 'A']: port = Channel_P1A
-            elif  v['port'].upper() in [Channel_P1B, 'B']: port = Channel_P1B
-            elif  v['port'].upper() in [Channel_P1C, 'C']: port = Channel_P1C
-            elif  v['port'].upper() in [Channel_P1CL, 'CL']: port = Channel_P1CL
-            elif  v['port'].upper() in [Channel_P1CH, 'CH']: port = Channel_P1CH
-            else: port = int(v['port'])
-            
-            line = int(v['line'])
-            
-            if   v['direction'].lower() in ('out', 'output', 'o'): direction = OUTPUT_LINE
-            elif v['direction'].lower() in ('in',  'input',  'i'): direction = INPUT_LINE
-            else: direction = int(v['direction'])
-                
-            if   v['enabled state'].lower() in ['high', '5', '5v', '1']: enabled_state = 1
-            elif v['enabled state'].lower() in ['low',  '0', '0v']:      enabled_state = 0
-            else: enabled_state = int(v['enabled state'])
-                
+        for _, v in self.config["DIOs"].items():
+            dio_name = str(v["dioName"])
+            dio_num = int(v["dioNum"])
+
+            if v["port"].upper() in [Channel_P1A, "A"]:
+                port = Channel_P1A
+            elif v["port"].upper() in [Channel_P1B, "B"]:
+                port = Channel_P1B
+            elif v["port"].upper() in [Channel_P1C, "C"]:
+                port = Channel_P1C
+            elif v["port"].upper() in [Channel_P1CL, "CL"]:
+                port = Channel_P1CL
+            elif v["port"].upper() in [Channel_P1CH, "CH"]:
+                port = Channel_P1CH
+            else:
+                port = int(v["port"])
+
+            line = int(v["line"])
+
+            if v["direction"].lower() in ("out", "output", "o"):
+                direction = OUTPUT_LINE
+            elif v["direction"].lower() in ("in", "input", "i"):
+                direction = INPUT_LINE
+            else:
+                direction = int(v["direction"])
+
+            if v["enabled state"].lower() in ["high", "5", "5v", "1"]:
+                enabled_state = 1
+            elif v["enabled state"].lower() in ["low", "0", "0v"]:
+                enabled_state = 0
+            else:
+                enabled_state = int(v["enabled state"])
+
             dios.append(DAQ_dio(dio_name, dio_num, port, line, direction, enabled_state))
 
-        DAQ_master = DAQ_card(card_number=int(self.config['DAQ cards']['master']['card number']),
-                              channels=[next(ch for ch in channels if ch.chNum==int(x)) for x in self.config['DAQ cards']['master']['channels']],
-                              dios  =  [x for x in [next((dio for dio in dios if dio.dio_num==int(x)),None) for x in self.config['DAQ cards']['master']['dios']] if x!=None])
+        DAQ_master = DAQ_card(
+            card_number=int(self.config["DAQ cards"]["master"]["card number"]),
+            channels=[
+                next(ch for ch in channels if ch.chNum == int(x))
+                for x in self.config["DAQ cards"]["master"]["channels"]
+            ],
+            dios=[
+                x
+                for x in [
+                    next((dio for dio in dios if dio.dio_num == int(x)), None)
+                    for x in self.config["DAQ cards"]["master"]["dios"]
+                ]
+                if x != None
+            ],
+        )
         DAQ_slaves = []
 
-        for _,v in self.config['DAQ cards']['slaves'].items():
+        for _, v in self.config["DAQ cards"]["slaves"].items():
             try:
-                DAQ_slaves.append(DAQ_card(card_number=int(v['card number']),
-                                           channels=[next(ch for ch in channels if ch.chNum==int(x)) for x in v['channels']],
-                                           dios  =  [x for x in [next((dio for dio in dios if dio.dio_num==int(x)),None) for x in v['dios']] if x!=None]))
+                DAQ_slaves.append(
+                    DAQ_card(
+                        card_number=int(v["card number"]),
+                        channels=[
+                            next(ch for ch in channels if ch.chNum == int(x)) for x in v["channels"]
+                        ],
+                        dios=[
+                            x
+                            for x in [
+                                next((dio for dio in dios if dio.dio_num == int(x)), None)
+                                for x in v["dios"]
+                            ]
+                            if x != None
+                        ],
+                    )
+                )
             except StopIteration as err:
-                print('It looks like one of the DAQ cards has a channel expected that does not exist')
+                print(
+                    "It looks like one of the DAQ cards has a channel expected that does not exist"
+                )
                 print([ch.chNum for ch in channels])
                 raise err
-        
-            
+
         return DAQ_controller(DAQ_master, DAQ_slaves)
-    
+
+    @patch("DAQ.DAQ2502")
+    @patch("DAQ.DAQ_controller.enslave")
     def load_dummy_DAQ_controller(self):
         """Load DAQ controller in development mode.
 
@@ -257,117 +355,130 @@ class DaqReader(object):
         is needed — just delegate to the normal loader.
         """
         return self.load_DAQ_controller()
-    
-class DaqWriter(object):
-    
+
+
+class DaqWriter:
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
-    
-    def save(self, master, *slaves):
-        
-        daq_cards = {}
-    
-        daq_cards['master'] = {'card number': master.card, 'channels': [ch.chNum for ch in master.channels]}
-        daq_cards['slaves'] = {}
-        for idx, slave in enumerate(slaves, start=1):
-            daq_cards['slaves'][str(idx)] = {'card number': slave.card, 'channels': [ch.chNum for ch in slave.channels]}
 
-        self.config['DAQ cards'] = daq_cards
+    def save(self, master, *slaves):
+
+        daq_cards = {}
+
+        daq_cards["master"] = {
+            "card number": master.card,
+            "channels": [ch.chNum for ch in master.channels],
+        }
+        daq_cards["slaves"] = {}
+        for idx, slave in enumerate(slaves, start=1):
+            daq_cards["slaves"][str(idx)] = {
+                "card number": slave.card,
+                "channels": [ch.chNum for ch in slave.channels],
+            }
+
+        self.config["DAQ cards"] = daq_cards
 
         daq_channels = {}
-    
+
         i = 0
-        # Note sum(x,[]) is a cheeky way to flatten a list of lists (x).        
-        for ch in sum( [card.channels for card in [master] + list(slaves)], []):
-            daq_channels[str(i)] = {'chNum':ch.chNum,
-                                    'chName':ch.chName,
-                                    'chLimits':ch.chLimits,
-                                    'default value':ch.defaultValue,
-                                    'UIvisible':ch.isUIVisable,
-                                    'calibrationFname':ch.calibrationFname if ch.isCalibrated else ''}
+        # Note sum(x,[]) is a cheeky way to flatten a list of lists (x).
+        for ch in sum([card.channels for card in [master] + list(slaves)], []):
+            daq_channels[str(i)] = {
+                "chNum": ch.chNum,
+                "chName": ch.chName,
+                "chLimits": ch.chLimits,
+                "default value": ch.defaultValue,
+                "UIvisible": ch.isUIVisable,
+                "calibrationFname": ch.calibrationFname if ch.isCalibrated else "",
+            }
             i += 1
-            
-        self.config['DAQ channels'] = daq_channels
+
+        self.config["DAQ channels"] = daq_channels
 
         self.config.write()
 
-class SequenceReader(object):
-    
+
+class SequenceReader:
     def __init__(self, fname):
         self.fname = fname
         self.config = MyConfig(self.fname)
-        
+
     def loadSequence(self):
         seq = Sequence(*self.get_sequence_init_args())
-        sequence_channels: Dict[str, Any] = {}
-        sequence_channels = self.config['sequence channels']
+        sequence_channels: dict[str, Any] = {}
+        sequence_channels = self.config["sequence channels"]
 
-        for _,v in sequence_channels.items():
+        for _, v in sequence_channels.items():
             ch = int(v["chNum"])
-            tV_pairs = [tuple(ast.literal_eval(x)) for x in v['tV_pairs']]
-            V_interval_styles = [int(x) for x in v['V_interval_styles']]
+            tV_pairs = [tuple(ast.literal_eval(x)) for x in v["tV_pairs"]]
+            V_interval_styles = [int(x) for x in v["V_interval_styles"]]
 
             seq.addChannelSeq(ch, tV_pairs, V_interval_styles)
 
-            
         return seq
-    
+
     def get_sequence_init_args(self):
-        return int(self.config['sequence']['n_samples']), int(self.config['sequence']['t_step'])
-    
+        return int(self.config["sequence"]["n_samples"]), int(self.config["sequence"]["t_step"])
+
     def get_global_timings(self):
-        return [eval(x) for x in self.config['sequence']['global_timings']]
-    
+        return [eval(x) for x in self.config["sequence"]["global_timings"]]
+
     def get_name(self):
         return self.config.filename
-    
+
     def get_time(self):
-        return self.config['time']
-    
+        return self.config["time"]
+
     def get_date(self):
-        return self.config['date']
-    
+        return self.config["date"]
+
     def get_channel_assignment_notes(self):
-        return self.config['notes']['config_ch_assignments']
-    
+        return self.config["notes"]["config_ch_assignments"]
+
     def get_user_notes(self):
-        return self.config['notes']['user']  
-    
-class SequenceWriter(object):
-    
+        return self.config["notes"]["user"]
+
+
+class SequenceWriter:
     def __init__(self, fname):
         self.fname = fname
         self.config = MyConfig(fname)
-    
-#     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
+
+    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, sequence, sequence_channel_labels, global_timings, user_notes):
-            
-        self.config['date'] = time.strftime("%d/%m/%y")
-        self.config['time'] = time.strftime("%H:%M:%S")
-        
-        self.config['notes'] = {}
-        self.config['notes']['user'] = user_notes
-        self.config['notes']['config_ch_assignments'] = [(k,v) for k,v in sequence_channel_labels.items()]
-        
-        self.config['sequence'] = {'n_samples': sequence.n_samples,
-                                   't_step': sequence.t_step,
-                                   'global_timings': global_timings}
-        
-        self.config['sequence channels'] = {}
-        
+
+        self.config["date"] = time.strftime("%d/%m/%y")
+        self.config["time"] = time.strftime("%H:%M:%S")
+
+        self.config["notes"] = {}
+        self.config["notes"]["user"] = user_notes
+        self.config["notes"]["config_ch_assignments"] = [
+            (k, v) for k, v in sequence_channel_labels.items()
+        ]
+
+        self.config["sequence"] = {
+            "n_samples": sequence.n_samples,
+            "t_step": sequence.t_step,
+            "global_timings": global_timings,
+        }
+
+        self.config["sequence channels"] = {}
+
         for chNum, ch in sequence.chSeqs.items():
-            self.config['sequence channels'][str(chNum)] = {'chNum': chNum,
-                                                        'tV_pairs': ch.tV_pairs,
-                                                        'V_interval_styles': ch.V_interval_styles}
-        
+            self.config["sequence channels"][str(chNum)] = {
+                "chNum": chNum,
+                "tV_pairs": ch.tV_pairs,
+                "V_interval_styles": ch.V_interval_styles,
+            }
+
         self.config.write()
 
 
-class ExperimentConfigReader():
+class ExperimentConfigReader:
     """
-    A class to read experimental config files. First the get_expt_type() method should be 
-    called to determine the type of experiment the config file is set up for. Then the 
+    A class to read experimental config files. First the get_expt_type() method should be
+    called to determine the type of experiment the config file is set up for. Then the
     relevant get_[expt_type]_configuration() method should be called which returns a
     GenericConfiguration object for the experiment type specified in the config file.
     The config file should contain:
@@ -381,9 +492,9 @@ class ExperimentConfigReader():
         self.fname = fname
         print(f"Reading config file: {fname}")
         self.config = MyConfig(fname)
-        metadata = self.config.get('metadata', {})
-        config_type = metadata.get('config_type') if isinstance(metadata, dict) else None
-        if config_type is not None and str(config_type).strip().lower() != 'experiment':
+        metadata = self.config.get("metadata", {})
+        config_type = metadata.get("config_type") if isinstance(metadata, dict) else None
+        if config_type is not None and str(config_type).strip().lower() != "experiment":
             warnings.warn(
                 f"Experiment config has config_type={config_type!r}; expected 'experiment' or leave unset.",
                 UserWarning,
@@ -392,77 +503,102 @@ class ExperimentConfigReader():
 
     def _validate_experiment_config_structure(self):
         """Check required keys for MOT fluorescence experiment config. Only runs when metadata.config_type == 'experiment'."""
-        required_top = ['save location', 'mot reload', 'iterations', 'use_cam', 'use_scope', 'use_awg', 'metadata']
+        required_top = [
+            "save location",
+            "mot reload",
+            "iterations",
+            "use_cam",
+            "use_scope",
+            "use_awg",
+            "metadata",
+        ]
         missing = [k for k in required_top if k not in self.config]
         if missing:
             raise ValueError(f"Experiment config missing required keys: {missing}")
-        if 'metadata' not in self.config or 'experiment_type' not in self.config['metadata']:
+        if "metadata" not in self.config or "experiment_type" not in self.config["metadata"]:
             raise ValueError("Experiment config [metadata] must contain experiment_type")
-        if self.config.get('use_scope'):
-            scope = self.config.get('scope_settings')
+        if self.config.get("use_scope"):
+            scope = self.config.get("scope_settings")
             if not scope:
                 raise ValueError("use_scope is True but [scope_settings] is missing")
-            for k in ['trigger_channel', 'trigger_level', 'sample_rate', 'time_range', 'data_channels']:
+            for k in [
+                "trigger_channel",
+                "trigger_level",
+                "sample_rate",
+                "time_range",
+                "data_channels",
+            ]:
                 if k not in scope:
                     raise ValueError(f"[scope_settings] missing required key: {k}")
-        if self.config.get('use_awg'):
-            awg = self.config.get('awg_settings')
-            if not awg or 'config_path' not in awg:
+        if self.config.get("use_awg"):
+            awg = self.config.get("awg_settings")
+            if not awg or "config_path" not in awg:
                 raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
 
-    
     def get_expt_type(self):
         """
         Method to extract the experiment type from the config file
         """
 
-        metadata = self.config.get('metadata', {})
-        expt_type = metadata.get('experiment_type')
+        metadata = self.config.get("metadata", {})
+        expt_type = metadata.get("experiment_type")
         if expt_type is None:
-            print(r"To fix this error you probably need to add a 'metadata' section to the config file. See configs\sequence\pulse_shaping_expt\photon_prod_config.ini")
+            print(
+                r"To fix this error you probably need to add a 'metadata' section to the config file. See configs\sequence\pulse_shaping_expt\photon_prod_config.ini"
+            )
             raise KeyError("No experiment type specified in the config file.")
-        
+
         return expt_type.lower()
-    
 
     def get_photon_production_configuration(self):
-        
-        awg_config = AwgConfiguration(sample_rate = float(self.config['AWG']['sample rate']),
-                                      burst_count = int(self.config['AWG']['burst count']),
-                                      waveform_output_channels = list(self.config['AWG']['waveform output channels']),
-                                      waveform_output_channel_lags = list(map(float, self.config['AWG']['waveform output channel lags'])),
-                                      marked_channels = list(self.config['AWG']['marked channels']),
-                                      marker_width = eval(self.config['AWG']['marker width'])) # type: ignore
 
-        tdc_config = TdcConfiguration(counter_channels = list(map(eval, self.config['TDC']['counter channels'])),
-                                      marker_channel = int(self.config['TDC']['marker channel']),
-                                      timestamp_buffer_size = int(self.config['TDC']['timestamp buffer size']))
-        
+        awg_config = AwgConfiguration(
+            sample_rate=float(self.config["AWG"]["sample rate"]),
+            burst_count=int(self.config["AWG"]["burst count"]),
+            waveform_output_channels=list(self.config["AWG"]["waveform output channels"]),
+            waveform_output_channel_lags=list(
+                map(float, self.config["AWG"]["waveform output channel lags"])
+            ),
+            marked_channels=list(self.config["AWG"]["marked channels"]),
+            marker_width=eval(self.config["AWG"]["marker width"]),
+        )  # type: ignore
+
+        tdc_config = TdcConfiguration(
+            counter_channels=list(map(eval, self.config["TDC"]["counter channels"])),
+            marker_channel=int(self.config["TDC"]["marker channel"]),
+            timestamp_buffer_size=int(self.config["TDC"]["timestamp buffer size"]),
+        )
+
         waveforms = []
-        for x,v in self.config['waveforms'].items():
-            _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
-            waveforms.append(Waveform(fname = v['filename'],
-                                      mod_frequency= float(v['modulation frequency']),
-                                      phases = _phases))
-            
-        print(self.config['waveform sequence'])
-        photon_production_config = \
-        PhotonProductionConfiguration(save_location = self.config['save location'],
-                                      mot_reload  = eval(self.config['mot reload']),
-                                      iterations = int(self.config['iterations']),
-                                      waveform_sequence = list(eval(self.config['waveform sequence'])),
-                                      waveforms = waveforms,
-                                      waveform_stitch_delays = list(eval(self.config['waveform stitch delays'])),
-                                      interleave_waveforms = toBool(self.config['interleave waveforms']),
-                                      awg_configuration = awg_config,
-                                      tdc_configuration = tdc_config)
+        for x, v in self.config["waveforms"].items():
+            _phases = [(float(p), i) for i, p in enumerate(v["phases"])]
+            waveforms.append(
+                Waveform(
+                    fname=v["filename"],
+                    mod_frequency=float(v["modulation frequency"]),
+                    phases=_phases,
+                )
+            )
+
+        print(self.config["waveform sequence"])
+        photon_production_config = PhotonProductionConfiguration(
+            save_location=self.config["save location"],
+            mot_reload=eval(self.config["mot reload"]),
+            iterations=int(self.config["iterations"]),
+            waveform_sequence=list(eval(self.config["waveform sequence"])),
+            waveforms=waveforms,
+            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"])),
+            interleave_waveforms=toBool(self.config["interleave waveforms"]),
+            awg_configuration=awg_config,
+            tdc_configuration=tdc_config,
+        )
 
         return photon_production_config
-    
+
     def get_mot_flourescence_configuration(self):
         """
         Extract MOT fluorescence configuration from the config file.
-        
+
         Reads camera, scope, sequence, and AWG settings, converts them to configuration objects,
         and returns a MotFluoresceConfiguration.
         """
@@ -471,9 +607,9 @@ class ExperimentConfigReader():
         use_awg = toBool(self.config.get("use_awg", False))
 
         # Load sequence configuration
-        configs_section = self.config.get('configs', {})
-        sequence_path = configs_section.get('sequence_path')
-        
+        configs_section = self.config.get("configs", {})
+        sequence_path = configs_section.get("sequence_path")
+
         sequence = None
         if sequence_path is not None:
             sequence_path = resolve_config_path(str(sequence_path).strip(), get_config_root())
@@ -482,142 +618,148 @@ class ExperimentConfigReader():
         # Create camera configuration if needed
         cam_config = None
         if use_camera:
-            camera_section = self.config.get('camera_settings')
+            camera_section = self.config.get("camera_settings")
             if camera_section is None:
                 raise ValueError("use_cam is True but [camera_settings] section is missing")
-            
+
             cam_config = CameraConfiguration(
-                cam_exposure=int(camera_section.get('cam_exposure', 0)),
-                cam_gain=int(camera_section.get('cam_gain', 0)),
-                camera_trigger_channel=int(camera_section.get('camera_trig_ch', 0)),
-                camera_trigger_level=float(camera_section.get('camera_trig_levs', 0)),
-                camera_pulse_width=float(camera_section.get('camera_pulse_width', 0)),
-                save_images=toBool(camera_section.get('save_images', True))
+                cam_exposure=int(camera_section.get("cam_exposure", 0)),
+                cam_gain=int(camera_section.get("cam_gain", 0)),
+                camera_trigger_channel=int(camera_section.get("camera_trig_ch", 0)),
+                camera_trigger_level=float(camera_section.get("camera_trig_levs", 0)),
+                camera_pulse_width=float(camera_section.get("camera_pulse_width", 0)),
+                save_images=toBool(camera_section.get("save_images", True)),
             )
 
         # Create scope configuration if needed
         scope_config = None
         if use_scope:
-            scope_section = self.config.get('scope_settings')
+            scope_section = self.config.get("scope_settings")
             if scope_section is None:
                 raise ValueError("use_scope is True but [scope_settings] section is missing")
-            
+
             # Parse data channel configurations
             data_chs = {}
-            impedance_section = scope_section.get('data_channel_impedance', {})
-            coupling_section = scope_section.get('data_channel_coupling', {})
-            
-            for ch_idx, limits in scope_section['data_channels'].items():
+            impedance_section = scope_section.get("data_channel_impedance", {})
+            coupling_section = scope_section.get("data_channel_coupling", {})
+
+            for ch_idx, limits in scope_section["data_channels"].items():
                 if isinstance(limits, (list, tuple)):
                     low, high = float(limits[0]), float(limits[1])
                 else:
-                    parts = [x.strip() for x in str(limits).split(',')]
+                    parts = [x.strip() for x in str(limits).split(",")]
                     low, high = float(parts[0]), float(parts[1])
-                
-                impedance = impedance_section.get(ch_idx, 'high')
+                impedance = impedance_section.get(ch_idx, "high")
                 if isinstance(impedance, list):
-                    impedance = impedance[0] if impedance else 'high'
+                    impedance = impedance[0] if impedance else "high"
                 impedance = str(impedance).strip().lower()
-                
-                coupling = coupling_section.get(ch_idx, 'DC')
+                coupling = coupling_section.get(ch_idx, "DC")
                 if isinstance(coupling, list):
-                    coupling = coupling[0] if coupling else 'DC'
+                    coupling = coupling[0] if coupling else "DC"
                 coupling = str(coupling).strip().upper()
-                
+
                 data_chs[int(ch_idx)] = {
-                    'range': (low, high),
-                    'impedance': impedance,
-                    'coupling': coupling
+                    "range": (low, high),
+                    "impedance": impedance,
+                    "coupling": coupling,
                 }
-            
+
             scope_config = ScopeConfiguration(
-                trigger_channel=int(scope_section['trigger_channel']),
-                trigger_level=float(scope_section['trigger_level']),
-                sample_rate=float(scope_section['sample_rate']),
-                time_range=toFloatTuple(scope_section['time_range']),
-                data_channels=data_chs
+                trigger_channel=int(scope_section["trigger_channel"]),
+                trigger_level=float(scope_section["trigger_level"]),
+                sample_rate=float(scope_section["sample_rate"]),
+                time_range=toFloatTuple(scope_section["time_range"]),
+                data_channels=data_chs,
             )
 
         # Create AWG configuration if needed
         awg_config = None
         if use_awg:
-            awg_section = self.config.get('awg_settings')
+            awg_section = self.config.get("awg_settings")
             if awg_section is None:
                 raise ValueError("use_awg is True but [awg_settings] section is missing")
-            
+
             config_path = awg_section.get("config_path")
             if not config_path:
                 raise ValueError("[awg_settings] config_path is missing or empty")
-            
+
             config_path = resolve_config_path(str(config_path).strip(), get_config_root())
             config = MyConfig(config_path)
 
             # Load waveforms from AWG config file
             waveforms = []
-            for x, v in config['waveforms'].items():
-                if v['phases']:
-                    phases_str = ' '.join(v['phases'])
-                    phases_str = re.sub(r'\(([^)]+) ([^)]+)\)', r'(\1, \2)', phases_str)
-                    phases_str = phases_str.replace(') (', '), (')
+            for x, v in config["waveforms"].items():
+                if v["phases"]:
+                    phases_str = " ".join(v["phases"])
+                    phases_str = re.sub(r"\(([^)]+) ([^)]+)\)", r"(\1, \2)", phases_str)
+                    phases_str = phases_str.replace(") (", "), (")
                     phases = ast.literal_eval(phases_str)
                 else:
                     phases = []
-                waveforms.append(Waveform(
-                    fname=v['filename'],
-                    mod_frequency=float(v['modulation frequency']),
-                    phases=phases
-                ))
+                waveforms.append(
+                    Waveform(
+                        fname=v["filename"],
+                        mod_frequency=float(v["modulation frequency"]),
+                        phases=phases,
+                    )
+                )
 
-            # Create AWG configuration
+            # convert the output channels from str to int
+            output_channels = []
+            for channel in config["waveform output channels"]:
+                ch: str = channel.replace(" ", "")
+                output_channels.append(int(ch.lower().replace("channel", "")))
+
+            # Reads the awg properties from the config object, and creates a new awg configuration with those settings
             awg_config = AwgConfiguration(
-                waveform_sequence=list(eval(config['waveform sequence'])),
+                waveform_sequence=list(eval(config["waveform sequence"])),
                 waveforms=waveforms,
-                interleave_waveforms=toBool(config['interleave waveforms']),
-                waveform_stitch_delays=list(eval(config['waveform stitch delays'])),
-                sample_rate=float(config['sample rate']),
-                burst_count=int(config['burst count']),
-                waveform_output_channels=list(config['waveform output channels']),
-                waveform_output_channel_lags=list(map(float, config['waveform output channel lags'])),
-                marked_channels=list(config['marked channels']),
-                marker_width=eval(config['marker width'])
+                interleave_waveforms=toBool(config["interleave waveforms"]),
+                waveform_stitch_delays=list(eval(config["waveform stitch delays"])),
+                sample_rate=float(config["sample rate"]),
+                burst_count=int(config["burst count"]),
+                waveform_output_channels=output_channels,
+                waveform_output_channel_lags=list(
+                    map(float, config["waveform output channel lags"])
+                ),
+                marked_channels=list(config["marked channels"]),
+                marker_width=eval(config["marker width"]),
             )
 
         # Create and return MOT fluorescence configuration
         mot_fluoresce_config = MotFluoresceConfiguration(
-            save_location=self.config['save location'],
-            mot_reload=eval(self.config['mot reload']),
-            iterations=int(self.config['iterations']),
+            save_location=self.config["save location"],
+            mot_reload=eval(self.config["mot reload"]),
+            iterations=int(self.config["iterations"]),
             use_cam=use_camera,
             use_scope=use_scope,
             use_awg=use_awg,
             sequence=sequence,
             cam_config=cam_config,
             scope_config=scope_config,
-            awg_config=awg_config
+            awg_config=awg_config,
         )
-        
+
         return mot_fluoresce_config
 
-
-
-    def get_mot_flourescence_configuration_sweep(self):
+    def get_mot_flourescence_configuration_sweep(self) -> tuple[str, int, dict[str, Any]]:
         """
         Extract MOT fluorescence sweep configuration from the config file.
-        
+
         Returns:
             SweepConfiguration object containing sweep type, num_shots, and sweep parameters
         """
 
         def generate_int_list(section):
-            start = float(self.config[section]['start'])
-            stop = float(self.config[section]['stop'])
-            step = float(self.config[section]['step'])
+            start = float(self.config[section]["start"])
+            stop = float(self.config[section]["stop"])
+            step = float(self.config[section]["step"])
 
             if step == 0:
                 return [int(round(start))]
-            
+
             return list(np.round(np.arange(start, stop + step, step)).astype(int))
-        
+
         def generate_float_list(section):
             start = float(self.config[section]["start"])
             stop = float(self.config[section]["stop"])
@@ -625,10 +767,10 @@ class ExperimentConfigReader():
 
             if num_points == 1:
                 return [start] if start == stop else []
-            
+
             array = np.linspace(start, stop, num_points)
             return array.tolist()
-        
+
         def ensure_list(value):
             if isinstance(value, list):
                 return value
@@ -636,15 +778,15 @@ class ExperimentConfigReader():
                 return None
             else:
                 return [value]
-        
+
         sweep_type = self.config["sweep_type"]
-        num_shots = int(self.config['num_shots'])
+        num_shots = int(self.config["num_shots"])
 
         if sweep_type == "awg_sequence":
             defaults = self.config["defaults"]
-            wave_idxs = toIntList(defaults.get('waveform_indices', None))
-            rabi_freqs = toFloatList(defaults.get('rabi_frequencies', None))
-            mod_freqs = toFloatList(defaults.get('modulation_frequencies', None))
+            wave_idxs = toIntList(defaults.get("waveform_indices", None))
+            rabi_freqs = toFloatList(defaults.get("rabi_frequencies", None))
+            mod_freqs = toFloatList(defaults.get("modulation_frequencies", None))
             waveforms = ensure_list(defaults.get("waveforms", None))
             calib_paths = ensure_list(defaults.get("calibration_paths", None))
 
@@ -664,7 +806,9 @@ class ExperimentConfigReader():
                     elif key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
                     if wave_idxs is not None:
-                        assert len(sweep_changes[key]) == len(wave_idxs), f"Length mismatch for {key} in sweep {sweep_idx}"
+                        assert len(sweep_changes[key]) == len(wave_idxs), (
+                            f"Length mismatch for {key} in sweep {sweep_idx}"
+                        )
 
                 all_sweeps.append(sweep_changes)
 
@@ -676,157 +820,165 @@ class ExperimentConfigReader():
                 "calibration_paths": calib_paths,
                 "sweeps": all_sweeps,
             }
-            
-            return SweepConfiguration(sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params)
+
+            return SweepConfiguration(
+                sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params
+            )
 
         elif sweep_type == "mot_imaging":
             beam_powers = generate_float_list("beam_powers")
             beam_frequencies = generate_float_list("beam_frequencies")
             pulse_lengths = generate_int_list("pulse_lengths")
             pulse_times = generate_int_list("pulse_times")
-            
+
             sweep_params = {
                 "beam_powers": beam_powers,
                 "beam_frequencies": beam_frequencies,
                 "pulse_lengths": pulse_lengths,
-                "pulse_times": pulse_times
+                "pulse_times": pulse_times,
             }
-            
-            return SweepConfiguration(sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params)
-        
+
+            return SweepConfiguration(
+                sweep_type=sweep_type, num_shots=num_shots, sweep_parameters=sweep_params
+            )
+
         else:
             raise ValueError(f"Unsupported sweep type: {sweep_type}")
 
-    
     def get_absorbtion_imaging_configuration(self):
-                
+
         return AbsorbtionImagingConfiguration(
-                 scan_abs_img_freq = eval(self.config['scan_abs_img_freq']),
-                 abs_img_freq_ch = int(self.config['abs_img_freq_ch']),
-                 abs_img_freqs = toFloatList(self.config['abs_img_freqs']),
-                 camera_trig_ch = int(self.config['camera_trig_ch']),
-                 imag_power_ch = int(self.config['imag_power_ch']), 
-                 camera_trig_levs = toFloatTuple(self.config['camera_trig_levs']),
-                 imag_power_levs = toFloatTuple(self.config['imag_power_levs']), 
-                 camera_pulse_width = float(self.config['camera_pulse_width']),
-                 imag_pulse_width = float(self.config['imag_pulse_width']),
-                 t_imgs = toFloatList(self.config['t_imgs']), 
-                 mot_reload = float(self.config['mot_reload_time']), 
-                 n_backgrounds = int(self.config['n_backgrounds']),
-                 bkg_off_channels = toIntList(self.config['bkg_off_channels']), 
-                 cam_gain = int(self.config['cam_gain']),
-                 cam_exposure = int(self.config['cam_exposure']), 
-                 cam_gain_lims = toIntTuple(self.config['cam_gain_lims']),
-                 cam_exposure_lims = toIntTuple(self.config['cam_exposure_lims']),
-                 save_location = self.config['save_location'],
-                 save_raw_images = toBool(self.config['save_raw_images']),
-                 save_processed_images = toBool(self.config['save_processed_images']),
-                 review_processed_images = toBool(self.config['review_processed_images']))
-    
+            scan_abs_img_freq=eval(self.config["scan_abs_img_freq"]),
+            abs_img_freq_ch=int(self.config["abs_img_freq_ch"]),
+            abs_img_freqs=toFloatList(self.config["abs_img_freqs"]),
+            camera_trig_ch=int(self.config["camera_trig_ch"]),
+            imag_power_ch=int(self.config["imag_power_ch"]),
+            camera_trig_levs=toFloatTuple(self.config["camera_trig_levs"]),
+            imag_power_levs=toFloatTuple(self.config["imag_power_levs"]),
+            camera_pulse_width=float(self.config["camera_pulse_width"]),
+            imag_pulse_width=float(self.config["imag_pulse_width"]),
+            t_imgs=toFloatList(self.config["t_imgs"]),
+            mot_reload=float(self.config["mot_reload_time"]),
+            n_backgrounds=int(self.config["n_backgrounds"]),
+            bkg_off_channels=toIntList(self.config["bkg_off_channels"]),
+            cam_gain=int(self.config["cam_gain"]),
+            cam_exposure=int(self.config["cam_exposure"]),
+            cam_gain_lims=toIntTuple(self.config["cam_gain_lims"]),
+            cam_exposure_lims=toIntTuple(self.config["cam_exposure_lims"]),
+            save_location=self.config["save_location"],
+            save_raw_images=toBool(self.config["save_raw_images"]),
+            save_processed_images=toBool(self.config["save_processed_images"]),
+            review_processed_images=toBool(self.config["review_processed_images"]),
+        )
 
     def get_correct_config(self):
         """
         Method to extract the correct configuration object based on the experiment type
         specified in the config file.
         """
-        
+
         expt_type = self.get_expt_type()
-        
-        if expt_type == 'photon production':
+
+        if expt_type == "photon production":
             return self.get_photon_production_configuration()
-        elif expt_type == 'mot fluorescence':
+        elif expt_type == "mot fluorescence":
             return self.get_mot_flourescence_configuration()
-        elif expt_type == 'absorbtion imaging':
+        elif expt_type == "absorbtion imaging":
             return self.get_absorbtion_imaging_configuration()
         else:
             raise ValueError(f"Unknown experiment type: {expt_type}")
-        
-    
-class PhotonProductionWriter(object):
-    
+
+
+class PhotonProductionWriter:
     def __init__(self, fname):
         self.fname = fname
         self.config = MyConfig(fname)
-    
-#     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
-    def save(self, photon_producion_config:PhotonProductionConfiguration):
-            
-        self.config['date'] = time.strftime("%d/%m/%y")
-        self.config['time'] = time.strftime("%H:%M:%S")
-        
-        self.config['save location'] = photon_producion_config.save_location
-        self.config['mot reload'] = photon_producion_config.mot_reload
-        self.config['iterations'] = photon_producion_config.iterations
-        
-        self.config['waveform sequence'] = photon_producion_config.waveform_sequence
-        self.config['waveforms'] = photon_producion_config.waveforms
-        self.config['waveform stitch delays'] = photon_producion_config.waveform_stitch_delays
-        
-        awg_config:AwgConfiguration = photon_producion_config.awg_configuration
-        
-        self.config['AWG'] = {}
-        self.config['AWG']['sample rate'] = awg_config.sample_rate
-        self.config['AWG']['burst count'] = awg_config.burst_count
-        
+
+    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
+    def save(self, photon_producion_config: PhotonProductionConfiguration):
+
+        self.config["date"] = time.strftime("%d/%m/%y")
+        self.config["time"] = time.strftime("%H:%M:%S")
+
+        self.config["save location"] = photon_producion_config.save_location
+        self.config["mot reload"] = photon_producion_config.mot_reload
+        self.config["iterations"] = photon_producion_config.iterations
+
+        self.config["waveform sequence"] = photon_producion_config.waveform_sequence
+        self.config["waveforms"] = photon_producion_config.waveforms
+        self.config["waveform stitch delays"] = photon_producion_config.waveform_stitch_delays
+
+        awg_config: AwgConfiguration = photon_producion_config.awg_configuration
+
+        self.config["AWG"] = {}
+        self.config["AWG"]["sample rate"] = awg_config.sample_rate
+        self.config["AWG"]["burst count"] = awg_config.burst_count
+
         tdc_config = photon_producion_config.tdc_configuration
-        
-        self.config['TDC']['counter channels'] = tdc_config.counter_channels
-        self.config['TDC']['marker channel'] = tdc_config.marker_channels
-        self.config['TDC']['timestamp buffer size'] = tdc_config.timestamp_buffer_size
-        
+
+        self.config["TDC"]["counter channels"] = tdc_config.counter_channels
+        self.config["TDC"]["marker channel"] = tdc_config.marker_channels
+        self.config["TDC"]["timestamp buffer size"] = tdc_config.timestamp_buffer_size
+
         self.config.write()
 
 
-    
-class AbsorbtionImagingWriter(object):
-    
+class AbsorbtionImagingWriter:
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
-    
+
     def save(self, sequence_fname, daq_config_fname, absorbtion_imaging_config_fname):
-            
-        #TODO
-        
-        self.config.write()   
+
+        # TODO
+
+        self.config.write()
 
 
-class ExperimentalAutomationReader(object):
-
+class ExperimentalAutomationReader:
     def __init__(self, fname):
         self.fname = fname
         self.config = MyConfig(fname)
-    
+
     def get_experimental_automation_configuration(self):
-        
+
         automated_experiment_configurations = []
-        
-        for _,v in sorted(self.config['experiments'].items()):
+
+        for _, v in sorted(self.config["experiments"].items()):
             automated_experiment_configurations.append(
                 SingleExperimentConfig(
-                    daq_channel_static_values =  map(lambda x: (int(eval(x)[0]), float(eval(x)[1])), v['daq_channel_static_values']
-                                                                if v['daq_channel_static_values'] != []
-                                                                else []),
-                    sequence = SequenceReader(v['sequence_fname']).loadSequence(),
-                    sequence_fname =  v['sequence_fname'],
-                    iterations =  int(v['iterations']),
-                    mot_reload =  eval(v['mot_reload']),
-                    modulation_frequencies =  map(float, v['modulation_frequencies'] if v['modulation_frequencies'] != [] else [])))
-            
-        return ExperimentSessionConfig (
-                    save_location = self.config['save_location'],
-                    summary_fname = self.config['summary_fname'],
-                    automated_experiment_configurations = automated_experiment_configurations,
-                    daq_channel_update_steps = float(self.config['daq_channel_update_steps']),
-                    daq_channel_update_delay = float(self.config['daq_channel_update_delay']))
-    
-class ExperimentalAutomationWriter(object):
-    
+                    daq_channel_static_values=map(
+                        lambda x: (int(eval(x)[0]), float(eval(x)[1])),
+                        v["daq_channel_static_values"]
+                        if v["daq_channel_static_values"] != []
+                        else [],
+                    ),
+                    sequence=SequenceReader(v["sequence_fname"]).loadSequence(),
+                    sequence_fname=v["sequence_fname"],
+                    iterations=int(v["iterations"]),
+                    mot_reload=eval(v["mot_reload"]),
+                    modulation_frequencies=map(
+                        float,
+                        v["modulation_frequencies"] if v["modulation_frequencies"] != [] else [],
+                    ),
+                )
+            )
+
+        return ExperimentSessionConfig(
+            save_location=self.config["save_location"],
+            summary_fname=self.config["summary_fname"],
+            automated_experiment_configurations=automated_experiment_configurations,
+            daq_channel_update_steps=float(self.config["daq_channel_update_steps"]),
+            daq_channel_update_delay=float(self.config["daq_channel_update_delay"]),
+        )
+
+
+class ExperimentalAutomationWriter:
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
-    
-#     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
+
+    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, photon_producion_config):
         # TODO
         pass
@@ -834,634 +986,838 @@ class ExperimentalAutomationWriter(object):
 
 def _makeRootConfig():
     config = ConfigObj()
-    config.filename =  os.getcwd() + '/configs/rootConfig.ini'
-    
-    config['sequence_filename'] = os.getcwd() + '/configs/sequence/sequenceConfig2DAQ'
-    config['daq_config_filename'] = os.getcwd() + '/configs/daq/configCalibs'
-    config['absorbtion_images_config_filename']= os.getcwd() + '/configs/absorbtion imaging/defaultAbsImgConfig'
-    config['photon_production_config_filename']= os.getcwd() + '/configs/photon production/defaultPhotonProductionConfig'
-    config['development_mode'] = False
-    
+    config.filename = os.getcwd() + "/configs/rootConfig.ini"
+
+    config["sequence_filename"] = os.getcwd() + "/configs/sequence/sequenceConfig2DAQ"
+    config["daq_config_filename"] = os.getcwd() + "/configs/daq/configCalibs"
+    config["absorbtion_images_config_filename"] = (
+        os.getcwd() + "/configs/absorbtion imaging/defaultAbsImgConfig"
+    )
+    config["photon_production_config_filename"] = (
+        os.getcwd() + "/configs/photon production/defaultPhotonProductionConfig"
+    )
+    config["development_mode"] = False
+
     config.write()
 
+
 def _makeDaqConfig():
-    filename =  os.getcwd() + '/configs/daq/configCalibs'
+    filename = os.getcwd() + "/configs/daq/configCalibs"
     config = MyConfig(filename)
-    
-    config['DAQ cards'] = {}
-    
-    config['DAQ cards']['master'] = {'card number': 0, 'channels': [0,1,2,3,4,5,6,7]}
-    config['DAQ cards']['slaves'] = {}
-    config['DAQ cards']['slaves']['1'] = {'card number': 1, 'channels': [8,9,10,11,12,13,14,15]}
-    config['DAQ cards']['slaves']['2'] = {'card number': 1, 'channels': [16,17,18,19,20,21,22,23]}
-    
-    config['DAQ channels'] = {}
-    
-    config['DAQ channels']['0'] = {'chNum':0,
-                                  'chName':'MOT cooling 1 - freq',
-                                  'chLimits':(-10,10),
-                                  'default value':6.09035409035,
-                                  'UIvisible':True,
-                                  'calibrationFname':r'C:\Users\apc\workspace\Cold Control Heavy\calibrations\cool1_freq.txt'}
-    config['DAQ channels']['1'] = {'chNum':1,
-                                  'chName':'MOT cooling 1 - amp',
-                                  'chLimits':(-10,10),
-                                  'default value':3.66788766789,
-                                  'UIvisible':True,
-                                  'calibrationFname':r'C:\Users\apc\workspace\Cold Control Heavy\calibrations\cool1_amp_at_100MHz.txt'}
-    config['DAQ channels']['2'] = {'chNum':2,
-                                  'chName':'MOT cooling (upper)',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['3'] = {'chNum':3,
-                                  'chName':'Absorbtion imaging',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['4'] = {'chNum':4,
-                                  'chName':'ch 4',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['5'] = {'chNum':5,
-                                  'chName':'ch 5',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['6'] = {'chNum':6,
-                                  'chName':'ch 6',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['7'] = {'chNum':7,
-                                  'chName':'ch 7',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    
-    config['DAQ channels']['8'] = {'chNum':8,
-                                  'chName':'8',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['9'] = {'chNum':9,
-                                  'chName':'9',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['10'] = {'chNum':10,
-                                  'chName':'10',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['11'] = {'chNum':11,
-                                  'chName':'11',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['12'] = {'chNum':12,
-                                  'chName':'12',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['13'] = {'chNum':13,
-                                  'chName':'13',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['14'] = {'chNum':14,
-                                  'chName':'14',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['15'] = {'chNum':15,
-                                  'chName':'15',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['16'] = {'chNum':16,
-                                  'chName':'16',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['17'] = {'chNum':17,
-                                  'chName':'17',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['18'] = {'chNum':18,
-                                  'chName':'18',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['19'] = {'chNum':19,
-                                  'chName':'19',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['20'] = {'chNum':20,
-                                  'chName':'20',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['21'] = {'chNum':21,
-                                  'chName':'21',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['22'] = {'chNum':22,
-                                  'chName':'22',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    config['DAQ channels']['23'] = {'chNum':23,
-                                  'chName':'23',
-                                  'chLimits':(-10,10),
-                                  'default value':0,
-                                  'UIvisible':True,
-                                  'calibrationFname':''}
-    
+
+    config["DAQ cards"] = {}
+
+    config["DAQ cards"]["master"] = {"card number": 0, "channels": [0, 1, 2, 3, 4, 5, 6, 7]}
+    config["DAQ cards"]["slaves"] = {}
+    config["DAQ cards"]["slaves"]["1"] = {
+        "card number": 1,
+        "channels": [8, 9, 10, 11, 12, 13, 14, 15],
+    }
+    config["DAQ cards"]["slaves"]["2"] = {
+        "card number": 1,
+        "channels": [16, 17, 18, 19, 20, 21, 22, 23],
+    }
+
+    config["DAQ channels"] = {}
+
+    config["DAQ channels"]["0"] = {
+        "chNum": 0,
+        "chName": "MOT cooling 1 - freq",
+        "chLimits": (-10, 10),
+        "default value": 6.09035409035,
+        "UIvisible": True,
+        "calibrationFname": r"C:\Users\apc\workspace\Cold Control Heavy\calibrations\cool1_freq.txt",
+    }
+    config["DAQ channels"]["1"] = {
+        "chNum": 1,
+        "chName": "MOT cooling 1 - amp",
+        "chLimits": (-10, 10),
+        "default value": 3.66788766789,
+        "UIvisible": True,
+        "calibrationFname": r"C:\Users\apc\workspace\Cold Control Heavy\calibrations\cool1_amp_at_100MHz.txt",
+    }
+    config["DAQ channels"]["2"] = {
+        "chNum": 2,
+        "chName": "MOT cooling (upper)",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["3"] = {
+        "chNum": 3,
+        "chName": "Absorbtion imaging",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["4"] = {
+        "chNum": 4,
+        "chName": "ch 4",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["5"] = {
+        "chNum": 5,
+        "chName": "ch 5",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["6"] = {
+        "chNum": 6,
+        "chName": "ch 6",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["7"] = {
+        "chNum": 7,
+        "chName": "ch 7",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+
+    config["DAQ channels"]["8"] = {
+        "chNum": 8,
+        "chName": "8",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["9"] = {
+        "chNum": 9,
+        "chName": "9",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["10"] = {
+        "chNum": 10,
+        "chName": "10",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["11"] = {
+        "chNum": 11,
+        "chName": "11",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["12"] = {
+        "chNum": 12,
+        "chName": "12",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["13"] = {
+        "chNum": 13,
+        "chName": "13",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["14"] = {
+        "chNum": 14,
+        "chName": "14",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["15"] = {
+        "chNum": 15,
+        "chName": "15",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["16"] = {
+        "chNum": 16,
+        "chName": "16",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["17"] = {
+        "chNum": 17,
+        "chName": "17",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["18"] = {
+        "chNum": 18,
+        "chName": "18",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["19"] = {
+        "chNum": 19,
+        "chName": "19",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["20"] = {
+        "chNum": 20,
+        "chName": "20",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["21"] = {
+        "chNum": 21,
+        "chName": "21",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["22"] = {
+        "chNum": 22,
+        "chName": "22",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+    config["DAQ channels"]["23"] = {
+        "chNum": 23,
+        "chName": "23",
+        "chLimits": (-10, 10),
+        "default value": 0,
+        "UIvisible": True,
+        "calibrationFname": "",
+    }
+
     config.write()
-    
+
+
 def _makePhotonProductionConfig():
-    filename = os.getcwd() + '/configs/photon production/freqScanPhotonProductionConfig'
+    filename = os.getcwd() + "/configs/photon production/freqScanPhotonProductionConfig"
     config = MyConfig(filename)
-    
-    config['date'] = time.strftime("%d/%m/%y")
-    config['time'] = time.strftime("%H:%M:%S")
-    
-    config['save location'] = 'Z:/Results017_New/data'
-    config['mot reload'] = 300*10**3 # is us
-    config['iterations'] = 100
-    
-    config['waveform sequence'] = [0,1,2,3,4,5,6]
-    
-    config['waveforms'] = {}
-    config['waveforms']['0'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 60.25*10**6,
-                                'phases': []}
-    config['waveforms']['1'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 65.25*10**6,
-                                'phases': []}
-    config['waveforms']['2'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 70.25*10**6,
-                                'phases': []}
-    config['waveforms']['3'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 75.25*10**6,
-                                'phases': []}
-    config['waveforms']['4'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 80.25*10**6,
-                                'phases': []}
-    config['waveforms']['5'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 85.25*10**6,
-                                'phases': []}
-    config['waveforms']['6'] = {'filename': r'C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv',
-                                'modulation frequency': 90.25*10**6,
-                                'phases': []}
-    
-    config['waveform stitch delays'] = [192]*6+[192*10]
-    config['waveform aom calibrations location'] = os.getcwd() + '/calibrations/stirap_awg'
-    config['marker levels'] = (0,1)
-    config['marker width'] = 50*10**-3 #us
-    config['marker delay'] = 0.853 #us 
-    
-    config['AWG'] = {}
-    config['AWG']['sample rate'] = 1.25*10**9
-    config['AWG']['burst count'] = 12500
-    config['AWG']['waveform output channel'] = Channel.CHANNEL_1
-    
-    config['TDC'] = {}
-    config['TDC']['counter channels'] = [0]
-    config['TDC']['marker channel'] = 7
-    config['TDC']['timestamp buffer size'] = 1000000
-    
+
+    config["date"] = time.strftime("%d/%m/%y")
+    config["time"] = time.strftime("%H:%M:%S")
+
+    config["save location"] = "Z:/Results017_New/data"
+    config["mot reload"] = 300 * 10**3  # is us
+    config["iterations"] = 100
+
+    config["waveform sequence"] = [0, 1, 2, 3, 4, 5, 6]
+
+    config["waveforms"] = {}
+    config["waveforms"]["0"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 60.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["1"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 65.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["2"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 70.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["3"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 75.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["4"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 80.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["5"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 85.25 * 10**6,
+        "phases": [],
+    }
+    config["waveforms"]["6"] = {
+        "filename": r"C:\Users\apc\workspace\Cold Control Heavy\waveforms\oli_old\sin_squared_800.csv",
+        "modulation frequency": 90.25 * 10**6,
+        "phases": [],
+    }
+
+    config["waveform stitch delays"] = [192] * 6 + [192 * 10]
+    config["waveform aom calibrations location"] = os.getcwd() + "/calibrations/stirap_awg"
+    config["marker levels"] = (0, 1)
+    config["marker width"] = 50 * 10**-3  # us
+    config["marker delay"] = 0.853  # us
+
+    config["AWG"] = {}
+    config["AWG"]["sample rate"] = 1.25 * 10**9
+    config["AWG"]["burst count"] = 12500
+    config["AWG"]["waveform output channel"] = "channel 1"
+
+    config["TDC"] = {}
+    config["TDC"]["counter channels"] = [0]
+    config["TDC"]["marker channel"] = 7
+    config["TDC"]["timestamp buffer size"] = 1000000
+
     config.write()
-    
+
+
 def _makeSequenceConfig():
-    filename = os.getcwd() + '/configs/sequence/abs_img/feb24_just_flash.ini'
+    filename = os.getcwd() + "/configs/sequence/abs_img/feb24_just_flash.ini"
     config = MyConfig(filename)
-    
-    config['date'] = time.strftime("%d/%m/%y")
-    config['time'] = time.strftime("%H:%M:%S")
-    
-    config['notes'] = {}
-    config['notes']['user'] = 'Default user notes...'
-    config['notes']['config_ch_assignments'] = ['0 = MOT cool 1 (lower)\\n1 = MOT cool 2 (center)\\n2 = MOT cool 3 (upper)']
-    
-    config['sequence'] = {'n_samples': 1001,
-                          't_step': 100,
-                          'global_timings': [(1000.0, 'MOT launch'), (2000.0, 'Fire lasers'), (3000.0, 'Engage thrusters')]}
-    
-    config['sequence channels'] = {}
-    
-    config['sequence channels']['0']={'chNum': 0,
-                                      'tV_pairs': [(0.0, 0.0), (10010.0, 3.0), (14000.0, 3.0), (20000.0, 3.0), (30000.0, 3.0), (34000.0, 3.0)],
-                                      'V_interval_styles': [0, 1, 0, 1, 0, 0]}
-    config['sequence channels']['1']={'chNum': 1,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['2']={'chNum': 2,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['3']={'chNum': 3,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['4']={'chNum': 4,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['5']={'chNum': 5,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['6']={'chNum': 6,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['7']={'chNum': 7,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    
-    config['sequence channels']['8']={'chNum': 8,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['9']={'chNum': 9,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['10']={'chNum': 10,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['11']={'chNum': 11,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['12']={'chNum': 12,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['13']={'chNum': 13,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['14']={'chNum': 14,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['15']={'chNum': 15,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['16']={'chNum': 16,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['17']={'chNum': 17,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['18']={'chNum': 18,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['19']={'chNum': 19,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['20']={'chNum': 20,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['21']={'chNum': 21,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['22']={'chNum': 22,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    config['sequence channels']['23']={'chNum': 23,
-                                      'tV_pairs': [(0.0, 0.0)],
-                                      'V_interval_styles': [0]}
-    
+
+    config["date"] = time.strftime("%d/%m/%y")
+    config["time"] = time.strftime("%H:%M:%S")
+
+    config["notes"] = {}
+    config["notes"]["user"] = "Default user notes..."
+    config["notes"]["config_ch_assignments"] = [
+        "0 = MOT cool 1 (lower)\\n1 = MOT cool 2 (center)\\n2 = MOT cool 3 (upper)"
+    ]
+
+    config["sequence"] = {
+        "n_samples": 1001,
+        "t_step": 100,
+        "global_timings": [
+            (1000.0, "MOT launch"),
+            (2000.0, "Fire lasers"),
+            (3000.0, "Engage thrusters"),
+        ],
+    }
+
+    config["sequence channels"] = {}
+
+    config["sequence channels"]["0"] = {
+        "chNum": 0,
+        "tV_pairs": [
+            (0.0, 0.0),
+            (10010.0, 3.0),
+            (14000.0, 3.0),
+            (20000.0, 3.0),
+            (30000.0, 3.0),
+            (34000.0, 3.0),
+        ],
+        "V_interval_styles": [0, 1, 0, 1, 0, 0],
+    }
+    config["sequence channels"]["1"] = {
+        "chNum": 1,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["2"] = {
+        "chNum": 2,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["3"] = {
+        "chNum": 3,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["4"] = {
+        "chNum": 4,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["5"] = {
+        "chNum": 5,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["6"] = {
+        "chNum": 6,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["7"] = {
+        "chNum": 7,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+
+    config["sequence channels"]["8"] = {
+        "chNum": 8,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["9"] = {
+        "chNum": 9,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["10"] = {
+        "chNum": 10,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["11"] = {
+        "chNum": 11,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["12"] = {
+        "chNum": 12,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["13"] = {
+        "chNum": 13,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["14"] = {
+        "chNum": 14,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["15"] = {
+        "chNum": 15,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["16"] = {
+        "chNum": 16,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["17"] = {
+        "chNum": 17,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["18"] = {
+        "chNum": 18,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["19"] = {
+        "chNum": 19,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["20"] = {
+        "chNum": 20,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["21"] = {
+        "chNum": 21,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["22"] = {
+        "chNum": 22,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+    config["sequence channels"]["23"] = {
+        "chNum": 23,
+        "tV_pairs": [(0.0, 0.0)],
+        "V_interval_styles": [0],
+    }
+
     config.write()
-    
+
+
 # if __name__ == "__main__":
-#         
+#
 #     _makeRootConfig()
 #     _makeDaqConfig()
 #     _makeSequenceConfig()
 
+
 def _makeAbsorbtionImagingConfig():
     config = ConfigObj()
-    config.filename =  os.getcwd() + '/configs/absorbtion imaging/defaultAbsImgConfig'
-    
-    config['scan_abs_img_freq'] = False
-    config['abs_img_freq_ch'] = 12
-    config['abs_img_freqs'] = [5] 
-    config['camera_trig_ch'] = 15
-    config['imag_power_ch'] = 13
-    config['camera_trig_levs'] = (0.,10.)
-    config['imag_power_levs'] = (0.,1.6)
-    config['camera_pulse_width'] = 100
-    config['imag_pulse_width'] = 5
-    config['t_imgs'] = [5000]
-    config['mot_reload_time'] = 5000 * 10**3
-    config['n_backgrounds'] = 3
-    config['bkg_off_channels'] = [7]
-    config['save_location'] = os.getcwd() + '/data/Absorbtion images/'
-    config['save_raw_images'] = False
-    config['save_processed_images'] = False
-    config['review_processed_images'] = True
-    config['cam_gain'] = 180
-    config['cam_exposure'] = 4000 # In 1/seconds
-    config['cam_gain_lims'] = (180,1023)
-    config['cam_exposure_lims'] = (4000,1)
-    
+    config.filename = os.getcwd() + "/configs/absorbtion imaging/defaultAbsImgConfig"
+
+    config["scan_abs_img_freq"] = False
+    config["abs_img_freq_ch"] = 12
+    config["abs_img_freqs"] = [5]
+    config["camera_trig_ch"] = 15
+    config["imag_power_ch"] = 13
+    config["camera_trig_levs"] = (0.0, 10.0)
+    config["imag_power_levs"] = (0.0, 1.6)
+    config["camera_pulse_width"] = 100
+    config["imag_pulse_width"] = 5
+    config["t_imgs"] = [5000]
+    config["mot_reload_time"] = 5000 * 10**3
+    config["n_backgrounds"] = 3
+    config["bkg_off_channels"] = [7]
+    config["save_location"] = os.getcwd() + "/data/Absorbtion images/"
+    config["save_raw_images"] = False
+    config["save_processed_images"] = False
+    config["review_processed_images"] = True
+    config["cam_gain"] = 180
+    config["cam_exposure"] = 4000  # In 1/seconds
+    config["cam_gain_lims"] = (180, 1023)
+    config["cam_exposure_lims"] = (4000, 1)
+
     config.write()
-    
+
+
 def _makeExperimentalAutomationConfig():
-     
-    seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans\-22.5 MHz offset'
-    
-    filename =  os.getcwd() + '/configs/experimental automation/JuanExperimentalAutomationConfig'
+
+    seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans\-22.5 MHz offset"
+
+    filename = os.getcwd() + "/configs/experimental automation/JuanExperimentalAutomationConfig"
     config = MyConfig(filename)
 
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
 
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
-    config['experiments']['0'] = {'daq_channel_static_values' : [(10, 75.25)],
-                                  'sequence_fname' : os.path.join(seq_folder, 'cav_75_25'),
-                                  'iterations' : 50,
-                                  'mot_reload' : 1000*10**3,
-                                  'modulation_frequencies' : []}
-    
-    config['experiments']['1'] = {'daq_channel_static_values' : [(10, 75.75)],
-                                  'sequence_fname' : os.path.join(seq_folder, 'cav_75_75'),
-                                  'iterations' : 50,
-                                  'mot_reload' : 1000*10**3,
-                                  'modulation_frequencies' : []}
-    
-    config['experiments']['2'] = {'daq_channel_static_values' : [(10, 76.25)],
-                                  'sequence_fname' : os.path.join(seq_folder, 'cav_76_25'),
-                                  'iterations' : 50,
-                                  'mot_reload' : 1000*10**3,
-                                  'modulation_frequencies' : []}
-    
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
+    config["experiments"]["0"] = {
+        "daq_channel_static_values": [(10, 75.25)],
+        "sequence_fname": os.path.join(seq_folder, "cav_75_25"),
+        "iterations": 50,
+        "mot_reload": 1000 * 10**3,
+        "modulation_frequencies": [],
+    }
+
+    config["experiments"]["1"] = {
+        "daq_channel_static_values": [(10, 75.75)],
+        "sequence_fname": os.path.join(seq_folder, "cav_75_75"),
+        "iterations": 50,
+        "mot_reload": 1000 * 10**3,
+        "modulation_frequencies": [],
+    }
+
+    config["experiments"]["2"] = {
+        "daq_channel_static_values": [(10, 76.25)],
+        "sequence_fname": os.path.join(seq_folder, "cav_76_25"),
+        "iterations": 50,
+        "mot_reload": 1000 * 10**3,
+        "modulation_frequencies": [],
+    }
+
     config.write()
 
-def _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=[], cav_daq_channel = 10, iterations=500, mot_reload = 1000*10**3):
-     
-#     seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans'
-    seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction'
-    
-    min_freq, max_freq = map(lambda x: str(x).replace('.','_'), [min(cavity_freqs), max(cavity_freqs)]) 
-    
-    
-#     config.filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/Juan_scan_cav__{0}_to_{1}'.\
-#                                         format(min_freq, max_freq)
 
-    filename =  os.getcwd() + '/configs/experimental automation/Juan_scan_cav__{0}_to_{1}'.\
-                                        format(min_freq, max_freq)
+def _makeExperimentalAutomationConfig_cavityScan(
+    cavity_freqs=[], cav_daq_channel=10, iterations=500, mot_reload=1000 * 10**3
+):
+
+    #     seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans'
+    seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction"
+
+    min_freq, max_freq = map(
+        lambda x: str(x).replace(".", "_"), [min(cavity_freqs), max(cavity_freqs)]
+    )
+
+    #     config.filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/Juan_scan_cav__{0}_to_{1}'.\
+    #                                         format(min_freq, max_freq)
+
+    filename = (
+        os.getcwd() + f"/configs/experimental automation/Juan_scan_cav__{min_freq}_to_{max_freq}"
+    )
     config = MyConfig(filename)
-                                        
-                                        
-#     config.filename =  os.getcwd() + '/configs/experimental automation/Juan_try'                                        
-    
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
+
+    #     config.filename =  os.getcwd() + '/configs/experimental automation/Juan_try'
+
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
+
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
     i = 0
     for freq in sorted(cavity_freqs):
-        
-        config['experiments'][str(i)] = {'daq_channel_static_values' : [(cav_daq_channel, freq)],
-                                      'sequence_fname' : os.path.join(seq_folder, 'CavLock_{0}'.format(str(freq).replace('.','_'))),
-                                      'iterations' : iterations,
-                                      'mot_reload' : mot_reload, 
-                                      'modulation_frequencies' : []}
-        
+        config["experiments"][str(i)] = {
+            "daq_channel_static_values": [(cav_daq_channel, freq)],
+            "sequence_fname": os.path.join(
+                seq_folder, "CavLock_{0}".format(str(freq).replace(".", "_"))
+            ),
+            "iterations": iterations,
+            "mot_reload": mot_reload,
+            "modulation_frequencies": [],
+        }
+
         i += 1
-    
-    config.write()
-    
-    
 
-def _makeExperimentalAutomationConfig_xBiasScan(x_biases = [], iterations=50, mot_reload = 500*10**3,  n_repeat=1):
-     
-    seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\x bias scans'
-    
-    min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(x_biases), max(x_biases)])
-    
-    filename =  os.getcwd() + '/configs/experimental automation/scans/x bias scan/scan_x_bias__{0}A_to_{1}A'.\
-                                        format(min_bias, max_bias)
+    config.write()
+
+
+def _makeExperimentalAutomationConfig_xBiasScan(
+    x_biases=[], iterations=50, mot_reload=500 * 10**3, n_repeat=1
+):
+
+    seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\x bias scans"
+
+    min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(x_biases), max(x_biases)])
+
+    filename = (
+        os.getcwd()
+        + f"/configs/experimental automation/scans/x bias scan/scan_x_bias__{min_bias}A_to_{max_bias}A"
+    )
     config = MyConfig(filename)
-    
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
-    i,j=0,0
-    while j<n_repeat: 
+
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
+
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
+    i, j = 0, 0
+    while j < n_repeat:
         for bias in sorted(x_biases):
-        
-            config['experiments'][str(i)] = {'daq_channel_static_values' : [],
-                                          'sequence_fname' : os.path.join(seq_folder, '{0}A_xBias'.format(str(bias).replace('.','_'))),
-                                          'iterations' : iterations,
-                                          'mot_reload' : mot_reload,
-                                          'modulation_frequencies' : []}
-            
+            config["experiments"][str(i)] = {
+                "daq_channel_static_values": [],
+                "sequence_fname": os.path.join(
+                    seq_folder, "{0}A_xBias".format(str(bias).replace(".", "_"))
+                ),
+                "iterations": iterations,
+                "mot_reload": mot_reload,
+                "modulation_frequencies": [],
+            }
+
             i += 1
         j += 1
-    
-   
+
     config.write()
 
 
-def _makeExperimentalAutomationConfig_yBiasScan(y_biases = [], iterations=50, mot_reload = 500*10**3,  n_repeat=1):
-     
-    seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\y bias scans'
-    
-    min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(y_biases), max(y_biases)])
-    
-    filename =  os.getcwd() + '/configs/experimental automation/scans/y bias scan/scan_y_bias__{0}A_to_{1}A'.\
-                                        format(min_bias, max_bias)
+def _makeExperimentalAutomationConfig_yBiasScan(
+    y_biases=[], iterations=50, mot_reload=500 * 10**3, n_repeat=1
+):
+
+    seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\y bias scans"
+
+    min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(y_biases), max(y_biases)])
+
+    filename = (
+        os.getcwd()
+        + f"/configs/experimental automation/scans/y bias scan/scan_y_bias__{min_bias}A_to_{max_bias}A"
+    )
     config = MyConfig(filename)
-    
-    
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
-    i,j=0,0
-    while j<n_repeat: 
+
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
+
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
+    i, j = 0, 0
+    while j < n_repeat:
         for bias in sorted(y_biases):
-        
-            config['experiments'][str(i)] = {'daq_channel_static_values' : [],
-                                          'sequence_fname' : os.path.join(seq_folder, '{0}A_yBias'.format(str(bias).replace('.','_'))),
-                                          'iterations' : iterations,
-                                          'mot_reload' : mot_reload, 
-                                          'modulation_frequencies' : []}
-            
+            config["experiments"][str(i)] = {
+                "daq_channel_static_values": [],
+                "sequence_fname": os.path.join(
+                    seq_folder, "{0}A_yBias".format(str(bias).replace(".", "_"))
+                ),
+                "iterations": iterations,
+                "mot_reload": mot_reload,
+                "modulation_frequencies": [],
+            }
+
             i += 1
         j += 1
-    
-   
+
     config.write()
 
-    
-def _makeExperimentalAutomationConfig_zBiasScan(z_biases = [], iterations=500, mot_reload = 500*10**3, n_repeat=1):
-     
-    seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\z bias scans'
-    
-    min_bias, max_bias = map(lambda x: str(x).replace('.','_'), [min(z_biases), max(z_biases)])
-    
 
-    filename =  os.getcwd() + '/configs/experimental automation/scans/z bias scan/scan_z_bias__{0}A_to_{1}A'.\
-                                        format(min_bias, max_bias)
+def _makeExperimentalAutomationConfig_zBiasScan(
+    z_biases=[], iterations=500, mot_reload=500 * 10**3, n_repeat=1
+):
+
+    seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\z bias scans"
+
+    min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(z_biases), max(z_biases)])
+
+    filename = (
+        os.getcwd()
+        + f"/configs/experimental automation/scans/z bias scan/scan_z_bias__{min_bias}A_to_{max_bias}A"
+    )
     config = MyConfig(filename)
-    
-    
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
-    i,j=0,0
-    while j<n_repeat: 
+
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
+
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
+    i, j = 0, 0
+    while j < n_repeat:
         for bias in sorted(z_biases):
-        
-            config['experiments'][str(i)] = {'daq_channel_static_values' : [],
-                                          'sequence_fname' : os.path.join(seq_folder, '{0}A_zBias'.format(str(bias).replace('.','_'))),
-                                          'iterations' : iterations,
-                                          'mot_reload' : mot_reload,
-                                          'modulation_frequencies' : []}
-            
+            config["experiments"][str(i)] = {
+                "daq_channel_static_values": [],
+                "sequence_fname": os.path.join(
+                    seq_folder, "{0}A_zBias".format(str(bias).replace(".", "_"))
+                ),
+                "iterations": iterations,
+                "mot_reload": mot_reload,
+                "modulation_frequencies": [],
+            }
+
             i += 1
         j += 1
-    
-   
+
     config.write()
 
 
-def _makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=[], iterations=100, mot_reload = 1000*10**3):
-     
-    seq_loc =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction'
-    
-    filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/scan_stirap_freqs'
+def _makeExperimentalAutomationConfig_stirapFreqScan(
+    stirap_freqs=[], iterations=100, mot_reload=1000 * 10**3
+):
+
+    seq_loc = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction"
+
+    filename = (
+        os.getcwd() + "/configs/experimental automation/resonant driving scans/scan_stirap_freqs"
+    )
     config = MyConfig(filename)
-    
-    config['save_location'] = 'Z:/Results017_New/data'
-    config['summary_fname'] = 'automated_experiments_summary'
-    
-    config['daq_channel_update_steps'] = 5
-    config['daq_channel_update_delay'] = 1 # in seconds
-    
-    config['experiments'] = {}
-    
+
+    config["save_location"] = "Z:/Results017_New/data"
+    config["summary_fname"] = "automated_experiments_summary"
+
+    config["daq_channel_update_steps"] = 5
+    config["daq_channel_update_delay"] = 1  # in seconds
+
+    config["experiments"] = {}
+
     i = 0
     print(stirap_freqs)
     for freqs in sorted(stirap_freqs):
-        
-        config['experiments'][str(i)] = {'daq_channel_static_values' : [],
-                                         'sequence_fname' : seq_loc,
-                                         'iterations' : iterations,
-                                         'mot_reload' : mot_reload,
-                                         'modulation_frequencies' : freqs}
-        
+        config["experiments"][str(i)] = {
+            "daq_channel_static_values": [],
+            "sequence_fname": seq_loc,
+            "iterations": iterations,
+            "mot_reload": mot_reload,
+            "modulation_frequencies": freqs,
+        }
+
         i += 1
-    
+
     config.write()
-    print('Done')
-    
-def __copy_scan_seq_params(channels_to_copy = [17],
-                           seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction',
-                           base_seq_fname = r'CavLock_90'):
-  
-  
+    print("Done")
+
+
+def __copy_scan_seq_params(
+    channels_to_copy=[17],
+    seq_folder=r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction",
+    base_seq_fname=r"CavLock_90",
+):
+
     base_seq_reader = SequenceReader(os.path.join(seq_folder, base_seq_fname))
-    
+
     seq = base_seq_reader.loadSequence()
-    
+
     ch_settings = {}
     for ch in channels_to_copy:
-        ch_settings[ch] =  (seq.get_tV_pairs(ch), seq.get_V_intervalStyles(ch))
-      
+        ch_settings[ch] = (seq.get_tV_pairs(ch), seq.get_V_intervalStyles(ch))
+
     from os import listdir
     from os.path import isfile, join
-     
+
     for fname in [join(seq_folder, f) for f in listdir(seq_folder) if isfile(join(seq_folder, f))]:
         print(fname)
         seq_reader = SequenceReader(fname)
         seq = seq_reader.loadSequence()
-        
-        for ch in channels_to_copy: 
+
+        for ch in channels_to_copy:
             seq.updateChannel(ch, *ch_settings[ch])
-         
-        sequence_channel_labels={}
+
+        sequence_channel_labels = {}
         for chNum in seq.getChannelNums():
-            sequence_channel_labels[chNum] = 'Unconfigured channel'
-         
+            sequence_channel_labels[chNum] = "Unconfigured channel"
+
         seq_writer = SequenceWriter(fname)
-        seq_writer.save(seq,
-                        sequence_channel_labels,
-                        seq_reader.get_global_timings(),
-                        seq_reader.get_user_notes())
-    
-    
-    
-    
+        seq_writer.save(
+            seq,
+            sequence_channel_labels,
+            seq_reader.get_global_timings(),
+            seq_reader.get_user_notes(),
+        )
+
+
 if __name__ == "__main__":
     pass
     _makeSequenceConfig()
-    #_makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(87,91.1,0.2), cav_daq_channel = 10, iterations=150, mot_reload = 1000*10**3)
+    # _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(87,91.1,0.2), cav_daq_channel = 10, iterations=150, mot_reload = 1000*10**3)
 
-    '''
+    #     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
+
+    #     _makeAbsorbtionImagingConfig()
+    #     _makeSequenceConfig()
+    #     _makePhotonProductionConfig()
+    #     _makeExperimentalAutomationConfig()
+    #     e = ExperimentalAutomationReader(os.getcwd() + '/configs/experimental automation/defaultExperimentalAutomationConfig')
+    #     e.get_experimental_automation_configuration()
+    #
+
+    #     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(90.25,100.24,1))
+    # #     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=[x for x in np.arange(92.75,100,0.5) if x not in (92.75, 93.25,97.75,98.25,98.75,99.25,99.75,93.75,94.25,94.75)])
+    #
+    #
+    #     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
+
+    #
+    #     _makeExperimentalAutomationConfig_xBiasScan()
+    #     freqs=np.arange(59.5,90.5,1.75)*10**6
+    #     freqs=np.array([73.25,74.25,75.25,76.25,77.25])*10**6
+
+    """
     x bias scan
-    '''
-    #_makeExperimentalAutomationConfig_xBiasScan(x_biases=[3,4.5,6], iterations=500, mot_reload=400*10**3, n_repeat=2)
-    
-    '''
-    y bias scan
-    '''
-    #_makeExperimentalAutomationConfig_yBiasScan(y_biases=[0,1,2,3,4,5], iterations=333, mot_reload=500*10**3, n_repeat=3)
-    
-    '''
-    z bias scan
-    '''
-    #_makeExperimentalAutomationConfig_zBiasScan(z_biases=[3.1,3.2,3.3,3.4,3.5], iterations=333, mot_reload=500*10**3, n_repeat=3)
+    """
+    #     x_biases = [3,4.5,6]
+    #     _makeExperimentalAutomationConfig_xBiasScan(x_biases, iterations=500, mot_reload=400*10**3, n_repeat=2)
 
-    '''
+    """
+    y bias scan
+    """
+    #     y_biases = [0,1,2,3,4,5]
+    #     y_biases = [3.5,3.75,4.25,4.5]
+    #     _makeExperimentalAutomationConfig_yBiasScan(y_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
+    #
+    #     __copy_scan_seq_params(channels_to_copy=[10,21],
+    #                            seq_folder=r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F0 line\y bias scan',
+    #                            base_seq_fname=r'0A_yBias')
+
+    """
+    z bias scan
+    """
+    #     z_biases = [3.1,3.2,3.3,3.4,3.5]
+    #     _makeExperimentalAutomationConfig_zBiasScan(z_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
+
+    """
     driving freq scan
-    '''
-    #_makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
-     
-    
-    print('Done')
+    """
+    #     freqs=np.linspace(72.25,78.25,7)*10**6
+    # #     freqs=np.linspace(70.25,80.25,5)*10**6
+    #     _makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
+
+    print("Done")
