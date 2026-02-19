@@ -30,18 +30,18 @@ class ToolTip(object):
         x = x + self.widget.winfo_rootx() + 27
         y = y + cy + self.widget.winfo_rooty() +27
         self.tipwindow = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(1)
+        tw.wm_overrideredirect(True)
         tw.wm_geometry("+%d+%d" % (x, y))
         try:
             # For Mac OS
             tw.tk.call("::tk::unsupported::MacWindowStyle",
-                       "style", tw._w,
+                       "style", tw._w,  # type: ignore[attr-defined]
                        "help", "noActivates")
         except tk.TclError:
             pass
         label = tk.Label(tw, text=self.text, justify=tk.LEFT,
                       background="#ffffe0", relief=tk.SOLID, borderwidth=1,
-                      font=("tahoma", "8", "normal"))
+                      font=("tahoma", 8, "normal"))
         label.pack(ipadx=1)
 
     def hidetip(self):

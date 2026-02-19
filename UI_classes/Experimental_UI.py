@@ -1877,8 +1877,8 @@ class Photon_production_live_UI(tk.Toplevel):
 #         self.completed_iterations_entry.insert(0, n_iters)
 #         self.completed_iterations_entry.configure(state=tk.DISABLED)
       
-        self.count_rate_plot.update([self.data_hander.count_rate], n_iters)
-        self.stirap_hist_plot.update(self.data_hander.hist_stirap)
+        self.count_rate_plot.update_plot([self.data_hander.count_rate], n_iters)
+        self.stirap_hist_plot.update_plot(self.data_hander.hist_stirap)
          
         if focussed_wid != None: focussed_wid.focus_set()
         
@@ -2129,7 +2129,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         x_scrollbar.config(command=images_canvas.xview)
 
         i = 0
-        images_canvas._image_cache = []
+        images_canvas._image_cache = []  # type: ignore[attr-defined]
         canvas_img_items = []
         for img_arr, label in sorted(zip(img_arrs, labels),
                                       key=lambda x: int(re.findall(r'\d+', str(x[1]))[-1])):
@@ -2138,7 +2138,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
             
             img = ImageTk.PhotoImage(Image.fromarray(img_arr).resize(img_dims))
             canvas_img_items.append(images_canvas.create_image(x_coord,y_coord,anchor=tk.S, image=img, tags=label))
-            images_canvas._image_cache.append(img)  # avoid garbage collection
+            images_canvas._image_cache.append(img)  # type: ignore[attr-defined]  # avoid garbage collection
             
             images_canvas.create_text(x_coord,y_coord,anchor=tk.N, text=label)
             
@@ -2235,10 +2235,10 @@ class Stirap_hist_plot_live(tk.LabelFrame):
 
 #         self.fig.canvas.draw()   
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.show()
+        self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-    def update(self, hist_values):
+    def update_plot(self, hist_values):
         '''Each plot with new data.'''
         # TODO: speed this up - something is leaking into memory, can we delete the whole
         # rect container before re-plotting? Or Animate the graph?
@@ -2290,10 +2290,10 @@ class Count_rate_plot_live(tk.LabelFrame):
         
 #         self.fig.canvas.draw()   
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.show()
+        self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-    def update(self, lines_data, n_iters):
+    def update_plot(self, lines_data, n_iters):
         '''Each plot with new data.'''
         # TODO: speed this up
         x_data = range(n_iters+1)
@@ -2311,7 +2311,7 @@ class Count_rate_plot_live(tk.LabelFrame):
             else:
                 self.n_iters_update_counter+=1
             try:
-                self.canvas.show()
+                self.canvas.draw()
             except RuntimeError as err:
                 # Sometimes data gets out of sync and the plot fails.
                 # Just print a message and move on - hopefully it will re-sync!
