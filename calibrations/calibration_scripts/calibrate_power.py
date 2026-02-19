@@ -17,7 +17,6 @@ sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 )  # add parent directory to path
 
-from instruments.WX218x.WX218x_awg import Channel
 
 import lab_control_functions.calibration_functions as calibrate
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
@@ -108,16 +107,11 @@ def default_calib(calib_tuples):
         target_power_d2 *= 10 ** (-3)  # to W
         print(f"Target Power for desired Rabi Freq: {target_power_d2 * 1e3} mW")
 
-        awg_channels_dict = {
-            1: Channel.CHANNEL_1,
-            2: Channel.CHANNEL_2,
-            3: Channel.CHANNEL_3,
-            4: Channel.CHANNEL_4,
-        }
+
         amplitude_cal, diff, power, results_dict = calibrate.finding_amplitude_from_power(
             [freq],
             target_power_d2,
-            awg_channels_dict[channel],
+            channel,
             n_steps=20,
             repeats=300,
             delay=0.5,

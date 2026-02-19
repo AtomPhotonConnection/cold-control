@@ -20,8 +20,8 @@ from instruments.ThorlabsPM100 import ThorlabsPM100
 """
 Load required classes for awg driven AOM calibration
 """
-from instruments.WX218x.WX218x_awg import Channel, WX218x_awg
-from instruments.WX218x.WX218x_DLL import WX218x_OperationMode, WX218x_OutputMode
+from instruments.WX218x import awg_manager
+from instruments.WX218x.awg_manager import AWGManager
 
 from classes.DAQ import DAQ_controller
 
@@ -134,14 +134,14 @@ def awg_driven_aom_response(
     # Open and configure the AWG
     sample_rate = 1.25 * 10**9
     print("Creating AWG instance")
-    awg = WX218x_awg()
+    awg = awg_manager.AWGManager()
     print("Connecting...")
-    awg.open(reset=False)
 
-    awg.configure_operation_mode(awg_channel, WX218x_OperationMode.CONTINUOUS)
-    awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
+    for ch in [1,2,3,4]:
+        awg.disable_channel(ch)
+
     awg.configure_sample_rate(sample_rate)
-    awg.configure_arb_gain(awg_channel, 2)
+    awg.set_continuous(True)
 
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
@@ -156,8 +156,7 @@ def awg_driven_aom_response(
         for i, level in enumerate(levelData):
             print("Level:", level)
 
-            wf = testWaveform(sample_rate, level=level, mod_freq=freq * 10**6)
-            awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
+            awg.play_sine_wave(awg_channel, frequency=freq, amplitude=level)
 
             awg.enable_channel(awg_channel)
             time.sleep(delay)
@@ -556,17 +555,17 @@ def finding_amplitude_from_power(
             # print("Compensating for flip mirror: ", a, b)
 
             return a * power + b
+    else:
+        compensate_for_flip = lambda power: power
 
     sample_rate = 1.25 * 10**9
     print("Creating AWG instance")
-    awg = WX218x_awg()
+    awg = awg_manager.AWGManager()
     print("Connecting...")
-    awg.open(reset=False)
+    for i in [1,2,3,4]:
+        awg.disable_channel(i)
 
-    awg.configure_operation_mode(awg_channel, WX218x_OperationMode.CONTINUOUS)
-    awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
-    awg.configure_arb_gain(awg_channel, 2)
 
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
@@ -587,10 +586,10 @@ def finding_amplitude_from_power(
         print("Running through awg levels...might take a while...")
 
         for i, level in enumerate(levelData):
-            wf = testWaveform(sample_rate, level=level, mod_freq=freq * 10**6)
-            awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
-
+            awg.play_sine_wave(awg_channel, frequency=freq, amplitude=level)
+            awg.set_continuous(True)
             awg.enable_channel(awg_channel)
+
             time.sleep(delay)
             read_value = float(power_meter.read)  # type: ignore
             if flip_mirror:
