@@ -21,19 +21,12 @@ import time
 import numpy as np
 import threading
 from PIL import Image
-import csv
-import glob
-import re
 import collections.abc
 import pandas as pd
 import _tkinter
 from typing import List, Tuple, Dict, Any, Optional, TypeVar, Generic, cast
-import pyvisa
-from configobj import ConfigObj
-from numpy import trapz
 from datetime import datetime
 import matplotlib.pyplot as plt
-import re, ast
 
 # from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 # from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \

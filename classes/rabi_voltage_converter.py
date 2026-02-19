@@ -34,8 +34,8 @@ class RabiFreqVoltageConverter:
         print(f"Loaded calibration for: {'/'.join(parent_two)}")
 
         # Extract amplitude (x) and Rabi frequency (y)
-        self.x = self.df['amplitude_cal'].values
-        self.y = self.df['rabi_measured_no_ang'].values
+        self.x = np.asarray(self.df['amplitude_cal'].values, dtype=float)
+        self.y = np.asarray(self.df['rabi_measured_no_ang'].values, dtype=float)
         self.waist_size = self.df['waist_size'].values[0]
         self.cg = float(self.df['cg_ang'].values[0])
 

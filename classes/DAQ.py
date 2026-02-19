@@ -11,9 +11,7 @@ from ctypes import c_ubyte, c_short, c_ushort, c_long, c_ulong, c_float, c_doubl
       POINTER, byref, WinDLL
 import re
 from mock.mock import MagicMock
-import time
 import pandas as pd
-import os
 
 # Windows API data types
 BOOLEAN = c_ubyte

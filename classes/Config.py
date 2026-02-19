@@ -3,17 +3,14 @@ Created on 22 Apr 2016
 
 @author: Tom Barrett, Jan Ole Ernst
 '''
-from copy import deepcopy
 from configobj import ConfigObj
 import time
 import os
 import warnings
-from importlib_metadata import metadata
 from mock import patch
 import numpy as np
-import glob
 import re, ast
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional
 
 from classes.DAQ import DAQ_controller, DAQ_card, DAQ_channel, DAQ_dio, OUTPUT_LINE,\
       INPUT_LINE, Channel_P1A, Channel_P1B, Channel_P1C, Channel_P1CL, Channel_P1CH
