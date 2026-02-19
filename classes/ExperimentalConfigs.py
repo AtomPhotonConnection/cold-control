@@ -8,6 +8,7 @@ which will run the experiment with the specified configuration.
 created: 2025-05-30
 
 """
+
 from __future__ import annotations
 
 import csv
@@ -17,7 +18,7 @@ import shutil
 from copy import deepcopy
 from datetime import datetime
 from itertools import product
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
@@ -26,8 +27,9 @@ from classes.Sequence import Sequence
 
 
 def toBool(string):
-    GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
+    GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
+
 
 def make_property(attr_name):
     return property(
@@ -36,11 +38,13 @@ def make_property(attr_name):
         fdel=lambda self: delattr(self, attr_name),
     )
 
+
 def sanitize_filename(name: str) -> str:
     # Remove extension
     name = os.path.splitext(name)[0]
     # Remove all non-alphanumeric or underscore characters
-    return re.sub(r'[^A-Za-z0-9_]+', '_', name)
+    return re.sub(r"[^A-Za-z0-9_]+", "_", name)
+
 
 class ExperimentSessionConfig:
     """
@@ -54,12 +58,15 @@ class ExperimentSessionConfig:
 
     Intended to coordinate and control the behavior of a full session involving multiple experiments.
     """
-    def __init__(self,
-                 save_location,
-                 summary_fname,
-                 automated_experiment_configurations,
-                 daq_channel_update_steps,
-                 daq_channel_update_delay):
+
+    def __init__(
+        self,
+        save_location,
+        summary_fname,
+        automated_experiment_configurations,
+        daq_channel_update_steps,
+        daq_channel_update_delay,
+    ):
 
         self._save_location = save_location
         self._summary_fname = summary_fname
@@ -67,30 +74,33 @@ class ExperimentSessionConfig:
         self._daq_channel_update_steps = daq_channel_update_steps
         self._daq_channel_update_delay = daq_channel_update_delay
 
+    summary_fname = make_property("_summary_fname")
+    save_location = make_property("_save_location")
+    automated_experiment_configurations = make_property("_automated_experiment_configurations")
+    daq_channel_update_steps = make_property("_daq_channel_update_steps")
+    daq_channel_update_delay = make_property("_daq_channel_update_delay")
 
-    summary_fname = make_property('_summary_fname')
-    save_location = make_property('_save_location')
-    automated_experiment_configurations = make_property('_automated_experiment_configurations')
-    daq_channel_update_steps = make_property('_daq_channel_update_steps')
-    daq_channel_update_delay = make_property('_daq_channel_update_delay')
 
 class GenericConfiguration:
     """
     GenericConfiguration is a placeholder for any configuration that doesn't fit into the other categories.
     This class is not intended to be used directly but serves as a base for other configuration classes.
     """
-    def __init__(self,
-                 save_location,
-                 mot_reload,
-                 iterations,):
+
+    def __init__(
+        self,
+        save_location,
+        mot_reload,
+        iterations,
+    ):
 
         self._save_location = save_location
-        self._mot_reload = mot_reload# in milliseconds
+        self._mot_reload = mot_reload  # in milliseconds
         self._iterations = iterations
 
-    save_location = make_property('_save_location')
-    mot_reload = make_property('_mot_reload')
-    iterations = make_property('_iterations')
+    save_location = make_property("_save_location")
+    mot_reload = make_property("_mot_reload")
+    iterations = make_property("_iterations")
 
     def set_mot_reload(self, value):
         """Sets the value of the MOT reload time in milliseconds."""
@@ -103,9 +113,9 @@ class GenericConfiguration:
 class MotFluoresceConfiguration(GenericConfiguration):
     """
     Configuration for a MOT fluorescence experiment. More details can be found in the MotFluoresceExperiment class.
-    
-    The data used to configure the experiment should be loaded from a configuration file with (currently) the 
-    "ExperimentConfigReader" class and the get_mot_fluoresce_config method. This class must be passed to the 
+
+    The data used to configure the experiment should be loaded from a configuration file with (currently) the
+    "ExperimentConfigReader" class and the get_mot_fluoresce_config method. This class must be passed to the
     MotFluoresceExperiment class to run the experiment.
 
     inputs:
@@ -118,16 +128,18 @@ class MotFluoresceConfiguration(GenericConfiguration):
      - scope_dict: Dictionary containing scope configuration parameters (if use_scope is True)
     """
 
-    def __init__(self,
-                 save_location,
-                 mot_reload,
-                 iterations,
-                 use_cam,
-                 use_scope,
-                 use_awg,
-                 awg_dict: Dict|None = None,
-                 cam_dict: Dict|None = None,
-                 scope_dict: Dict|None = None):
+    def __init__(
+        self,
+        save_location,
+        mot_reload,
+        iterations,
+        use_cam,
+        use_scope,
+        use_awg,
+        awg_dict: dict | None = None,
+        cam_dict: dict | None = None,
+        scope_dict: dict | None = None,
+    ):
         super().__init__(save_location, mot_reload, iterations)
 
         self.use_scope = use_scope
@@ -167,15 +179,20 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
 
 class MotFluoresceConfigurationSweep:
-
-    def __init__(self, base_config: MotFluoresceConfiguration, base_sequence: Sequence,
-                 sweep_type: str, num_shots:int, sweep_params: Dict[Any, Any]):
+    def __init__(
+        self,
+        base_config: MotFluoresceConfiguration,
+        base_sequence: Sequence,
+        sweep_type: str,
+        num_shots: int,
+        sweep_params: dict[Any, Any],
+    ):
 
         self.base_config = base_config
         self.base_sequence = base_sequence
         self.sweep_type = sweep_type
         self.sweep_params = sweep_params
-        #print(self.sweep_params)
+        # print(self.sweep_params)
         self.num_shots = num_shots
         now = datetime.now()
         self.current_date = now.strftime("%Y-%m-%d")
@@ -183,8 +200,8 @@ class MotFluoresceConfigurationSweep:
         print(f"[DEBUG] date: {self.current_date}")
         print(f"[DEBUG] time: {self.current_time}")
 
-        self.configs:List[MotFluoresceConfiguration] = []
-        self.sequences:List[Sequence] = []
+        self.configs: list[MotFluoresceConfiguration] = []
+        self.sequences: list[Sequence] = []
         print("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
@@ -194,24 +211,26 @@ class MotFluoresceConfigurationSweep:
             waveforms_paths = self.sweep_params["waveforms"]
             calib_paths = self.sweep_params["calibration_paths"]
             all_sweeps = self.sweep_params["sweeps"]
-            self.__configure_awg_sweep(wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
-                                       calib_paths, all_sweeps)
+            self.__configure_awg_sweep(
+                wave_idxs, rabi_freqs, mod_freqs, waveforms_paths, calib_paths, all_sweeps
+            )
 
         elif sweep_type == "mot_imaging":
             # all these parameters need to be extracted from the config file
-            _beam_powers: List[float] = self.sweep_params["beam_powers"]
-            _beam_frequencies: List[float] = self.sweep_params["beam_frequencies"]
-            _pulse_lengths: List[int] = self.sweep_params["pulse_lengths"]
-            _pulse_times: List[int] = self.sweep_params["pulse_times"]
-            self.__configure_imaging_sweep(_beam_powers, _beam_frequencies, _pulse_lengths,
-                                            _pulse_times)
+            _beam_powers: list[float] = self.sweep_params["beam_powers"]
+            _beam_frequencies: list[float] = self.sweep_params["beam_frequencies"]
+            _pulse_lengths: list[int] = self.sweep_params["pulse_lengths"]
+            _pulse_times: list[int] = self.sweep_params["pulse_times"]
+            self.__configure_imaging_sweep(
+                _beam_powers, _beam_frequencies, _pulse_lengths, _pulse_times
+            )
 
         else:
             raise ValueError("Sweep type not supported")
 
-        assert len(self.configs) == len(self.sequences), \
-        "configs and sequences must have the same length"
-
+        assert len(self.configs) == len(self.sequences), (
+            "configs and sequences must have the same length"
+        )
 
     def __iter__(self):
         """
@@ -224,12 +243,12 @@ class MotFluoresceConfigurationSweep:
     def __len__(self):
         return len(self.configs)
 
-
-    def __configure_awg_sweep(self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths,
-                              calib_paths, all_sweeps):
+    def __configure_awg_sweep(
+        self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths, calib_paths, all_sweeps
+    ):
         """
         Creates the list of MOTFluoresceConfiguration objects and Sequence objects for each
-        of the different experiments to be run by the sweep. This function changes the 
+        of the different experiments to be run by the sweep. This function changes the
         MOTFluoresceConfiguration objects so that the AWG configs are different, allowing
         for experiments with different pulse shapes.
         """
@@ -250,7 +269,6 @@ class MotFluoresceConfigurationSweep:
 
                 new_paths = {}
                 for j, idx in enumerate(wave_idxs):
-
                     if waves[j] == "":
                         # This means the pulse shouldn't be changed
                         new_paths[idx] = waves[j]  # No rescaling needed
@@ -259,11 +277,14 @@ class MotFluoresceConfigurationSweep:
 
                         if not os.path.exists(pulse_path):
                             os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
-                            calib_path = os.path.join(calibs[j], f"{freqs[j]/1e6:.0f}MHz\\rabi_data.csv")
+                            calib_path = os.path.join(
+                                calibs[j], f"{freqs[j] / 1e6:.0f}MHz\\rabi_data.csv"
+                            )
                             rabi_converter = RabiFreqVoltageConverter(calib_path)
 
-                            rabi_converter.rescale_csv(rabis[j]*2*np.pi, waves[j],
-                                                        pulse_path, normalised=False)
+                            rabi_converter.rescale_csv(
+                                rabis[j] * 2 * np.pi, waves[j], pulse_path, normalised=False
+                            )
 
                         new_paths[idx] = pulse_path
 
@@ -274,8 +295,8 @@ class MotFluoresceConfigurationSweep:
                 # Modify waveform and frequency settings
                 modified_sequence_config = self.modify_awg_sequence_config(
                     base_config=new_config.awg_config,
-                    waveform_csvs = {idx: new_paths[idx] for idx in wave_idxs},
-                    mod_freqs={idx: freqs[j] for j, idx in enumerate(wave_idxs)}
+                    waveform_csvs={idx: new_paths[idx] for idx in wave_idxs},
+                    mod_freqs={idx: freqs[j] for j, idx in enumerate(wave_idxs)},
                 )
 
                 # Update the new config with modified sequence
@@ -286,11 +307,13 @@ class MotFluoresceConfigurationSweep:
                     self.current_date,
                     self.current_time,
                     sweep_title,
-                    f"shot{shot:03d}"
+                    f"shot{shot:03d}",
                 )
 
                 if not os.path.exists(self.base_config.save_location):
-                    raise FileNotFoundError(f"Base save location does not exist: {self.base_config.save_location}")
+                    raise FileNotFoundError(
+                        f"Base save location does not exist: {self.base_config.save_location}"
+                    )
                 # Ensure the directory exists
                 save_dir = os.path.dirname(new_config.save_location)
                 os.makedirs(save_dir, exist_ok=True)
@@ -311,8 +334,9 @@ class MotFluoresceConfigurationSweep:
         print(f"Sweeping over the following parameters: {to_sweep}")
 
         for i in range(self.num_shots):
-            for power, freq, length, time in product(beam_powers, beam_frequencies,\
-                                                     pulse_lengths, pulse_times):
+            for power, freq, length, time in product(
+                beam_powers, beam_frequencies, pulse_lengths, pulse_times
+            ):
                 # Clone and modify the base sequence and config
                 new_config = deepcopy(self.base_config)
                 new_sequence = deepcopy(self.base_sequence)
@@ -334,21 +358,29 @@ class MotFluoresceConfigurationSweep:
                     self.base_config.save_location,
                     self.current_date,
                     self.current_time,
-                    file_text.rstrip('_'),
-                    f"shot{i}"
+                    file_text.rstrip("_"),
+                    f"shot{i}",
                 )
 
                 # Modifies the sequence
-                freq_ch = 2 # These values shouldn't be hardcoded
+                freq_ch = 2  # These values shouldn't be hardcoded
                 power_ch = 6
-                new_sequence.updateChannel(freq_ch, [(0, freq),], [0,])
+                new_sequence.updateChannel(
+                    freq_ch,
+                    [
+                        (0, freq),
+                    ],
+                    [
+                        0,
+                    ],
+                )
                 tv_pairs = list(new_sequence.get_tV_pairs(power_ch))
                 print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
-                #HACK to change the correct power value and pulse length
-                img_start_tv = tv_pairs[2]# This is a tuple representing a time voltage pair
+                # HACK to change the correct power value and pulse length
+                img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
                 img_end_tv = tv_pairs[3]
                 new_start_tv = (time, power)
-                new_end_tv = (time+length, img_end_tv[1])
+                new_end_tv = (time + length, img_end_tv[1])
                 tv_pairs[2] = new_start_tv
                 tv_pairs[3] = new_end_tv
                 print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
@@ -357,7 +389,9 @@ class MotFluoresceConfigurationSweep:
 
                 # Ensure directory exists
                 if not os.path.exists(self.base_config.save_location):
-                    raise FileNotFoundError(f"Base save location does not exist: {self.base_config.save_location}")
+                    raise FileNotFoundError(
+                        f"Base save location does not exist: {self.base_config.save_location}"
+                    )
                 save_dir = os.path.dirname(new_config.save_location)
                 os.makedirs(save_dir, exist_ok=True)
 
@@ -365,14 +399,10 @@ class MotFluoresceConfigurationSweep:
                 self.configs.append(new_config)
                 self.sequences.append(new_sequence)
 
-
-
-
-
     @staticmethod
-    def modify_awg_sequence_config(*, base_config: AwgConfiguration,
-                                waveform_csvs: Dict[int, str],
-                                mod_freqs: Dict[int, float]) -> AwgConfiguration:
+    def modify_awg_sequence_config(
+        *, base_config: AwgConfiguration, waveform_csvs: dict[int, str], mod_freqs: dict[int, float]
+    ) -> AwgConfiguration:
         new_config = deepcopy(base_config)
 
         for idx, wf in enumerate(new_config.waveforms):
@@ -383,8 +413,7 @@ class MotFluoresceConfigurationSweep:
 
         return new_config
 
-
-    #this can be used as follows:
+    # this can be used as follows:
     # base_config = MotFluoresceConfiguration(...)
 
     # waveform_csvs_ch1 = ['waveform1.csv', 'waveform2.csv']
@@ -409,17 +438,17 @@ class AWGSequenceConfiguration:
     - Configuration objects for the AWG and TDC systems
     """
 
-    def __init__(self,
-                 waveform_sequence,
-                 waveforms,
-                 interleave_waveforms,
-                 waveform_stitch_delays,
-                 awg_configuration,
-                 ):
-
+    def __init__(
+        self,
+        waveform_sequence,
+        waveforms,
+        interleave_waveforms,
+        waveform_stitch_delays,
+        awg_configuration,
+    ):
 
         self._waveform_sequence = waveform_sequence
-        self.waveforms: List[Waveform] = waveforms
+        self.waveforms: list[Waveform] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
@@ -429,15 +458,18 @@ class AWGSequenceConfiguration:
     @property
     def waveform_sequence(self):
         return self._waveform_sequence
+
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print('Setting waveform sequence to', value, [type(x) for x in value])
+        print("Setting waveform sequence to", value, [type(x) for x in value])
         self._waveform_sequence = value
+
     @waveform_sequence.deleter
     def waveform_sequence(self):
         del self._waveform_sequence
 
-    awg_configuration = make_property('_awg_configuration')
+    awg_configuration = make_property("_awg_configuration")
+
 
 class PhotonProductionConfiguration(GenericConfiguration):
     """
@@ -452,48 +484,51 @@ class PhotonProductionConfiguration(GenericConfiguration):
     - Configuration objects for the AWG and TDC systems
     """
 
-    def __init__(self,
-                 save_location,
-                 mot_reload,
-                 iterations,
-                 waveform_sequence,
-                 waveforms,
-                 interleave_waveforms,
-                 waveform_stitch_delays,
-                 awg_configuration,
-                 tdc_configuration):
+    def __init__(
+        self,
+        save_location,
+        mot_reload,
+        iterations,
+        waveform_sequence,
+        waveforms,
+        interleave_waveforms,
+        waveform_stitch_delays,
+        awg_configuration,
+        tdc_configuration,
+    ):
 
         super().__init__(save_location, mot_reload, iterations)
 
         self._waveform_sequence = waveform_sequence
-        self.waveforms: List[Waveform] = waveforms
+        self.waveforms: list[Waveform] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
         self._awg_configuration: AwgConfiguration = awg_configuration
         self._tdc_configuration: TdcConfiguration = tdc_configuration
 
-
     # --- waveform_sequence ---
     @property
     def waveform_sequence(self):
         return self._waveform_sequence
+
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print('Setting waveform sequence to', value, [type(x) for x in value])
+        print("Setting waveform sequence to", value, [type(x) for x in value])
         self._waveform_sequence = value
+
     @waveform_sequence.deleter
     def waveform_sequence(self):
         del self._waveform_sequence
 
+    awg_configuration = make_property("_awg_configuration")
+    tdc_configuration = make_property("_tdc_configuration")
 
-    awg_configuration = make_property('_awg_configuration')
-    tdc_configuration = make_property('_tdc_configuration')
 
 class AbsorbtionImagingConfiguration(GenericConfiguration):
-    '''
+    """
     This object stores and presents for editing the settings for absorbtion imaging experiments.
-        
+
         scan_abs_img_freq - TODO
         abs_img_freq_ch - TODO
         abs_img_freqs - TODO
@@ -506,7 +541,7 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
         cam_gain - The gain setting for the camera when taking the picture.
         cam_exposure - How long the camera exposure should be.  Passes as an integer x which corresponds to an exposure time of 1/x seconds.
         save_location - The folder to save images to as 'save_location/{date}/{time}/'
-        save_raw_images - Boolean determining whether the raw images (i.e. processed absorbtion images and all background contributing to 
+        save_raw_images - Boolean determining whether the raw images (i.e. processed absorbtion images and all background contributing to
                           the background average) are saved.
         save_processed_images - Boolean determining whether the processed images (i.e. absorbtion images after background subtraction and
                                 average backgrounds) are automatically saved.
@@ -514,20 +549,33 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
                                   to allow the user to review the images, add notes and decide whether to save or not. Note that since the
                                   user is given the chance to review the processed images, the option to automatically save them is disabled
                                   when review_processed_images=True.
-    '''
+    """
 
-    def __init__(self,
-                 scan_abs_img_freq, abs_img_freq_ch, abs_img_freqs,
-                 camera_trig_ch, imag_power_ch,
-                 camera_trig_levs, imag_power_levs,
-                 camera_pulse_width, imag_pulse_width,
-                 t_imgs,
-                 mot_reload,
-                 n_backgrounds, bkg_off_channels,
-                 cam_gain, cam_exposure,
-                 cam_gain_lims, cam_exposure_lims,
-                 save_location,
-                 save_raw_images, save_processed_images, review_processed_images, iterations=1):
+    def __init__(
+        self,
+        scan_abs_img_freq,
+        abs_img_freq_ch,
+        abs_img_freqs,
+        camera_trig_ch,
+        imag_power_ch,
+        camera_trig_levs,
+        imag_power_levs,
+        camera_pulse_width,
+        imag_pulse_width,
+        t_imgs,
+        mot_reload,
+        n_backgrounds,
+        bkg_off_channels,
+        cam_gain,
+        cam_exposure,
+        cam_gain_lims,
+        cam_exposure_lims,
+        save_location,
+        save_raw_images,
+        save_processed_images,
+        review_processed_images,
+        iterations=1,
+    ):
         super().__init__(save_location, mot_reload, iterations)
 
         self.scan_abs_img_freq = scan_abs_img_freq
@@ -553,7 +601,6 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
         self.review_processed_images = review_processed_images
 
 
-
 class SingleExperimentConfig(GenericConfiguration):
     """
     SingleExperimentConfig defines the configuration for a single automated experiment run.
@@ -568,14 +615,17 @@ class SingleExperimentConfig(GenericConfiguration):
 
     Intended to be used as part of a larger experiment session, or independently for individual runs.
     """
-    def __init__(self,
-                 daq_channel_static_values,
-                 sequence_fname,
-                 sequence,
-                 iterations,
-                 mot_reload,
-                 modulation_frequencies,
-                 save_location=None):
+
+    def __init__(
+        self,
+        daq_channel_static_values,
+        sequence_fname,
+        sequence,
+        iterations,
+        mot_reload,
+        modulation_frequencies,
+        save_location=None,
+    ):
 
         self._daq_channel_static_values = daq_channel_static_values
         self._sequence_fname = sequence_fname
@@ -583,28 +633,26 @@ class SingleExperimentConfig(GenericConfiguration):
         self._modulation_frequencies = modulation_frequencies
         super().__init__(save_location, mot_reload, iterations)
 
-    daq_channel_static_values = make_property('_daq_channel_static_values')
-    sequence_fname = make_property('_sequence_fname')
-    iterations = make_property('_iterations')
-    mot_reload_time = make_property('_mot_reload_time')
-    sequence = make_property('_sequence')
-    modulation_frequencies = make_property('_modulation_frequencies')
-
-
+    daq_channel_static_values = make_property("_daq_channel_static_values")
+    sequence_fname = make_property("_sequence_fname")
+    iterations = make_property("_iterations")
+    mot_reload_time = make_property("_mot_reload_time")
+    sequence = make_property("_sequence")
+    modulation_frequencies = make_property("_modulation_frequencies")
 
 
 class Waveform:
-    def __init__(self, fname: str, mod_frequency: float, phases: List[Tuple[float, int]]):
+    def __init__(self, fname: str, mod_frequency: float, phases: list[tuple[float, int]]):
         self.__fname = fname
         self.__mod_frequency = mod_frequency
         self.__phases = sorted(phases, key=lambda x: x[1])  # Sort by index
         self.data = self.__load_data()
 
-    def __load_data(self) -> List[float]:
+    def __load_data(self) -> list[float]:
         """Loads waveform data from a CSV file."""
         with open(self.__fname) as csvfile:
-            print('Loading waveform:', self.__fname)
-            reader = csv.reader(csvfile, delimiter=',')
+            print("Loading waveform:", self.__fname)
+            reader = csv.reader(csvfile, delimiter=",")
             data = []
             for row in reader:
                 if len(row) > 1:
@@ -617,8 +665,13 @@ class Waveform:
 
         return data
 
-    def get(self, sample_rate: float, calibration_function=lambda level: level,
-            constant_voltage=False, double_pass=False) -> List[float]:
+    def get(
+        self,
+        sample_rate: float,
+        calibration_function=lambda level: level,
+        constant_voltage=False,
+        double_pass=False,
+    ) -> list[float]:
         """
         Returns the modulated waveform data.
 
@@ -645,8 +698,14 @@ class Waveform:
 
         return mod_data
 
-    def get_marker_data(self, marker_positions=[], marker_levels=(0, 1),
-                        marker_width=50, n_pad_right=0, n_pad_left=0) -> List[int]:
+    def get_marker_data(
+        self,
+        marker_positions=[],
+        marker_levels=(0, 1),
+        marker_width=50,
+        n_pad_right=0,
+        n_pad_left=0,
+    ) -> list[int]:
         """
         Returns a marker waveform.
 
@@ -655,7 +714,7 @@ class Waveform:
         data = np.array([marker_levels[0]] * (n_pad_left + len(self.data) + n_pad_right))
         for pos in marker_positions:
             pos = int(pos)
-            data[pos:pos + int(marker_width)] = marker_levels[1]
+            data[pos : pos + int(marker_width)] = marker_levels[1]
 
         # Fix for high-start issue
         if data[0] == 1:
@@ -663,7 +722,7 @@ class Waveform:
 
         return data.tolist()
 
-    def get_profile(self) -> List[float]:
+    def get_profile(self) -> list[float]:
         """Returns the raw waveform data."""
         return self.data
 
@@ -684,6 +743,7 @@ class Waveform:
     @property
     def fname(self) -> str:
         return self.__fname
+
     @fname.setter
     def fname(self, value: str):
         self.__fname = value
@@ -692,15 +752,17 @@ class Waveform:
     @property
     def mod_frequency(self) -> float:
         return self.__mod_frequency
+
     @mod_frequency.setter
     def mod_frequency(self, value: float):
         self.__mod_frequency = value
 
     @property
-    def phases(self) -> List[Tuple[float, int]]:
+    def phases(self) -> list[tuple[float, int]]:
         return self.__phases
+
     @phases.setter
-    def phases(self, value: List[Tuple[float, int]]):
+    def phases(self, value: list[tuple[float, int]]):
         self.__phases = sorted(value, key=lambda x: x[1])
 
 
@@ -731,17 +793,20 @@ class AwgConfiguration:
             contain a single row of voltage values, one per column.
 
     """
-    def __init__(self,
-                 waveform_sequence:List[List[int]],
-                 waveforms:List[Waveform],
-                 sample_rate: float,
-                 burst_count: int,
-                 waveform_output_channels: List[int],
-                 waveform_output_channel_lags: List[float],
-                 marker_width: int,
-                 waveform_stitch_delays:Optional[List[List[Any]]] = None,
-                 interleave_waveforms: Optional[bool] = None,
-                 marked_channels: Optional[List[int]] = None):
+
+    def __init__(
+        self,
+        waveform_sequence: list[list[int]],
+        waveforms: list[Waveform],
+        sample_rate: float,
+        burst_count: int,
+        waveform_output_channels: list[int],
+        waveform_output_channel_lags: list[float],
+        marker_width: int,
+        waveform_stitch_delays: Optional[list[list[Any]]] = None,
+        interleave_waveforms: Optional[bool] = None,
+        marked_channels: Optional[list[int]] = None,
+    ):
 
         self._waveform_sequence = waveform_sequence
         self.waveforms = waveforms
@@ -756,10 +821,9 @@ class AwgConfiguration:
         self.marked_channels = marked_channels
         self.marker_width = marker_width
 
-
-    sample_rate:property = make_property('_sample_rate')
-    burst_count:property = make_property('_burst_count')
-    waveform_output_channels:property = make_property('_waveform_output_channels')
+    sample_rate: property = make_property("_sample_rate")
+    burst_count: property = make_property("_burst_count")
+    waveform_output_channels: property = make_property("_waveform_output_channels")
 
     def set_burst_count(self, value: int):
         self._burst_count = value
@@ -770,14 +834,15 @@ class AwgConfiguration:
     @property
     def waveform_sequence(self):
         return self._waveform_sequence
+
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print('Setting waveform sequence to', value, [type(x) for x in value])
+        print("Setting waveform sequence to", value, [type(x) for x in value])
         self._waveform_sequence = value
+
     @waveform_sequence.deleter
     def waveform_sequence(self):
         del self._waveform_sequence
-
 
 
 class TdcConfiguration:
@@ -786,17 +851,18 @@ class TdcConfiguration:
     counting events, the marker channel for synchronization, and the timestamp buffer size.
     """
 
-    def __init__(self, counter_channels: List[int], marker_channel: int,
-                 timestamp_buffer_size: int):
+    def __init__(
+        self, counter_channels: list[int], marker_channel: int, timestamp_buffer_size: int
+    ):
         self._counter_channels = counter_channels
         self._marker_channel = marker_channel
         self._timestamp_buffer_size = timestamp_buffer_size
 
-    counter_channels = make_property('_counter_channels')
-    marker_channel = make_property('_marker_channel')
-    timestamp_buffer_size = make_property('_timestamp_buffer_size')
+    counter_channels = make_property("_counter_channels")
+    marker_channel = make_property("_marker_channel")
+    timestamp_buffer_size = make_property("_timestamp_buffer_size")
 
-    def set_counter_channels(self, value: List[int]):
+    def set_counter_channels(self, value: list[int]):
         self._counter_channels = value
 
     def set_marker_channel(self, value: int):

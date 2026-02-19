@@ -1,19 +1,20 @@
-'''
-This module is intended to hold the top profiles for running assorted experiments from 
+"""
+This module is intended to hold the top profiles for running assorted experiments from
 configuration through to data acquisition.
 
 Created on 13 Aug 2016, Refactored on 22 May 2025
 
 @authors: Tom Barrett, Matt King, Jan Ole Ernst and Marina Llano Pineiro
 
-This module contains configuration classes that are used to store the parameters for a 
-particular experiment, usually loaded from a configuration file. It also contains 
+This module contains configuration classes that are used to store the parameters for a
+particular experiment, usually loaded from a configuration file. It also contains
 experiment classes that are used to run the experiments getting the details from the
 configuration classes. The (experimental) configuration classes should inherit from the
 generic configuration class, GenericConfiguration. The experiment classes should inherit
 from the GenericExperiment class.
 
-'''
+"""
+
 import _tkinter
 import collections.abc
 import copy
@@ -22,7 +23,7 @@ import threading
 import time
 from datetime import datetime
 from time import sleep
-from typing import Any, Generic, List, Optional, Tuple, TypeVar, cast
+from typing import Any, Generic, Optional, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -55,8 +56,9 @@ from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
 
 
 def toBool(string):
-    GLOB_TRUE_BOOL_STRINGS = ['true', 't', 'yes', 'y']
+    GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
+
 
 def make_property(attr_name):
     return property(
@@ -65,20 +67,22 @@ def make_property(attr_name):
         fdel=lambda self: delattr(self, attr_name),
     )
 
+
 T = TypeVar("T", bound=GenericConfiguration)
 
+
 class GenericExperiment(Generic[T]):
-    '''
+    """
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
-    '''
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, configuration: T):
-        '''
+    """
+
+    def __init__(self, daq_controller: DAQ_controller, sequence: Sequence, configuration: T):
+        """
         Constructor
-        '''
+        """
         self.daq_controller = daq_controller
         self.sequence = sequence
         self.config: T = configuration
-
 
     def configure(self):
         raise NotImplementedError()
@@ -108,40 +112,45 @@ class GenericExperiment(Generic[T]):
         raise NotImplementedError()
 
     def run_in_thread(self, start_thread=True):
-        '''
+        """
         Run the experiment with the experimental loop in a separate thread.
-        '''
+        """
         # def run_and_close():
         #     self.run()
         #     self.close()
         # the experiment should close itself in run() method, so we don't need to close it here.
 
-        thread = threading.Thread(name='Cold Control Experiment Thread',
-                                  target=self.run)
+        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
 
         if start_thread:
             thread.start()
         return thread
 
+
 class AbsorbtionImagingExperiment(GenericExperiment):
+    shutter_lag = 4.8  # The camera response time to the trigger.  Hard coded as it is a physical camera property.
 
-    shutter_lag = 4.8 #The camera response time to the trigger.  Hard coded as it is a physical camera property.
-
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, absorbtion_imaging_configuration:AbsorbtionImagingConfiguration, ic_imaging_control:IC_ImagingControl):
-        '''
+    def __init__(
+        self,
+        daq_controller: DAQ_controller,
+        sequence: Sequence,
+        absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
+        ic_imaging_control: IC_ImagingControl,
+    ):
+        """
         Runs an absorbtion imaging experiment. Takes a number of parameters, namely:
             daq_controller - The DAQ Controller object for running the daq channels
             sequence - The sequence to run whilst taking the images.  Note that the camera trigger and
                        imaging power channels are overwritten by this experiment and so need not be configured
                        in the original sequence.
             absorbtion_imaging_configuration - An instance of AbsorbtionImagingConfiguration.
-        '''
+        """
 
         super().__init__(daq_controller, sequence, absorbtion_imaging_configuration)
         # the configuration object is called self.config
         assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c:AbsorbtionImagingConfiguration = self.config
-        self.results_ready = False # A flag to determine if the experiment has finished running and the results exist yet
+        c: AbsorbtionImagingConfiguration = self.config
+        self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
         # Use the externally provided IC_ImagingControl instances if one is provided
         if ic_imaging_control != None:
@@ -156,8 +165,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.external_ic_ic_provided = False
 
         if self.sequence.t_step > 100:
-            print('WARNING: Sequence step size is > 100us.  This means the fastest possible imaging flash is longer than recommended.\n',
-                   'Typically the order of 10us flashes are appropriate. Continuing with the sequence anyway...')
+            print(
+                "WARNING: Sequence step size is > 100us.  This means the fastest possible imaging flash is longer than recommended.\n",
+                "Typically the order of 10us flashes are appropriate. Continuing with the sequence anyway...",
+            )
 
         self.save_location = os.path.join(c.save_location, time.strftime("%y-%m-%d/%H-%M-%S"))
         if not os.path.exists(self.save_location):
@@ -165,12 +176,27 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
         # If the trigger levs have not been set, default them to 0 and the maximum permitted value on the camera/imaging channels.
         if c.camera_trig_levs == None:
-            c.camera_trig_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1]) #type:ignore
-                                           for ch in daq_controller.getChannels() if ch.chNum == c.camera_trig_ch))
+            c.camera_trig_levs = (
+                0,
+                next(
+                    ch.chLimits[1]
+                    if not ch.isCalibrated
+                    else ch.calibrationFromVFunc(ch.chLimits[1])  # type:ignore
+                    for ch in daq_controller.getChannels()
+                    if ch.chNum == c.camera_trig_ch
+                ),
+            )
         if c.imag_power_levs == None:
-            c.imag_power_levs = (0, next(ch.chLimits[1] if not ch.isCalibrated else ch.calibrationFromVFunc(ch.chLimits[1]) # type:ignore
-                                           for ch in daq_controller.getChannels() if ch.chNum == c.imag_power_ch))
-
+            c.imag_power_levs = (
+                0,
+                next(
+                    ch.chLimits[1]
+                    if not ch.isCalibrated
+                    else ch.calibrationFromVFunc(ch.chLimits[1])  # type:ignore
+                    for ch in daq_controller.getChannels()
+                    if ch.chNum == c.imag_power_ch
+                ),
+            )
 
         # If the camera trigger pulse is shorter than a single time step in the sequence, make it longer so it actually happens!
         if c.camera_pulse_width < sequence.t_step:
@@ -182,21 +208,24 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
         # Check the absorbtion imaging flash will be on for background images and other sanity checks
         if c.imag_power_ch in c.bkg_off_channels:
-            print('WARNING: You specified no to to have the absorption imaging flash on while taking backgrounds. \n' +\
-                   'This will lead to poor background correction so it will be left on for background regardless.')
+            print(
+                "WARNING: You specified no to to have the absorption imaging flash on while taking backgrounds. \n"
+                + "This will lead to poor background correction so it will be left on for background regardless."
+            )
             c.bkg_off_channels.remove(c.imag_power_ch)
-        if len(c.bkg_off_channels)==0:
-            print('WARNING: No channels are turned off when taking background images - this means the images will be taken \n' +\
-                   'using an identical sequence to the absorption images.  Please consider turning the MOT repump off to remove \n' +\
-                   'atoms from the background images.' )
-
+        if len(c.bkg_off_channels) == 0:
+            print(
+                "WARNING: No channels are turned off when taking background images - this means the images will be taken \n"
+                + "using an identical sequence to the absorption images.  Please consider turning the MOT repump off to remove \n"
+                + "atoms from the background images."
+            )
 
     def run(self, analyse=True, bkg_test=False):
-        '''
+        """
         Run the absorbtion imaging.  This first generates a series of sequences to run, then
         opens and configures the camera, takes the images, saves them and closes the camera.
-        '''
-        print('Running absorbtion imaging experiment')
+        """
+        print("Running absorbtion imaging experiment")
 
         self.__configureExperiment()
 
@@ -204,11 +233,15 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.__configureCamera()
             img_arrs, bkg_arrs = self.__takeImages(save_raw_images=self.config.save_raw_images)
             if bkg_test:
-                self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images\
-                      = None, [np.mean(bkgs, axis=0, dtype=float) for bkgs in bkg_arrs], None#[sum([b.astype(float)/len(bkgs) for b in bkgs]) for bkgs in bkg_arrs]
+                self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images = (
+                    None,
+                    [np.mean(bkgs, axis=0, dtype=float) for bkgs in bkg_arrs],
+                    None,
+                )  # [sum([b.astype(float)/len(bkgs) for b in bkgs]) for bkgs in bkg_arrs]
             elif analyse:
-                self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images\
-                      = self.__analyseImages(img_arrs, bkg_arrs, save_processed_images=self.config.save_processed_images)
+                self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images = self.__analyseImages(
+                    img_arrs, bkg_arrs, save_processed_images=self.config.save_processed_images
+                )
             else:
                 self.corr_img_arrs, self.ave_bkg_arrs = None, None
             self.results_ready = True
@@ -219,90 +252,123 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
         return self.getResults()
 
-
-
     def __configureExperiment(self):
-        '''
+        """
         Perform and configuration that has to occur before the experiment can be safely run.
-        '''
+        """
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
-        self.sequences: List[Sequence] = []
-        self.bkg_sequences: List[Sequence] = []
+        self.sequences: list[Sequence] = []
+        self.bkg_sequences: list[Sequence] = []
         assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c:AbsorbtionImagingConfiguration = self.config
+        c: AbsorbtionImagingConfiguration = self.config
 
         t_lag = AbsorbtionImagingExperiment.shutter_lag
-#         t_offset = AbsorbtionImagingExperiment.flash_offset
-        t_offset = ((1./c.cam_exposure)*10**6)/2
+        #         t_offset = AbsorbtionImagingExperiment.flash_offset
+        t_offset = ((1.0 / c.cam_exposure) * 10**6) / 2
 
         for t in c.t_imgs:
-            if t==0: t += self.sequence.t_step
+            if t == 0:
+                t += self.sequence.t_step
             sequenceCopy = copy.deepcopy(self.sequence)
             # Note the camera triggers on the down slope of the square wave trigger sent to it.
 
-            print(f'cam trig: {np.clip(t-c.camera_pulse_width,0,self.sequence.getLength())}-{t}')
+            print(
+                f"cam trig: {np.clip(t - c.camera_pulse_width, 0, self.sequence.getLength())}-{t}"
+            )
 
-            sequenceCopy.updateChannel(c.camera_trig_ch, [(0,c.camera_trig_levs[0]),
-                                                        (np.clip(t-c.camera_pulse_width,0,self.sequence.getLength()), c.camera_trig_levs[1]),
-                                                        (t,c.camera_trig_levs[0])],
-                                       [IntervalStyle.FLAT]*3)
+            sequenceCopy.updateChannel(
+                c.camera_trig_ch,
+                [
+                    (0, c.camera_trig_levs[0]),
+                    (
+                        np.clip(t - c.camera_pulse_width, 0, self.sequence.getLength()),
+                        c.camera_trig_levs[1],
+                    ),
+                    (t, c.camera_trig_levs[0]),
+                ],
+                [IntervalStyle.FLAT] * 3,
+            )
 
-            print(f'flash: {np.clip(t+t_lag+t_offset, 0, sequenceCopy.getLength()-c.imag_pulse_width)}-{np.clip(t+t_lag+t_offset+c.imag_pulse_width, 0, sequenceCopy.getLength()-sequenceCopy.t_step )}')
-            sequenceCopy.updateChannel(c.imag_power_ch, [(0,c.imag_power_levs[0]),
-                                                        (np.clip(t+t_lag+t_offset, 0, sequenceCopy.getLength()-c.imag_pulse_width) ,c.imag_power_levs[1]),
-                                                        (np.clip(t+t_lag+t_offset+c.imag_pulse_width, 0, sequenceCopy.getLength()-sequenceCopy.t_step),c.imag_power_levs[0])],
-                                       [IntervalStyle.FLAT]*3)
-#             t=1000
-#             sequenceCopy.updateChannel(c.imag_power_ch, [(0,c.imag_power_levs[0]),
-#                                                         ( np.clip( t+t_lag+t_offset, 0, sequenceCopy.getLength()-c.imag_pulse_width) ,c.imag_power_levs[1]),
-#                                                         ( np.clip( t+t_lag+t_offset+c.imag_pulse_width, 0, sequenceCopy.getLength()-sequenceCopy.t_step ),c.imag_power_levs[0])],
-#                                        [IntervalStyle.FLAT]*3)
+            print(
+                f"flash: {np.clip(t + t_lag + t_offset, 0, sequenceCopy.getLength() - c.imag_pulse_width)}-{np.clip(t + t_lag + t_offset + c.imag_pulse_width, 0, sequenceCopy.getLength() - sequenceCopy.t_step)}"
+            )
+            sequenceCopy.updateChannel(
+                c.imag_power_ch,
+                [
+                    (0, c.imag_power_levs[0]),
+                    (
+                        np.clip(
+                            t + t_lag + t_offset, 0, sequenceCopy.getLength() - c.imag_pulse_width
+                        ),
+                        c.imag_power_levs[1],
+                    ),
+                    (
+                        np.clip(
+                            t + t_lag + t_offset + c.imag_pulse_width,
+                            0,
+                            sequenceCopy.getLength() - sequenceCopy.t_step,
+                        ),
+                        c.imag_power_levs[0],
+                    ),
+                ],
+                [IntervalStyle.FLAT] * 3,
+            )
+            #             t=1000
+            #             sequenceCopy.updateChannel(c.imag_power_ch, [(0,c.imag_power_levs[0]),
+            #                                                         ( np.clip( t+t_lag+t_offset, 0, sequenceCopy.getLength()-c.imag_pulse_width) ,c.imag_power_levs[1]),
+            #                                                         ( np.clip( t+t_lag+t_offset+c.imag_pulse_width, 0, sequenceCopy.getLength()-sequenceCopy.t_step ),c.imag_power_levs[0])],
+            #                                        [IntervalStyle.FLAT]*3)
 
             self.sequences.append(sequenceCopy)
 
             sequenceBackground = copy.deepcopy(sequenceCopy)
             # Set any channels that should be off for background images to zero.
             for ch in c.bkg_off_channels:
-                sequenceBackground.updateChannel(ch, [(0,0)],[IntervalStyle.FLAT])
+                sequenceBackground.updateChannel(ch, [(0, 0)], [IntervalStyle.FLAT])
             self.bkg_sequences.append(sequenceBackground)
 
         # Make a list of labels for the sequences - this is what the images will be saved as.
-        self.sequence_labels = list(map(int,c.t_imgs))
+        self.sequence_labels = list(map(int, c.t_imgs))
 
         if c.scan_abs_img_freq:
             new_seqs = []
             new_labs = []
             try:
-                calib_units,_,fromVFunc = self.daq_controller.getChannelCalibrationDict()[c.abs_img_freq_ch]
+                calib_units, _, fromVFunc = self.daq_controller.getChannelCalibrationDict()[
+                    c.abs_img_freq_ch
+                ]
             except KeyError:
-                calib_units,_,fromVFunc = 'V', None, lambda x: x
+                calib_units, _, fromVFunc = "V", None, lambda x: x
 
-            assert fromVFunc is not None, f"Calibration function for channel {c.abs_img_freq_ch} is None. Cannot scan absorption imaging frequency without a valid calibration function."
+            assert fromVFunc is not None, (
+                f"Calibration function for channel {c.abs_img_freq_ch} is None. Cannot scan absorption imaging frequency without a valid calibration function."
+            )
 
             for freq in c.abs_img_freqs:
                 seqs_copy = [copy.deepcopy(seq) for seq in self.sequences]
                 for seq in seqs_copy:
                     seq.updateChannel(c.abs_img_freq_ch, [(0, freq)], [IntervalStyle.FLAT])
                 new_seqs += seqs_copy
-                new_labs += [f"{lab}_{fromVFunc(freq)}{calib_units}" for lab in self.sequence_labels]
+                new_labs += [
+                    f"{lab}_{fromVFunc(freq)}{calib_units}" for lab in self.sequence_labels
+                ]
 
             self.sequences = new_seqs
-            self.bkg_sequences = self.bkg_sequences*len(c.abs_img_freqs)
+            self.bkg_sequences = self.bkg_sequences * len(c.abs_img_freqs)
             self.sequence_labels = new_labs
 
         super().daq_cards_on()
 
-
     def __configureCamera(self):
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam:IC_Camera
-        cam:IC_Camera
+        self.cam: IC_Camera
+        cam: IC_Camera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
-#         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
+        #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
-        print(f'Timeout set to {self.cam_frame_timeout}ms')
-        print('Opened connection to camera {0}', cam_names[0])
+        print(f"Timeout set to {self.cam_frame_timeout}ms")
+        print("Opened connection to camera {0}", cam_names[0])
 
         if not cam.is_open():
             cam.open()
@@ -313,15 +379,15 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         cam.gain.value = self.config.cam_gain
         cam.exposure.value = self.config.cam_exposure
         formats = cam.list_video_formats()
-        cam.set_video_format(formats[0])        # use first available video format
-        cam.enable_continuous_mode(True)        # image in continuous mode
-        cam.start_live(show_display=False)       # start imaging
+        cam.set_video_format(formats[0])  # use first available video format
+        cam.enable_continuous_mode(True)  # image in continuous mode
+        cam.start_live(show_display=False)  # start imaging
 
         # print cam.is_triggerable()
-        cam.enable_trigger(True)              # camera will wait for trigger
+        cam.enable_trigger(True)  # camera will wait for trigger
 
         if not cam.callback_registered:
-            cam.register_frame_ready_callback() # needed to wait for frame ready callback
+            cam.register_frame_ready_callback()  # needed to wait for frame ready callback
 
         # Clear out the memory of any rogue image still in there
         try:
@@ -332,75 +398,88 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         cam.reset_frame_ready()
 
     def __takeImages(self, save_raw_images):
-            img_arrs = []
-            bkg_arrs = []
-            img_dir = None
-            bkg_dir = None
+        img_arrs = []
+        bkg_arrs = []
+        img_dir = None
+        bkg_dir = None
 
+        for seq, bkg_seq, label in zip(self.sequences, self.bkg_sequences, self.sequence_labels):
+            # Write the persistance values and wait for the MOT to reload
+            self.daq_controller.load(seq.getArray())
+            self.daq_controller.writeChannelValues()
+            print(f"Loading MOT for {self.config.mot_reload}ms...")
+            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
-            for seq, bkg_seq, label in zip(self.sequences, self.bkg_sequences, self.sequence_labels):
-                # Write the persistance values and wait for the MOT to reload
-                self.daq_controller.load(seq.getArray())
-                self.daq_controller.writeChannelValues()
-                print(f'Loading MOT for {self.config.mot_reload}ms...')
-                sleep(self.config.mot_reload*10**-3) # convert from ms to s
+            if save_raw_images:
+                # Make dirs for saving pictures
+                img_dir = os.path.join(self.save_location, "raw")
+                #                 os.makedirs(img_dir)
+                bkg_dir = os.path.join(img_dir, f"img{label}-backgrounds")
+                os.makedirs(bkg_dir)
 
-                if save_raw_images:
-                    # Make dirs for saving pictures
-                    img_dir = os.path.join(self.save_location, 'raw')
-    #                 os.makedirs(img_dir)
-                    bkg_dir = os.path.join(img_dir,f'img{label}-backgrounds')
-                    os.makedirs(bkg_dir)
+            # Load and play imaging sequence
+            #                 self.daq_controller.load(seq.getArray())
+            self.daq_controller.play(float(seq.t_step), clearCards=True)
 
-                # Load and play imaging sequence
-#                 self.daq_controller.load(seq.getArray())
-                self.daq_controller.play(float(seq.t_step), clearCards=True)
+            # Grab image and save as bmp
+            self.cam.wait_til_frame_ready(self.cam_frame_timeout)
+            data = self.cam.get_image_data()
+            img = (
+                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                .convert("L")
+                .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            )
+            img_arrs.append(np.array(img))
+            if save_raw_images:
+                img.save(f"{img_dir}/img{label}raw.bmp", "bmp")
 
-                # Grab image and save as bmp
+            #                 sleep(1)
+
+            self.cam.reset_frame_ready()
+
+            # Take the background images
+            bkgs = []
+            self.daq_controller.load(bkg_seq.getArray())
+            for i in range(self.config.n_backgrounds):
+                # Load and play background sequence
+                sleep(0.5)
+                self.daq_controller.play(float(bkg_seq.t_step), clearCards=False)
                 self.cam.wait_til_frame_ready(self.cam_frame_timeout)
-                data = self.cam.get_image_data()
-                img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-                img_arrs.append(np.array(img))
-                if save_raw_images:
-                    img.save(f"{img_dir}/img{label}raw.bmp", "bmp")
 
-#                 sleep(1)
+                data = self.cam.get_image_data()
+                img = (
+                    Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                    .convert("L")
+                    .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+                )
+                bkgs.append(np.array(img))
+                if save_raw_images:
+                    img.save(f"{bkg_dir}/{i}.bmp", "bmp")
 
                 self.cam.reset_frame_ready()
 
-                # Take the background images
-                bkgs = []
-                self.daq_controller.load(bkg_seq.getArray())
-                for i in range(self.config.n_backgrounds):
-                    # Load and play background sequence
-                    sleep(0.5)
-                    self.daq_controller.play(float(bkg_seq.t_step), clearCards=False)
-                    self.cam.wait_til_frame_ready(self.cam_frame_timeout)
+            bkg_arrs.append(bkgs)
 
-                    data = self.cam.get_image_data()
-                    img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-                    bkgs.append(np.array(img))
-                    if save_raw_images:
-                        img.save(f"{bkg_dir}/{i}.bmp", "bmp")
+            self.daq_controller.clearCards()
 
-                    self.cam.reset_frame_ready()
+        return img_arrs, bkg_arrs
 
-                bkg_arrs.append(bkgs)
-
-                self.daq_controller.clearCards()
-
-            return img_arrs, bkg_arrs
-
-    def __analyseImages(self, img_arrs: List[np.ndarray], bkg_arrs: List[np.ndarray], save_processed_images:bool, process_type=1):
-        '''
+    def __analyseImages(
+        self,
+        img_arrs: list[np.ndarray],
+        bkg_arrs: list[np.ndarray],
+        save_processed_images: bool,
+        process_type=1,
+    ):
+        """
         Takes images and backgrounds as lists of np.arrays containing there pixel values, averages the backgrounds for each time step
         and corrects the raw image for this background.
             imgs_arrs = [img1, img2, ...]
             bkg_arrs = [[bkg1.1,bkg1.2,...], [bkg2.1,bkg2.2,...], ...]
         Returns a list of corrected images (as arrays), and of the averaged background images (also as arrays).
-        
+
         If the save_processed_images flag is True then the background corrected images and the average backgrounds for each time step are saved.
-        
+
         So a bit of jiggery-pokery here to analyse the image:
             1. Average the background together, converting them to arrays of floats before doing so.
             2. Convert the raw images to floats and subract them from the backgrounds.  This means light in the background absorbed by the MOT will now appear as
@@ -409,16 +488,24 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             image was negative or greater than 255.  This also means that extra light present in the raw image when compared to the background (e.g. MOT beams
             clipping on mirrors) are removed from the corrected image.  Note that pixels between 0,255 are only necessary for PIL - matplotlip.pyplot can handle
             wider ranges.
-            4. Rescale the pixel values from to span 0-255 for maximum visibility.  Finally convert the images back to unit8 arrays as PIL expects. 
-        '''
+            4. Rescale the pixel values from to span 0-255 for maximum visibility.  Finally convert the images back to unit8 arrays as PIL expects.
+        """
         bkg_aves_float = [np.mean(bkgs, axis=0, dtype=float) for bkgs in bkg_arrs]
 
         if process_type == 1:
-            print("processing images by subtracting the image from the background and clipping to be between 0 and 255")# This was Tom's original method
-            unscaled_corr_imgs = [np.clip(np.round(bkg - img), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)]
+            print(
+                "processing images by subtracting the image from the background and clipping to be between 0 and 255"
+            )  # This was Tom's original method
+            unscaled_corr_imgs = [
+                np.clip(np.round(bkg - img), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+            ]
         elif process_type == 2:
-            print("processing images by subtracting the background from the image and clipping to be between 0 and 255")
-            unscaled_corr_imgs = [np.clip(np.round(img - bkg), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)]
+            print(
+                "processing images by subtracting the background from the image and clipping to be between 0 and 255"
+            )
+            unscaled_corr_imgs = [
+                np.clip(np.round(img - bkg), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+            ]
         elif process_type == 3:
             print("images aren't being processed.")
             unscaled_corr_imgs = img_arrs
@@ -426,17 +513,17 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             raise ValueError(f"process_type cannot take the value {process_type}")
 
         bkg_aves = [bkg.astype(np.uint8) for bkg in bkg_aves_float]
-        corr_images = [(arr * 255.0/arr.max()).astype(np.uint8) for arr in unscaled_corr_imgs]
-#         corr_images = [arr.astype(np.uint8) for arr in unscaled_corr_imgs]
+        corr_images = [(arr * 255.0 / arr.max()).astype(np.uint8) for arr in unscaled_corr_imgs]
+        #         corr_images = [arr.astype(np.uint8) for arr in unscaled_corr_imgs]
 
         if save_processed_images:
-            print('Saving processed images...')
-            bkg_dir = os.path.join(self.save_location,'backgrounds')
+            print("Saving processed images...")
+            bkg_dir = os.path.join(self.save_location, "backgrounds")
             os.makedirs(bkg_dir)
             for img, bkg_img, label in zip(corr_images, bkg_aves, self.sequence_labels):
                 Image.fromarray(img).save(f"{self.save_location}/{label}.bmp", "bmp")
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
-            print('Processed images saved')
+            print("Processed images saved")
 
         raw_images = img_arrs
 
@@ -444,64 +531,75 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def saveProcessedImages(self, notes=None):
         if not self.results_ready:
-            raise Exception('The abosrbtion imaging experiment has not been run yet. There are no results to save.')
-        bkg_dir = os.path.join(self.save_location,'backgrounds')
+            raise Exception(
+                "The abosrbtion imaging experiment has not been run yet. There are no results to save."
+            )
+        bkg_dir = os.path.join(self.save_location, "backgrounds")
         os.makedirs(bkg_dir)
 
         if self.corr_img_arrs == None and self.ave_bkg_arrs == None:
             print("No images to save.")
         elif self.corr_img_arrs == None:
             # this code runs when only a background experiment has been run
-            for bkg_img, label in zip(cast(List[Any], self.ave_bkg_arrs), self.sequence_labels):
+            for bkg_img, label in zip(cast(list[Any], self.ave_bkg_arrs), self.sequence_labels):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
-                    bkg_img = (255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)).astype(np.uint8)
+                    bkg_img = (
+                        255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)
+                    ).astype(np.uint8)
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
         else:
-            for img, bkg_img, label in zip(self.corr_img_arrs, cast(List[Any], self.ave_bkg_arrs), self.sequence_labels):
+            for img, bkg_img, label in zip(
+                self.corr_img_arrs, cast(list[Any], self.ave_bkg_arrs), self.sequence_labels
+            ):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
-                    bkg_img = (255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)).astype(np.uint8)
+                    bkg_img = (
+                        255 * (bkg_img - np.min(bkg_img)) / (np.ptp(bkg_img) + 1e-10)
+                    ).astype(np.uint8)
                 if img.dtype == float:
                     img = (255 * (img - np.min(img)) / (np.ptp(img) + 1e-10)).astype(np.uint8)
                 Image.fromarray(img).save(f"{self.save_location}/{label}.bmp", "bmp")
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
 
         if notes:
-            fname = os.path.join(self.save_location,'notes.txt')
-            f = open(fname, 'w')
-            print('write: ', fname)
+            fname = os.path.join(self.save_location, "notes.txt")
+            f = open(fname, "w")
+            print("write: ", fname)
             f.write(notes)
             f.close()
 
     def getResults(self):
         if not self.results_ready:
-            raise Exception('The abosrbtion imaging experiment has not been run yet.')
-        print('Returning absorbtion imaging results.', len(cast(List[Any], self.ave_bkg_arrs)))
+            raise Exception("The abosrbtion imaging experiment has not been run yet.")
+        print("Returning absorbtion imaging results.", len(cast(list[Any], self.ave_bkg_arrs)))
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
     def close(self):
-        '''
+        """
         Perform any tidying up.
-        '''
-        print('closing camera...')
+        """
+        print("closing camera...")
         self.cam.enable_trigger(False)
         self.cam.stop_live()
         self.cam.close()
 
         if not self.external_ic_ic_provided:
             self.ic_ic.close_library()
-        print('...closed')
+        print("...closed")
 
         super().daq_cards_off()
+
 
 r"""
 Needs to be reworked to use the new AWG manager.
 """
+
+
 class PhotonProductionExperiment(GenericExperiment):
     def __init__(self, daq_controller, sequence, photon_production_configuration):
         self.forced_stop = False
-        self.data_saver:PhotonProductionDataSaver
+        self.data_saver: PhotonProductionDataSaver
         self.iterations = 0
         self.mot_reload_time = 0
         self.waveform_length = 0
@@ -510,6 +608,8 @@ class PhotonProductionExperiment(GenericExperiment):
         self.set_iterations = lambda x: x
         self.set_mot_reload_time = lambda x: x
         pass
+
+
 r"""
     
     def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, photon_production_configuration:PhotonProductionConfiguration):
@@ -974,15 +1074,16 @@ r"""
         
 """
 
+
 class MotFluoresceExperiment(GenericExperiment):
     """
     Experimental runner for the mot fluoresce experiment.
 
-    The MOT fluorescence experiment can be run with or without a camera and/or an 
-    oscilloscope, but at least one of these is needed to collect data. The experimental 
+    The MOT fluorescence experiment can be run with or without a camera and/or an
+    oscilloscope, but at least one of these is needed to collect data. The experimental
     steps are as follows:
     1. The MOT is loaded for a set time.
-    2. A sequence of DAQ cards is played. This will consist of turning off the MOT and 
+    2. A sequence of DAQ cards is played. This will consist of turning off the MOT and
      sending a trigger to the oscilloscope or camera, amongst other things.
     3. The oscilloscope is used to read data captured by a photodiode allowing the
      fluorescence of the atoms to be measured, or the image of the MOT is read from the
@@ -1002,26 +1103,32 @@ class MotFluoresceExperiment(GenericExperiment):
     - close(): Closes the DAQ cards and the oscilloscope.
     """
 
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence,
-                mot_fluoresce_configuration:MotFluoresceConfiguration,
-                ic_imaging_control:Optional[IC_ImagingControl] = None, sweep=True):
+    def __init__(
+        self,
+        daq_controller: DAQ_controller,
+        sequence: Sequence,
+        mot_fluoresce_configuration: MotFluoresceConfiguration,
+        ic_imaging_control: Optional[IC_ImagingControl] = None,
+        sweep=True,
+    ):
 
         super().__init__(daq_controller, sequence, mot_fluoresce_configuration)
         # the configuration object is a MotFluoresceConfiguration object and called self.config
-        assert isinstance(self.config, MotFluoresceConfiguration), \
+        assert isinstance(self.config, MotFluoresceConfiguration), (
             "mot_fluoresce_configuration must be a MotFluoresceConfiguration object."
-        self.mot_fluoresce_config:MotFluoresceConfiguration = self.config
+        )
+        self.mot_fluoresce_config: MotFluoresceConfiguration = self.config
         self.save_location = self.mot_fluoresce_config.save_location
         self.iterations = self.mot_fluoresce_config.iterations
-        self.mot_reload = self.mot_fluoresce_config.mot_reload # in ms
-        print('MOT reload time (ms)', self.mot_reload)
+        self.mot_reload = self.mot_fluoresce_config.mot_reload  # in ms
+        print("MOT reload time (ms)", self.mot_reload)
 
         self.with_cam = self.mot_fluoresce_config.use_cam
         self.with_scope = self.mot_fluoresce_config.use_scope
         self.with_awg = self.mot_fluoresce_config.use_awg
 
         self.sweep = sweep
-        #if self.save_with_time and self.iterations != 1:
+        # if self.save_with_time and self.iterations != 1:
         #    raise ValueError("Cannot save with time if iterations is not 1. Set save_with_time to False or iterations to 1.")
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.current_time = datetime.now().strftime("%H-%M-%S")
@@ -1029,7 +1136,6 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_awg:
             self.awg_config = self.mot_fluoresce_config.awg_config
             self.awg_config_single = self.mot_fluoresce_config.awg_config_single
-
 
         if self.with_cam:
             if ic_imaging_control is None:
@@ -1059,21 +1165,20 @@ class MotFluoresceExperiment(GenericExperiment):
             self.trig_lvl = self.mot_fluoresce_config.scope_trigger_level
             self.data_chs = self.mot_fluoresce_config.scope_data_channels
 
-
     def __configureCamera(self):
         """
         Private method to configure the camera for the MOT fluorescence experiment.
         """
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam:IC_Camera
-        cam:IC_Camera
+        self.cam: IC_Camera
+        cam: IC_Camera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
-#         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
-        #is this in milliseconds? and does it match the MOT reload time? I think so
+        #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
+        # is this in milliseconds? and does it match the MOT reload time? I think so
         self.cam_frame_timeout = 5000
-        print(f'Timeout set to {self.cam_frame_timeout}ms')
-        print('Opened connection to camera {0}', cam_names[0])
+        print(f"Timeout set to {self.cam_frame_timeout}ms")
+        print("Opened connection to camera {0}", cam_names[0])
 
         if not cam.is_open():
             cam.open()
@@ -1084,15 +1189,15 @@ class MotFluoresceExperiment(GenericExperiment):
         cam.gain.value = self.cam_gain
         cam.exposure.value = self.cam_exposure
         formats = cam.list_video_formats()
-        cam.set_video_format(formats[0])        # use first available video format
-        cam.enable_continuous_mode(True)        # image in continuous mode
-        cam.start_live(show_display=False)       # start imaging
+        cam.set_video_format(formats[0])  # use first available video format
+        cam.enable_continuous_mode(True)  # image in continuous mode
+        cam.start_live(show_display=False)  # start imaging
 
         # print cam.is_triggerable()
-        cam.enable_trigger(True)              # camera will wait for trigger
+        cam.enable_trigger(True)  # camera will wait for trigger
 
         if not cam.callback_registered:
-            cam.register_frame_ready_callback() # needed to wait for frame ready callback
+            cam.register_frame_ready_callback()  # needed to wait for frame ready callback
 
         # Clear out the memory of any rogue image still in there
         try:
@@ -1101,7 +1206,6 @@ class MotFluoresceExperiment(GenericExperiment):
         except IC_Exception as err:
             print(f"Caught IC_Exception with error: {err.message}")
         cam.reset_frame_ready()
-
 
     def configure(self):
         """
@@ -1114,14 +1218,15 @@ class MotFluoresceExperiment(GenericExperiment):
             print("connecting to scope")
             start_time = time.time()
             self.scope = osc.OscilloscopeManager()
-            #self.scope.reset_scope()
-            self.scope.configure_scope(self.data_chs, samp_rate=self.samp_rate,
-                                    timebase_range=self.time_range)
+            # self.scope.reset_scope()
+            self.scope.configure_scope(
+                self.data_chs, samp_rate=self.samp_rate, timebase_range=self.time_range
+            )
 
             self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
             print("scope configured")
-            print(f"configuring scope took {time.time()-start_time}s")
-            #self.scope.set_to_run()
+            print(f"configuring scope took {time.time() - start_time}s")
+            # self.scope.set_to_run()
 
         if self.with_awg:
             print("Configuring AWG")
@@ -1139,8 +1244,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
         awg.upload_and_arm(self.awg_config)
 
-        print(f"AWG configured in {time.time()-start_time}s")
-
+        print(f"AWG configured in {time.time() - start_time}s")
 
     def __run_with_scope(self):
         """
@@ -1173,12 +1277,12 @@ class MotFluoresceExperiment(GenericExperiment):
         i = 1
         fails = 0
 
-        #self.scope.set_to_run()
+        # self.scope.set_to_run()
         while i <= self.config.iterations:
             print(f"Iteration {i}")
             print(f"loading mot for {self.config.mot_reload}ms")
-            #self.scope.set_to_digitize(self.data_chs)
-            sleep(self.config.mot_reload*10**-3) # convert from ms to s
+            # self.scope.set_to_digitize(self.data_chs)
+            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
             self.scope.arm_scope()
 
@@ -1195,11 +1299,11 @@ class MotFluoresceExperiment(GenericExperiment):
                 print("collecting data")
                 data = self.scope.read_slow_return_data(list(self.data_chs.keys()))
                 if data is not None:
-                    filename=f"iteration_{i}_data.csv"
+                    filename = f"iteration_{i}_data.csv"
                     full_name = os.path.join(full_directory, filename)
-                    data.to_csv(full_name, index=False)# Saves the data
+                    data.to_csv(full_name, index=False)  # Saves the data
                     print(f"Data saved to {full_name}")
-                    print(f"data collection took {time.time()-start_data_time}s")
+                    print(f"data collection took {time.time() - start_data_time}s")
                     i += 1
                 else:
                     print("Warning: No data returned from scope")
@@ -1227,7 +1331,7 @@ class MotFluoresceExperiment(GenericExperiment):
         while i <= self.config.iterations:
             print(f"Iteration {i} of experiment {experiment_name}")
             print(f"loading mot for {self.config.mot_reload}ms")
-            sleep(self.config.mot_reload*10**-3) # convert from ms to s
+            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
             print("playing sequence")
             self.daq_controller.play(float(self.sequence.t_step), clearCards=False)
@@ -1237,7 +1341,6 @@ class MotFluoresceExperiment(GenericExperiment):
 
             print(f"Iteration {i} complete.")
             i += 1
-
 
     def __run_with_cam(self):
         # needs to be in a try except. If the camera isn't closed the computer will crash
@@ -1252,7 +1355,7 @@ class MotFluoresceExperiment(GenericExperiment):
         while i <= self.config.iterations:
             print(f"Iteration {i}")
             print(f"loading mot for {self.config.mot_reload}ms")
-            sleep(self.config.mot_reload*10**-3) # convert from ms to s
+            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
             print("playing sequence")
             self.daq_controller.play(float(self.sequence.t_step), clearCards=False)
@@ -1260,8 +1363,11 @@ class MotFluoresceExperiment(GenericExperiment):
             # Grab image and save as bmp
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)
             data = self.cam.get_image_data()
-            img = Image.frombuffer('RGB', (data[1], data[2]), data[0], 'raw', 'RGB',\
-                                    0,1).convert('L').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            img = (
+                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                .convert("L")
+                .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            )
             img_arrs.append(np.array(img))
 
             # Save the images
@@ -1280,7 +1386,6 @@ class MotFluoresceExperiment(GenericExperiment):
             self.daq_controller.writeChannelValues()
 
             i += 1
-
 
     def run(self):
         """
@@ -1302,20 +1407,19 @@ class MotFluoresceExperiment(GenericExperiment):
         finally:
             self.close()
 
-
     def close(self):
-        '''
+        """
         Perform any tidying up.
-        '''
+        """
         if self.with_cam:
-            print('closing camera...')
+            print("closing camera...")
             self.cam.enable_trigger(False)
             self.cam.stop_live()
             self.cam.close()
 
             if not self.external_ic_ic_provided:
                 self.ic_ic.close_library()
-            print('...closed')
+            print("...closed")
 
         self.daq_controller.clearCards()
         if self.with_scope:
@@ -1325,11 +1429,11 @@ class MotFluoresceExperiment(GenericExperiment):
 
 
 class MotFluoresceSweepExperiment:
-    def __init__(self, sweep_config:MotFluoresceConfigurationSweep,
-                 daq_controller:DAQ_controller):
+    def __init__(
+        self, sweep_config: MotFluoresceConfigurationSweep, daq_controller: DAQ_controller
+    ):
         self.sweep_config = sweep_config
         self.daq_controller = daq_controller
-
 
     def run(self):
         """
@@ -1338,29 +1442,28 @@ class MotFluoresceSweepExperiment:
 
         print(f"This will run a series of {len(self.sweep_config)} experiments.")
 
-
         for i, (config, sequence) in enumerate(self.sweep_config):
             print(f"Running experiment with configuration: {i}")
             # Create a new MotFluoresceExperiment with the current configuration
-            experiment = MotFluoresceExperiment(self.daq_controller, sequence, config,
-                                                sweep=True)
+            experiment = MotFluoresceExperiment(self.daq_controller, sequence, config, sweep=True)
 
             experiment.run()
             print(f"Experiment {i} completed and closed.")
 
 
-
-
 class PhotonProductionDataSaver:
-    '''
+    """
     This object takes raw data from the TDC, parses it into our desired format and saves
     it to file.  It also enables all of the parsing/saving to be done in a separate thread
     so as to not hold up the experiment.
-    '''
-    def __init__(self, tdc_timebase, tdc_marker_channel, save_location, data_queue=None, create_log=False):
-        '''
+    """
+
+    def __init__(
+        self, tdc_timebase, tdc_marker_channel, save_location, data_queue=None, create_log=False
+    ):
+        """
         Initialise the object with the information it will need for saving.
-        '''
+        """
         self.tdc_timebase = tdc_timebase
         self.tdc_marker_channel = tdc_marker_channel
 
@@ -1368,7 +1471,7 @@ class PhotonProductionDataSaver:
         self.experiment_date = time.strftime("%y-%m-%d")
 
         self.save_location = os.path.join(save_location, self.experiment_date, self.experiment_time)
-        self.save_location_raw = os.path.join(self.save_location, 'raw')
+        self.save_location_raw = os.path.join(self.save_location, "raw")
 
         if not os.path.exists(self.save_location):
             os.makedirs(self.save_location)
@@ -1376,8 +1479,8 @@ class PhotonProductionDataSaver:
             os.makedirs(self.save_location_raw)
 
         if create_log:
-            self.log_file = os.path.join(self.save_location, 'log.txt')
-            print(f'Log file at {self.log_file}')
+            self.log_file = os.path.join(self.save_location, "log.txt")
+            print(f"Log file at {self.log_file}")
         else:
             self.log_file = None
 
@@ -1385,165 +1488,183 @@ class PhotonProductionDataSaver:
 
         self.threads = []
 
-    def save_in_thread(self,timestamps, channels, valid, throw_number):
-        '''
+    def save_in_thread(self, timestamps, channels, valid, throw_number):
+        """
         Save the data in a new thread.
-        '''
-        thread = threading.Thread(name=f'Throw {throw_number} save',
-                                  target=self.__save,
-                                  args=(timestamps, channels, valid, throw_number))
+        """
+        thread = threading.Thread(
+            name=f"Throw {throw_number} save",
+            target=self.__save,
+            args=(timestamps, channels, valid, throw_number),
+        )
         thread.start()
         self.threads.append(thread)
         return thread
 
     def log_in_thread(self, log_input, throw_number):
-        thread = threading.Thread(name=f'Throw {throw_number} save',
-                                  target=self.__log,
-                                  args=(log_input, throw_number))
+        thread = threading.Thread(
+            name=f"Throw {throw_number} save", target=self.__log, args=(log_input, throw_number)
+        )
         thread.start()
         self.threads.append(thread)
         return thread
 
     def combine_saves(self):
-        '''
+        """
         Combine all the individual files from each MOT throw into a single file.
-        '''
+        """
         t = 0
         # Check only the main thread is still running i.e. nothing is stills saving.
         while True in [thread.is_alive() for thread in self.threads]:
             time.sleep(1)
-            t+=1
-            if t>60:
+            t += 1
+            if t > 60:
                 print("Timed-out waiting for save-threads to finish. Abandoning combine_saves().")
                 return
 
-        combined_file = open(os.path.join(self.save_location, self.experiment_time + '.txt'), 'w')
+        combined_file = open(os.path.join(self.save_location, self.experiment_time + ".txt"), "w")
         for fname in os.listdir(self.save_location_raw):
             if fname.endswith(".txt"):
                 data_file = open(os.path.join(self.save_location_raw, fname))
                 combined_file.write(data_file.read())
                 data_file.close()
-                combined_file.write('nan,nan,nan,nan\n') # Batman!
+                combined_file.write("nan,nan,nan,nan\n")  # Batman!
         combined_file.close()
 
     def __save(self, timestamps, channels, valid, throw_number):
-        '''
+        """
         Save the data returned from the TDC.
-        '''
-        print('__save iter', throw_number)
+        """
+        print("__save iter", throw_number)
 
         t = time.time()
-#         print 'Num markers:', channels.tolist().count(self.tdc_marker_channel)
+        #         print 'Num markers:', channels.tolist().count(self.tdc_marker_channel)
         try:
-#             marker_index = channels.tolist().index(self.tdc_marker_channel)
-            first_marker_index = next(i for i,elm in enumerate(channels.tolist()) if elm==self.tdc_marker_channel)
-            last_marker_index  = next(len(channels)-1-i for i,elm in enumerate(reversed(channels.tolist())) if elm==self.tdc_marker_channel)
+            #             marker_index = channels.tolist().index(self.tdc_marker_channel)
+            first_marker_index = next(
+                i for i, elm in enumerate(channels.tolist()) if elm == self.tdc_marker_channel
+            )
+            last_marker_index = next(
+                len(channels) - 1 - i
+                for i, elm in enumerate(reversed(channels.tolist()))
+                if elm == self.tdc_marker_channel
+            )
         except ValueError as err:
-            print(f"__save(throw={throw_number}) Nothing measured on marker channel - so nothing to save.")
+            print(
+                f"__save(throw={throw_number}) Nothing measured on marker channel - so nothing to save."
+            )
             print(err)
             return
-        print(f'__save: found first marker index ({time.time()-t} sec)')
+        print(f"__save: found first marker index ({time.time() - t} sec)")
         x_0 = timestamps[first_marker_index]
-#         t_mot_0 = x_0*self.tdc_timebase
-#         timestamps = [(x-x_0)*self.tdc_timebase for x in timestamps[marker_index+1:] if x >= 0]
-#         channels = [x for x in channels[marker_index+1:] if x >= 0]
+        #         t_mot_0 = x_0*self.tdc_timebase
+        #         timestamps = [(x-x_0)*self.tdc_timebase for x in timestamps[marker_index+1:] if x >= 0]
+        #         channels = [x for x in channels[marker_index+1:] if x >= 0]
 
         # This step essentially does two things:
         #     1. Converts all the timestamps to picoseconds by *tdc_timebase.
         #     2. Makes t=0 be the time of the initial marker pulse, i.e. writes
         #        all timestamps in terms of the so-called mot-time.
         t = time.time()
-        timestamps = [(x-x_0)*self.tdc_timebase for x in timestamps[first_marker_index:last_marker_index+1]]
-        channels = channels[first_marker_index:last_marker_index+1]
-#         print 'create temp data dump'
-#         t = open(os.path.join(self.save_location, 'temp.txt'), 'w')
-#         for line in zip(timestamps, channels):
-#             t.write('{0},{1}\n'.format(*line))
-#         t.close()
-#
-        print('__save: selected valid timestamps and channels')
+        timestamps = [
+            (x - x_0) * self.tdc_timebase
+            for x in timestamps[first_marker_index : last_marker_index + 1]
+        ]
+        channels = channels[first_marker_index : last_marker_index + 1]
+        #         print 'create temp data dump'
+        #         t = open(os.path.join(self.save_location, 'temp.txt'), 'w')
+        #         for line in zip(timestamps, channels):
+        #             t.write('{0},{1}\n'.format(*line))
+        #         t.close()
+        #
+        print("__save: selected valid timestamps and channels")
         t = time.time()
         pulse_number = 0
         data = []
         data_buffer = []
-#         sti_lens = []
+        #         sti_lens = []
         t_stirap_0 = None
         ch = None
 
         try:
             for t, ch in zip(timestamps, channels):
                 if ch == self.tdc_marker_channel:
-#                     print 'MARKER', t, ch
+                    #                     print 'MARKER', t, ch
                     t_stirap_0 = t
                     pulse_number += 1
                     data += data_buffer
-    #                 sti_lens.append(len(data_buffer))
+                    #                 sti_lens.append(len(data_buffer))
                     data_buffer = []
                 else:
-#                     print 'DATA', t, ch
+                    #                     print 'DATA', t, ch
                     assert t_stirap_0 is not None, "Unknown error has occurred. t_stirap_0 is None."
-                    data_buffer.append((ch, t-t_stirap_0, t, pulse_number))
+                    data_buffer.append((ch, t - t_stirap_0, t, pulse_number))
         except _tkinter.TclError as err:
             print(t, ch)
             raise err
 
         if pulse_number > 25000:
-            print(f'__save: Too many pulses recorded ({pulse_number}) - returning.')
+            print(f"__save: Too many pulses recorded ({pulse_number}) - returning.")
             return
 
-#         print len(data), sti_lens
-        print('__save: creating file')
-        f = open(os.path.join(self.save_location_raw, f'{throw_number}.txt'), 'w')
-        print('__save: writing file')
+        #         print len(data), sti_lens
+        print("__save: creating file")
+        f = open(os.path.join(self.save_location_raw, f"{throw_number}.txt"), "w")
+        print("__save: writing file")
         for line in data:
-            f.write('{0},{1},{2},{3}\n'.format(*line))
-        print('__save: closing file')
+            f.write("{0},{1},{2},{3}\n".format(*line))
+        print("__save: closing file")
         f.close()
 
         # If a push data function is configured, throw it now
         if self.data_queue:
-            print('Queuing  data')
+            print("Queuing  data")
             self.data_queue.put((throw_number, data))
 
-        print(f'iter {throw_number}: counts {len(data)}, pulses recorded {pulse_number}')
+        print(f"iter {throw_number}: counts {len(data)}, pulses recorded {pulse_number}")
 
     def __log(self, log_input, throw_number):
         if self.log_file != None:
-            print('__log: writing to log')
+            print("__log: writing to log")
 
             if callable(log_input):
                 log_input = log_input()
 
             if isinstance(log_input, (list, tuple)):
+
                 def flatten(l):
                     for el in l:
                         # Check for iterable but exclude strings (to avoid infinite recursion on chars)
-                        if isinstance(el, collections.abc.Iterable) and not isinstance(el, (str, bytes)):
-                             yield from flatten(el)
+                        if isinstance(el, collections.abc.Iterable) and not isinstance(
+                            el, (str, bytes)
+                        ):
+                            yield from flatten(el)
                         else:
-                             yield el
+                            yield el
 
-                log_input = ' '.join([str(x) for x in flatten([x() if callable(x) else x for x in log_input])])
+                log_input = " ".join(
+                    [str(x) for x in flatten([x() if callable(x) else x for x in log_input])]
+                )
 
-            f = open(self.log_file, 'w')
-            f.write(f'Throw {throw_number}: {log_input}\n')
+            f = open(self.log_file, "w")
+            f.write(f"Throw {throw_number}: {log_input}\n")
             f.close()
-            print('__log: closed log file')
+            print("__log: closed log file")
         else:
-            print('__log: Can not write. No log file exists.')
-
+            print("__log: Can not write. No log file exists.")
 
 
 class ExperimentalAutomationRunner:
-    daq_controller:DAQ_controller
-    experimental_automation_configuration:ExperimentSessionConfig
-    photon_production_configuration:PhotonProductionConfiguration
+    daq_controller: DAQ_controller
+    experimental_automation_configuration: ExperimentSessionConfig
+    photon_production_configuration: PhotonProductionConfiguration
 
     def __init__(
-            self,
-            daq_controller:DAQ_controller,
-            experimental_automation_configuration:ExperimentSessionConfig,
-            photon_production_configuration:PhotonProductionConfiguration):
+        self,
+        daq_controller: DAQ_controller,
+        experimental_automation_configuration: ExperimentSessionConfig,
+        photon_production_configuration: PhotonProductionConfiguration,
+    ):
 
         self.daq_controller = daq_controller
         self.experimental_automation_configuration = c = experimental_automation_configuration
@@ -1559,7 +1680,7 @@ class ExperimentalAutomationRunner:
         if not os.path.exists(summary_location):
             os.makedirs(summary_location)
 
-        self.summary_fname = os.path.join(summary_location, f'{c.summary_fname}.txt')
+        self.summary_fname = os.path.join(summary_location, f"{c.summary_fname}.txt")
 
         self.original_daq_channel_values = daq_controller.getChannelValues()
 
@@ -1567,12 +1688,18 @@ class ExperimentalAutomationRunner:
             print("DAQ output must be on to run an experiement - turning it on.")
             self.daq_controller.toggleContinuousOutput()
 
-    def get_next_experiment(self) -> Tuple[PhotonProductionExperiment, str, List[float]]:
+    def get_next_experiment(self) -> tuple[PhotonProductionExperiment, str, list[float]]:
 
-        print(f'Configuring experiment {self.experiements_iter+1} of {self.experiements_to_run}')
+        print(f"Configuring experiment {self.experiements_iter + 1} of {self.experiements_to_run}")
 
-        config:SingleExperimentConfig = self.experimental_automation_configuration.automated_experiment_configurations[self.experiements_iter]
-        self.experiements_to_run = len(self.experimental_automation_configuration.automated_experiment_configurations)
+        config: SingleExperimentConfig = (
+            self.experimental_automation_configuration.automated_experiment_configurations[
+                self.experiements_iter
+            ]
+        )
+        self.experiements_to_run = len(
+            self.experimental_automation_configuration.automated_experiment_configurations
+        )
         self.experiements_iter += 1
 
         # Update MOT reload, iterations and, if necessary, the modulation frequencies.
@@ -1580,16 +1707,18 @@ class ExperimentalAutomationRunner:
         self.photon_prod_cfg.mot_reload = config.mot_reload
 
         if config.modulation_frequencies != []:
-            j=0
-            waveforms_list:List[Waveform] = [self.photon_prod_cfg.waveforms[i] for i in self.photon_prod_cfg.waveform_sequence[0]]
+            j = 0
+            waveforms_list: list[Waveform] = [
+                self.photon_prod_cfg.waveforms[i] for i in self.photon_prod_cfg.waveform_sequence[0]
+            ]
 
             for waveform in waveforms_list:
                 try:
                     waveform.mod_frequency = config.modulation_frequencies[j]
-                    print('Set freq', config.modulation_frequencies[j])
-                    j+=1
+                    print("Set freq", config.modulation_frequencies[j])
+                    j += 1
                 except IndexError:
-                    #If the modulation frequency 'j' is not specified, stop iterating.
+                    # If the modulation frequency 'j' is not specified, stop iterating.
                     break
 
         # Reset the daq channels to their original values - this way channel value changes for
@@ -1603,24 +1732,32 @@ class ExperimentalAutomationRunner:
 
         # Return photon experiment
 
-        #NOTE: PhotonProductionExperiment is currently broken. It needs to use the new awg_manager
+        # NOTE: PhotonProductionExperiment is currently broken. It needs to use the new awg_manager
 
-        return (PhotonProductionExperiment(daq_controller=self.daq_controller,
-                                          sequence=config.sequence,
-                                          photon_production_configuration=self.photon_prod_cfg),
-                config.sequence_fname,
-                config.modulation_frequencies)
-
+        return (
+            PhotonProductionExperiment(
+                daq_controller=self.daq_controller,
+                sequence=config.sequence,
+                photon_production_configuration=self.photon_prod_cfg,
+            ),
+            config.sequence_fname,
+            config.modulation_frequencies,
+        )
 
     def write_to_summary_file(self, text):
-#         if not os.path.exists(self.summary_fname):
-#             os.path.join(self.summary_location, 'log.txt')
-        f = open(self.summary_fname, 'a+')
+        #         if not os.path.exists(self.summary_fname):
+        #             os.path.join(self.summary_location, 'log.txt')
+        f = open(self.summary_fname, "a+")
         f.write(text)
         f.close()
 
     def get_total_iterations(self):
-        return sum([x.iterations for x in self.experimental_automation_configuration.automated_experiment_configurations])
+        return sum(
+            [
+                x.iterations
+                for x in self.experimental_automation_configuration.automated_experiment_configurations
+            ]
+        )
 
     def has_next_experiment(self):
         return self.experiements_iter < self.experiements_to_run
@@ -1628,51 +1765,64 @@ class ExperimentalAutomationRunner:
     def _update_daq_channel_static_values(self, channel_number, new_val):
 
         try:
-            channel:DAQ_channel = next(ch for ch in self.daq_controller.getChannels() if ch.chNum==channel_number)
+            channel: DAQ_channel = next(
+                ch for ch in self.daq_controller.getChannels() if ch.chNum == channel_number
+            )
         except StopIteration:
-            print(f'Channel {channel_number} not found, ignoring this channel.')
+            print(f"Channel {channel_number} not found, ignoring this channel.")
             return
 
         start_val = self.daq_controller.channelValues[channel_number]
         if channel.isCalibrated:
-            start_val = channel.calibrationFromVFunc(start_val) #type: ignore
+            start_val = channel.calibrationFromVFunc(start_val)  # type: ignore
 
-        print(f'Updating channel {channel_number} from {start_val} to {float(new_val)}',)
+        print(
+            f"Updating channel {channel_number} from {start_val} to {float(new_val)}",
+        )
 
-        for val in np.linspace(start_val, new_val, self.experimental_automation_configuration.daq_channel_update_steps):
-            self.daq_controller.updateChannelValue(channel.chNum,
-                                                   val if not channel.isCalibrated else channel.calibrationToVFunc(val)) # type: ignore
+        for val in np.linspace(
+            start_val, new_val, self.experimental_automation_configuration.daq_channel_update_steps
+        ):
+            self.daq_controller.updateChannelValue(
+                channel.chNum, val if not channel.isCalibrated else channel.calibrationToVFunc(val)
+            )  # type: ignore
             time.sleep(self.experimental_automation_configuration.daq_channel_update_delay)
-            print('.')
-        print(f'channel {channel_number} update.')
+            print(".")
+        print(f"channel {channel_number} update.")
 
     def _reset_daq_channel_static_values(self, channels_to_ignore=[]):
 
-#         bool_mask = np.array([True if x not in channels_to_ignore else False for x in range(len(self.original_daq_channel_values))])
-#         for orig_val, curr_val in zip(self.original_daq_channel_values[bool_mask], self.daq_controller.getChannelValues[bool_mask]):
-#
+        #         bool_mask = np.array([True if x not in channels_to_ignore else False for x in range(len(self.original_daq_channel_values))])
+        #         for orig_val, curr_val in zip(self.original_daq_channel_values[bool_mask], self.daq_controller.getChannelValues[bool_mask]):
+        #
         channel_values_to_reset = []
         current_daq_channel_values = self.daq_controller.getChannelValues()
 
         for chNum in range(len(self.original_daq_channel_values)):
-
             if chNum not in channels_to_ignore:
                 # If the current daq value is not the original reset it back.
                 if self.original_daq_channel_values[chNum] != current_daq_channel_values[chNum]:
-
                     try:
-                        channel:DAQ_channel = next(ch for ch in self.daq_controller.getChannels() if ch.chNum==chNum)
+                        channel: DAQ_channel = next(
+                            ch for ch in self.daq_controller.getChannels() if ch.chNum == chNum
+                        )
                     except StopIteration:
-                        print(f'Channel {chNum} not found, ignoring this channel.')
+                        print(f"Channel {chNum} not found, ignoring this channel.")
                         return
 
                     orig_val = self.original_daq_channel_values[chNum]
-                    channel_values_to_reset.append((chNum, orig_val if not channel.isCalibrated else channel.calibrationFromVFunc(orig_val)))# type: ignore
+                    channel_values_to_reset.append(
+                        (
+                            chNum,
+                            orig_val
+                            if not channel.isCalibrated
+                            else channel.calibrationFromVFunc(orig_val),
+                        )
+                    )  # type: ignore
 
-        print(f'Resetting DAQ channels {[x[0] for x in channel_values_to_reset]}')
+        print(f"Resetting DAQ channels {[x[0] for x in channel_values_to_reset]}")
         for args in channel_values_to_reset:
             self._update_daq_channel_static_values(*args)
 
     def close(self):
         self._reset_daq_channel_static_values()
-

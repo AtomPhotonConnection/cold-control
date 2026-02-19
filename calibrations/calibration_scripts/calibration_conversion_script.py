@@ -1,27 +1,29 @@
 # import pyvisa as visa
 import os
-from typing import List, Tuple
 
 from classes.Config import ConfigReader, DaqReader
 from classes.DAQ import DAQ_channel
 
-config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
-daq_config_fname = config_reader.get_daq_config_fname()# gets the name of the config file for the DAQ cards
+config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
+daq_config_fname = (
+    config_reader.get_daq_config_fname()
+)  # gets the name of the config file for the DAQ cards
 daq_reader = DaqReader(daq_config_fname)
 
-channels:List[DAQ_channel] = []
-for _,v in daq_reader.config['DAQ channels'].items():
-    channelArgs: Tuple[int, str, tuple[float, float], float, bool, str] = (
-        int(v['chNum']),                                              # chNum (int)
-        str(v['chName']),                                            # chName (str)
-        (float(v['chLimits'][0]), float(v['chLimits'][1])),           # chLimits (tuple[float,float])
-        float(v['default value']),                                    # default value (float)
-        bool(v['UIvisible']),                                          # UIvisible (bool) or use v['UIvisible'] if already bool
-        str(v['calibrationFname']),                                   # calibrationFname (str)
+channels: list[DAQ_channel] = []
+for _, v in daq_reader.config["DAQ channels"].items():
+    channelArgs: tuple[int, str, tuple[float, float], float, bool, str] = (
+        int(v["chNum"]),  # chNum (int)
+        str(v["chName"]),  # chName (str)
+        (float(v["chLimits"][0]), float(v["chLimits"][1])),  # chLimits (tuple[float,float])
+        float(v["default value"]),  # default value (float)
+        bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
+        str(v["calibrationFname"]),  # calibrationFname (str)
     )
     channels.append(DAQ_channel(*channelArgs))
 
-#print(channels)
+# print(channels)
+
 
 def main_loop():
     print("\n\n**Starting program to convert between voltages and calibration values**\n")
@@ -40,7 +42,7 @@ def main_loop():
     calib_from_V = calib_to_V = None
 
     for channel in channels:
-        #print(channel.chNum)
+        # print(channel.chNum)
         if channel.chNum == ch_num:
             calib_to_V = channel.calibrationToVFunc
             calib_from_V = channel.calibrationFromVFunc

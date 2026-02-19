@@ -11,21 +11,15 @@ from .IC_Property import IC_Property
 GrabberHandlePtr = POINTER(structs.GrabberHandle)
 
 # "typedefs"
-IMG_FILETYPE = ['FILETYPE_BMP',
-                'FILETYPE_JPG']
-COLOR_FORMAT = ['Y800',
-                'RGB24',
-                'RGB32',
-                'UYVY',
-                'Y16',
-                'NONE']
+IMG_FILETYPE = ["FILETYPE_BMP", "FILETYPE_JPG"]
+COLOR_FORMAT = ["Y800", "RGB24", "RGB32", "UYVY", "Y16", "NONE"]
 
 # c function type for frame callback
 # outside of class so it can be called by unbound function
 C_FRAME_READY_CALLBACK = CFUNCTYPE(None, GrabberHandlePtr, POINTER(c_ubyte), c_ulong, c_void_p)
 
-class IC_Camera:
 
+class IC_Camera:
     @property
     def callback_registered(self):
         return self._callback_registered
@@ -39,8 +33,7 @@ class IC_Camera:
             raise IC_Exception(0)
 
         self._callback_registered = False
-        self._frame = {'num'    :   -1,
-                       'ready'  :   False}
+        self._frame = {"num": -1, "ready": False}
 
     def __getattr__(self, attr):
 
@@ -50,7 +43,7 @@ class IC_Camera:
             raise AttributeError
 
     # not needed if we use props directly
-    #def __setattr__(self, attr, val):
+    # def __setattr__(self, attr, val):
     #
     #    if attr.startswith('_'):
     #        super(IC_Camera, self).__setattr__(attr, val)
@@ -67,8 +60,7 @@ class IC_Camera:
         """
         Open the camera device, required for most functions.
         """
-        err = IC_GrabberDLL.open_device_by_unique_name(self._handle,
-                                                       self._unique_device_name)
+        err = IC_GrabberDLL.open_device_by_unique_name(self._handle, self._unique_device_name)
         if err != 1:
             raise IC_Exception(err)
 
@@ -78,9 +70,8 @@ class IC_Camera:
         """
         IC_GrabberDLL.close_device(self._handle)
 
-
         ## don't use, returns wrong number..?
-        #def get_serial_number(self):
+        # def get_serial_number(self):
         #
         #    #serial = create_string_buffer(20)
         #    serial = (c_char * 20)()
@@ -90,11 +81,10 @@ class IC_Camera:
         #
         #    return serial.value
 
-
     def is_open(self):
         """
         Check if the camera device is currently open.
-        
+
         :returns: boolean -- True if camera is open.
         """
         return bool(IC_GrabberDLL.is_dev_valid(self._handle))
@@ -111,16 +101,16 @@ class IC_Camera:
         return IC_Property.get_all_property_names()
 
     # use props instead, e.g. cam.gain.range
-    #def get_property_range(self, property_name):
+    # def get_property_range(self, property_name):
     #    return IC_Property(self._handle, property_name).range
     #
-    #def is_property_available(self, property_name):
+    # def is_property_available(self, property_name):
     #    return IC_Property(self._handle, property_name).is_available
     #
-    #def is_property_auto_available(self, property_name):
+    # def is_property_auto_available(self, property_name):
     #    return IC_Property(self._handle, property_name).is_auto_available
     #
-    #def get_property_type(self, property_name):
+    # def get_property_type(self, property_name):
     #    return IC_Property(self._handle, property_name).type
 
     def reset_properties(self):
@@ -137,9 +127,7 @@ class IC_Camera:
         :returns: list -- available video formats.
         """
         vf_list = ((c_char * 80) * 40)()
-        num_vfs = IC_GrabberDLL.list_video_formats(self._handle,
-                                                   byref(vf_list),
-                                                   c_int(80))
+        num_vfs = IC_GrabberDLL.list_video_formats(self._handle, byref(vf_list), c_int(80))
         if num_vfs < 0:
             raise IC_Exception(num_vfs)
         return_list = []
@@ -150,9 +138,9 @@ class IC_Camera:
 
     def get_video_norm_count(self):
         """
-        Get the number of the available video norm formats for the current device. 
+        Get the number of the available video norm formats for the current device.
         A video capture device must have been opened before this call.
-        
+
         :returns: int -- number of available video norms.
         """
         vn_count = IC_GrabberDLL.get_video_norm_count(self._handle)
@@ -162,9 +150,9 @@ class IC_Camera:
 
     def get_video_norm(self, norm_index):
         """
-        Get a string representation of the video norm specified by norm_index. 
+        Get a string representation of the video norm specified by norm_index.
         norm_index must be between 0 and get_video_norm_count().
-        
+
         :returns: string -- name of video norm of specified index.
         """
         # DLL says need to call this first for it to work
@@ -178,9 +166,9 @@ class IC_Camera:
 
     def get_video_format_count(self):
         """
-        Get the number of the available video formats for the current device. 
+        Get the number of the available video formats for the current device.
         A video capture device must have been opened before this call.
-        
+
         :returns: int -- number of available video formats.
         """
         vf_count = IC_GrabberDLL.get_video_format_count(self._handle)
@@ -190,7 +178,7 @@ class IC_Camera:
 
     def get_video_format(self, format_index):
         """
-        Get a string representation of the video format specified by format_index. 
+        Get a string representation of the video format specified by format_index.
         format_index must be between 0 and get_video_format_count().
         """
         # DLL says need to call this first for it to work
@@ -205,7 +193,7 @@ class IC_Camera:
     def set_video_format(self, video_format):
         """
         Set a video format for the device. Must be supported.
-        
+
         :param video_format: string -- video format to use.
         """
         err = IC_GrabberDLL.set_video_format(self._handle, c_char_p(video_format))
@@ -215,7 +203,7 @@ class IC_Camera:
     def set_video_norm(self, video_norm):
         """
         Sets video norm format, whatver that means.
-        
+
         :param video_norm: string -- video norm to use.
         """
         err = IC_GrabberDLL.set_video_norm(self._handle, c_char_p(video_norm))
@@ -223,41 +211,34 @@ class IC_Camera:
             raise IC_Exception(err)
 
     def get_video_format_width(self):
-        """
-        """
+        """ """
         return IC_GrabberDLL.get_video_format_width(self._handle)
 
     def get_video_format_height(self):
-        """
-        """
+        """ """
         return IC_GrabberDLL.get_video_format_height(self._handle)
 
     def get_format(self):
-        """
-        """
+        """ """
         return IC_GrabberDLL.get_format(self._handle)
 
     def set_format(self, color_format):
-        """
-        """
+        """ """
         err = IC_GrabberDLL.set_format(self._handle, c_int(color_format))
-        print('set format err:', err)
+        print("set format err:", err)
         if err != 1:
             raise IC_Exception(err)
 
     def is_triggerable(self):
-        """
-        """
+        """ """
         return bool(IC_GrabberDLL.is_trigger_available(self._handle))
 
     def get_frame_rate(self):
-        """
-        """
+        """ """
         return IC_GrabberDLL.get_frame_rate(self._handle)
 
     def set_frame_rate(self, frame_rate):
-        """
-        """
+        """ """
         err = IC_GrabberDLL.set_frame_rate(self._handle, c_float(frame_rate))
         if err != 1:
             raise IC_Exception(err)
@@ -270,29 +251,29 @@ class IC_Camera:
         """
         err = IC_GrabberDLL.enable_trigger(self._handle, c_int(int(enable)))
         if err != 1:
-            #raise IC_Exception(err)
-            pass # todo, always raises false error for some reason...?
+            # raise IC_Exception(err)
+            pass  # todo, always raises false error for some reason...?
 
     def enable_continuous_mode(self, enable):
         """
         Enable or disable continuous mode.
-        
+
         :param enable: boolean -- True to enable continuous mode, False to disable.
         """
         actual = not enable
-        #print actual, enable, c_int(int(actual))
+        # print actual, enable, c_int(int(actual))
         err = IC_GrabberDLL.set_continuous_mode(self._handle, c_int(int(actual)))
-        print('enable_continuous_mode:', err)
+        print("enable_continuous_mode:", err)
         if err != 1:
-            #raise IC_Exception(err)
-            pass # todo, always raises false error for some reason...?
+            # raise IC_Exception(err)
+            pass  # todo, always raises false error for some reason...?
 
     def send_trigger(self):
         """
         Send a software trigger to fire the device when in triggered mode.
         """
         err = IC_GrabberDLL.software_trigger(self._handle)
-        print('send err code:', err)
+        print("send err code:", err)
         if err != 1:
             raise IC_Exception(err)
 
@@ -329,7 +310,7 @@ class IC_Camera:
     def get_image_description(self):
         """
         Get image info.
-        
+
         :returns: tuple -- (image width, image height, image depth, color format).
         """
 
@@ -338,46 +319,47 @@ class IC_Camera:
         img_depth = c_int()
         color_format = c_int()
 
-        err = IC_GrabberDLL.get_image_description(self._handle,
-                                                  byref(img_width),
-                                                  byref(img_height),
-                                                  byref(img_depth),
-                                                  byref(color_format),
-                                                  )
+        err = IC_GrabberDLL.get_image_description(
+            self._handle,
+            byref(img_width),
+            byref(img_height),
+            byref(img_depth),
+            byref(color_format),
+        )
 
         return (img_width.value, img_height.value, img_depth.value, color_format.value)
 
     def snap_image(self, timeout=1000):
         """
         Snap an image. Device must be set to live mode and a format must be set.
-        
+
         :param timeout: int -- time out in milliseconds.
         """
         err = IC_GrabberDLL.snap_image(self._handle, c_int(timeout))
-        print('snap_image err:', err)
+        print("snap_image err:", err)
         if err != 1:
             raise IC_Exception(err)
 
     def get_image_ptr(self):
         """
         Get image buffer from camera.
-        
+
         :returns: ctypes pointer -- pointer to image data.
         """
         img_ptr = IC_GrabberDLL.get_image_ptr(self._handle)
         if img_ptr is None:
             raise IC_Exception(0)
 
-        #img_data = cast(img_ptr, POINTER(c_ubyte * buffer_size))
+        # img_data = cast(img_ptr, POINTER(c_ubyte * buffer_size))
         ####array = (c_ubyte * iheight * iwidth * 3).from_address(addressof(data.contents))
-        #array = img_data.contents
+        # array = img_data.contents
 
         return img_ptr
 
     def get_image_data(self):
         """
         Get image data.
-        
+
         :returns: ctypes.c_ubyte array -- the image data.
         """
         image_size = self.get_image_description()[:3]
@@ -388,33 +370,32 @@ class IC_Camera:
         buffer_size = img_width * img_height * img_depth * sizeof(c_uint8)
 
         img_ptr = self.get_image_ptr()
-        #print(c_ubyte)
-        #print(buffer_size)
+        # print(c_ubyte)
+        # print(buffer_size)
         buffer_size = int(buffer_size)
-        #print("WARNING: buffer_size converted to integer")
+        # print("WARNING: buffer_size converted to integer")
         data = cast(img_ptr, POINTER(c_ubyte * buffer_size))
 
         return (data.contents, img_width, img_height, img_depth)
 
-        #img = np.ndarray(buffer = data.contents,
+        # img = np.ndarray(buffer = data.contents,
         #                 dtype = np.uint8,
         #                 shape = (img_height,
         #                          img_width,
         #                          img_depth))
-        #return img
+        # return img
 
     def save_image(self, filename, filetype=1, jpeq_quality=75):
         """
         Save the contents of the last snapped image into a file.
-        
+
         :param filename: string -- filename to name saved file.
         :param filetype: int -- 0 = BMP, 1 = JPEG.
         :param jpeq_quality: int -- JPEG file quality, 0-100.
         """
-        err = IC_GrabberDLL.save_image(self._handle,
-                                       c_char_p(filename),
-                                       c_int(filetype),
-                                       c_long(jpeq_quality))
+        err = IC_GrabberDLL.save_image(
+            self._handle, c_char_p(filename), c_int(filetype), c_long(jpeq_quality)
+        )
         if err != 1:
             raise IC_Exception(err)
 
@@ -422,10 +403,10 @@ class IC_Camera:
     # (cb_func cannot have the self parameter)
     def _get_callback_func(self):
         def cb_func(handle_ptr, p_data, frame_num, data):
-            self._frame['ready'] = True
-            self._frame['num'] = frame_num
+            self._frame["ready"] = True
+            self._frame["num"] = frame_num
 
-#             print 'Callback frame num:', frame_num
+        #             print 'Callback frame num:', frame_num
 
         return C_FRAME_READY_CALLBACK(cb_func)
 
@@ -446,36 +427,30 @@ class IC_Camera:
         Reset the frame ready flag to False, generally so
         that wait_til_frame_ready() can be called again.
         """
-        self._frame['ready'] = False
-        self._frame['num'] = -1
+        self._frame["ready"] = False
+        self._frame["num"] = -1
 
     def wait_til_frame_ready(self, timeout=0):
         """
         Wait until the devices announces a frame as being ready.
         Requires register_frame_ready_callback() being called.
-        
+
         :param timeout: int -- timeout in milliseconds. Set to 0 for no timeout.
-        
+
         :returns: int -- frame number that was announced as ready.
         """
         if timeout:
-            start = time.perf_counter()# should maybe use time.time() here?
+            start = time.perf_counter()  # should maybe use time.time() here?
             elapsed = (time.perf_counter() - start) * 1000
-            while not self._frame['ready'] and elapsed < timeout:
+            while not self._frame["ready"] and elapsed < timeout:
                 time.sleep(0.001)
                 elapsed = (time.perf_counter() - start) * 1000
         else:
-            while not self._frame['ready']:
+            while not self._frame["ready"]:
                 time.sleep(0.001)
 
-        if self._frame['ready']:
-            return self._frame['num']
+        if self._frame["ready"]:
+            return self._frame["num"]
         else:
-            print('Timed-out')
+            print("Timed-out")
             raise IC_Exception(-100)
-
-
-
-
-
-

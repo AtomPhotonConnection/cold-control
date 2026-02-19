@@ -7,7 +7,7 @@ before running the optimization system. Run this first to catch issues early.
 
 Usage:
     python verify_setup.py config_forward.ini
-    
+
 Output:
     ✓ = OK
     ✗ = Problem (stop and fix)
@@ -17,11 +17,10 @@ Output:
 import logging
 import sys
 from pathlib import Path
-from typing import Dict
 
 from configobj import ConfigObj
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +28,7 @@ def print_header(title):
     """Print a formatted section header."""
     print(f"\n{'=' * 60}")
     print(f"  {title}")
-    print('=' * 60)
+    print("=" * 60)
 
 
 def check_mark(condition, message):
@@ -66,18 +65,18 @@ def check_python_packages():
     print_header("Python Dependencies")
 
     required_packages = {
-        'numpy': 'Numerical computing',
-        'scipy': 'Scientific computation (signal processing)',
-        'pandas': 'Data analysis',
-        'matplotlib': 'Plotting',
-        'configobj': 'Configuration file parsing',
-        'pyvisa': 'VISA hardware control',
+        "numpy": "Numerical computing",
+        "scipy": "Scientific computation (signal processing)",
+        "pandas": "Data analysis",
+        "matplotlib": "Plotting",
+        "configobj": "Configuration file parsing",
+        "pyvisa": "VISA hardware control",
     }
 
     optional_packages = {
-        'scikit-learn': 'Machine learning utilities',
-        'pyserial': 'Serial communication',
-        'h5py': 'HDF5 file support',
+        "scikit-learn": "Machine learning utilities",
+        "pyserial": "Serial communication",
+        "h5py": "HDF5 file support",
     }
 
     all_ok = True
@@ -107,18 +106,18 @@ def check_workspace_structure():
     print_header("Workspace Structure")
 
     required_dirs = [
-        'classes',
-        'instruments/agilent_9000',
-        'instruments/WX218x',
-        'marina',
-        'calibrations',
-        'configs',
+        "classes",
+        "instruments/agilent_9000",
+        "instruments/WX218x",
+        "marina",
+        "calibrations",
+        "configs",
     ]
 
     required_files = [
-        'classes/ExperimentalConfigs.py',
-        'instruments/agilent_9000.py',
-        'instruments/WX218x/awg_control2.py',
+        "classes/ExperimentalConfigs.py",
+        "instruments/agilent_9000.py",
+        "instruments/WX218x/awg_control2.py",
     ]
 
     all_ok = True
@@ -141,11 +140,11 @@ def check_new_modules():
     print_header("Optimization Modules")
 
     required_files = {
-        'marina/pulse_optimizer_core.py': 'Core optimization utilities',
-        'marina/optimize_awg_pulse_forward.py': 'Forward optimizer',
-        'marina/optimize_awg_pulse_inverted.py': 'Inverted optimizer',
-        'marina/config_forward.ini': 'Forward config template',
-        'marina/config_inverted.ini': 'Inverted config template',
+        "marina/pulse_optimizer_core.py": "Core optimization utilities",
+        "marina/optimize_awg_pulse_forward.py": "Forward optimizer",
+        "marina/optimize_awg_pulse_inverted.py": "Inverted optimizer",
+        "marina/config_forward.ini": "Forward config template",
+        "marina/config_inverted.ini": "Inverted config template",
     }
 
     all_ok = True
@@ -158,7 +157,7 @@ def check_new_modules():
     return all_ok
 
 
-def _cfg_section(cfg: ConfigObj, key: str) -> Dict[str, str]:
+def _cfg_section(cfg: ConfigObj, key: str) -> dict[str, str]:
     """Extract a config section with a runtime guard."""
     section = cfg[key]
     if not isinstance(section, dict):
@@ -184,7 +183,14 @@ def check_config_file(config_path):
     check_mark(True, "Config file parseable")
 
     # Check required sections
-    required_sections = ['Hardware', 'Channel', 'Optimization', 'Oscilloscope', 'Measurement', 'Paths']
+    required_sections = [
+        "Hardware",
+        "Channel",
+        "Optimization",
+        "Oscilloscope",
+        "Measurement",
+        "Paths",
+    ]
     all_ok = True
 
     for section in required_sections:
@@ -193,29 +199,26 @@ def check_config_file(config_path):
         all_ok = all_ok and exists
 
     # Check key parameters
-    if 'Hardware' in config:
-        hardware_section = _cfg_section(config, 'Hardware')
-        scope_id = hardware_section.get('scope_id')
+    if "Hardware" in config:
+        hardware_section = _cfg_section(config, "Hardware")
+        scope_id = hardware_section.get("scope_id")
         check_mark(scope_id, "Hardware.scope_id set")
 
-    if 'Channel' in config:
-        channel_section = _cfg_section(config, 'Channel')
-        channel = channel_section.get('channel')
-        pulse = channel_section.get('pulse_type')
+    if "Channel" in config:
+        channel_section = _cfg_section(config, "Channel")
+        channel = channel_section.get("channel")
+        pulse = channel_section.get("pulse_type")
         check_mark(channel and pulse, f"Channel config: channel={channel}, pulse={pulse}")
 
-    if 'Optimization' in config:
-        optimization_section = _cfg_section(config, 'Optimization')
-        amplitude = optimization_section.get('amplitude')
-        #len_awg = optimization_section.get('len_awg')
-        warn_mark(
-            float(amplitude or 0) > 1.0,
-            f"Amplitude {amplitude} (typical: 0.1-0.5)"
-        )
+    if "Optimization" in config:
+        optimization_section = _cfg_section(config, "Optimization")
+        amplitude = optimization_section.get("amplitude")
+        # len_awg = optimization_section.get('len_awg')
+        warn_mark(float(amplitude or 0) > 1.0, f"Amplitude {amplitude} (typical: 0.1-0.5)")
 
-    if 'Measurement' in config:
-        measurement_section = _cfg_section(config, 'Measurement')
-        num_meas = measurement_section.get('num_measurements')
+    if "Measurement" in config:
+        measurement_section = _cfg_section(config, "Measurement")
+        num_meas = measurement_section.get("num_measurements")
         check_mark(int(num_meas or 0) > 0, f"num_measurements set: {num_meas}")
 
     return all_ok
@@ -255,8 +258,8 @@ def check_oscilloscope_connection(config_path):
 
     try:
         config = ConfigObj(str(config_path))
-        hardware_section = _cfg_section(config, 'Hardware')
-        scope_id = hardware_section.get('scope_id')
+        hardware_section = _cfg_section(config, "Hardware")
+        scope_id = hardware_section.get("scope_id")
 
         if not scope_id:
             check_mark(False, "scope_id not configured")
@@ -291,10 +294,10 @@ def check_calibration_files():
     print_header("Calibration Files")
 
     pulse_types = {
-        'stokes': 'calibrations/StirapDL_awg/stokes.csv',
-        'pump': 'calibrations/StirapDL_awg/pump.csv',
-        'P1': 'calibrations/ELYSA_fibre_branch/P1.csv',
-        'P2': 'calibrations/ELYSA_fibre_branch/P2.csv',
+        "stokes": "calibrations/StirapDL_awg/stokes.csv",
+        "pump": "calibrations/StirapDL_awg/pump.csv",
+        "P1": "calibrations/ELYSA_fibre_branch/P1.csv",
+        "P2": "calibrations/ELYSA_fibre_branch/P2.csv",
     }
 
     all_ok = True
@@ -313,8 +316,8 @@ def check_output_directory(config_path):
 
     try:
         config = ConfigObj(str(config_path))
-        paths_section = _cfg_section(config, 'Paths')
-        output_dir = paths_section.get('output_dir', './optimization_results')
+        paths_section = _cfg_section(config, "Paths")
+        output_dir = paths_section.get("output_dir", "./optimization_results")
 
         output_path = Path(output_dir)
 
@@ -323,7 +326,7 @@ def check_output_directory(config_path):
             check_mark(True, f"Output directory writable: {output_dir}")
 
             # Try to write a test file
-            test_file = output_path / '.test'
+            test_file = output_path / ".test"
             test_file.write_text("test")
             test_file.unlink()
 
@@ -345,7 +348,7 @@ def main():
     print("└" + "─" * 58 + "┘")
 
     # Get config path from command line
-    config_path = sys.argv[1] if len(sys.argv) > 1 else 'config_forward.ini'
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "config_forward.ini"
 
     checks = [
         ("Python Version", check_python_version),
@@ -397,11 +400,11 @@ def main():
         if "Workspace Structure" in failed:
             print("    Check you're in the correct repository root directory")
         if "Oscilloscope" in failed:
-            print("    python -c \"import visa; print(visa.ResourceManager().list_resources())\"")
+            print('    python -c "import visa; print(visa.ResourceManager().list_resources())"')
         print()
 
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

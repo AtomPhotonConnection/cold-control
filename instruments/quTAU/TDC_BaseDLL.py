@@ -1,63 +1,55 @@
 #!/usr/bin/env python
 
-'''
+"""
 Created on 22 Sep 2016
 
 @author: Tom Barrett
-'''
+"""
+
 import os
 from ctypes import *
 
 
 class TDC_DevType:
-    (DEVTYPE_1A,
-     DEVTYPE_1B,
-     DEVTYPE_1C,
-     DEVTYPE_NONE) = map(int, range(4))
+    (DEVTYPE_1A, DEVTYPE_1B, DEVTYPE_1C, DEVTYPE_NONE) = map(int, range(4))
+
 
 class TDC_FileFormat:
-    (FORMAT_ASCII,
-     FORMAT_BINARY,
-     FORMAT_COMPRESSED,
-     FORMAT_RAW,
-     FORMAT_NONE) = map(c_int, range(5))
+    (FORMAT_ASCII, FORMAT_BINARY, FORMAT_COMPRESSED, FORMAT_RAW, FORMAT_NONE) = map(c_int, range(5))
+
 
 class TDC_SignalCond:
-    (SCOND_TTL,
-     SCOND_LVTTL,
-     SCOND_NIM,
-     SCOND_MISC,
-     SCOND_NONE) = map(c_int, range(5))
+    (SCOND_TTL, SCOND_LVTTL, SCOND_NIM, SCOND_MISC, SCOND_NONE) = map(c_int, range(5))
+
 
 class TDC_SimType:
-    (SIM_FLAT,
-     SIM_NORMAL,
-     SIM_NONE) = map(c_int, range(3))
+    (SIM_FLAT, SIM_NORMAL, SIM_NONE) = map(c_int, range(3))
+
 
 class TDC_BaseDLL:
-
     """
     ctypes funcs to talk to tdcbase.dll.
     """
-    #tdc_base_dll = windll.LoadLibrary('C:\\Users\\LabUser\\APC\\Cold Control Heavy\\dlls\\quTAU\\userlib\\lib64\\tdcbase.dll')  from Mark's code
-    base_path = "C:\\Users\\LabUser\\Documents\\cold-control\\dlls"
-    tdc_base_dll = windll.LoadLibrary(os.path.join(base_path,r"quTAU\userlib\lib64\tdcbase.dll"))
 
-    #//////////////////////////////////////////////////////////////////////////
-    #/*!
+    # tdc_base_dll = windll.LoadLibrary('C:\\Users\\LabUser\\APC\\Cold Control Heavy\\dlls\\quTAU\\userlib\\lib64\\tdcbase.dll')  from Mark's code
+    base_path = "C:\\Users\\LabUser\\Documents\\cold-control\\dlls"
+    tdc_base_dll = windll.LoadLibrary(os.path.join(base_path, r"quTAU\userlib\lib64\tdcbase.dll"))
+
+    # //////////////////////////////////////////////////////////////////////////
+    # /*!
     #     Returns the time base (the resolution) of the TDC device.
     #     It is used as time unit by many other functions.
     #
     #     Returns
     #        Time base in seconds
-    #*/
+    # */
     # TDC_API double TDC_CC TDC_getTimebase    (        )    ;///<Get Time Base.
     getTimebase = tdc_base_dll.TDC_getTimebase
     getTimebase.restype = c_double
     getTimebase.argtypes = None
 
-    #//////////////////////////////////////////////////////////////////////////
-    #/*!
+    # //////////////////////////////////////////////////////////////////////////
+    # /*!
     #     The function initializes internal data and starts an event loop for data acquisition. It discovers devices connected to the computer, and connects to the first device that matches the given device ID. (The device ID is an identification number programmed by the user.)
     #     The function should be called before any other TDC functions, except TDC_getVersion and TDC_getTimebase .
     #     If no device is found, the function returns TDC_NotConnected. If that error code is ignored, the library falls into a demo mode where all parameter setting and getting calls return without error.
@@ -66,26 +58,26 @@ class TDC_BaseDLL:
     #         deviceId    Identification number of the device to connect. The special value -1 matches all devices.
     #     Returns
     #         Error code
-    #*/
+    # */
     # TDC_API int TDC_CC TDC_init( int deviceId );///<Initialize and Start.
     init = tdc_base_dll.TDC_init
     init.restype = c_int
     init.argtypes = (c_int,)
 
-    #//////////////////////////////////////////////////////////////////////////
-    #/*!
+    # //////////////////////////////////////////////////////////////////////////
+    # /*!
     #     Disconnects a connected device and stops the internal event loop.
     #
     #     Returns
     #         TDC_Ok (never fails)
-    #*/
+    # */
     # TDC_API int TDC_CC TDC_deInit( );///<Disconnect and uninitialize.
     deInit = tdc_base_dll.TDC_deInit
     deInit.restype = None
     deInit.argtypes = None
 
-    #//////////////////////////////////////////////////////////////////////////
-    #/*!
+    # //////////////////////////////////////////////////////////////////////////
+    # /*!
     #     Reads the device parameters back from the device.
     #     All Parameters are output parameters but may be NULL-Pointers if the
     #     result is not required.
@@ -104,15 +96,15 @@ class TDC_BaseDLL:
     getDeviceParams.restype = c_int
     getDeviceParams.argtypes = (POINTER(c_int32), POINTER(c_int32), POINTER(c_int32))
 
-    #//////////////////////////////////////////////////////////////////////////
-    #/*!
+    # //////////////////////////////////////////////////////////////////////////
+    # /*!
     #     Checks if the HBT feature is available for the connected device.
     #     This feature is necessary to use the functions of tdchbt.h.
     #
     #     Returns
     #         If the feature is available (1) or not (0)
-    #*/
-    #TDC_API Bln32 TDC_CC TDC_checkFeatureHbt();///<Check for HBT Feature.
+    # */
+    # TDC_API Bln32 TDC_CC TDC_checkFeatureHbt();///<Check for HBT Feature.
     checkFeatureHbt = tdc_base_dll.TDC_checkFeatureHbt
     checkFeatureHbt.restype = c_int
     checkFeatureHbt.argtypes = None
@@ -229,7 +221,7 @@ class TDC_BaseDLL:
     #                                                     double     threshold);///<Configure Signal Conditioning.
     configure_signal_conditioning = tdc_base_dll.TDC_configureSignalConditioning
     configure_signal_conditioning.restype = c_int
-    #TODO: enum
+    # TODO: enum
     configure_signal_conditioning.argtypes = (c_int32, c_int, c_int32, c_int32, c_double)
 
     # //////////////////////////////////////////////////////////////////////////
@@ -331,7 +323,7 @@ class TDC_BaseDLL:
     # )    ;///<Generate Timestamps.
     generateTimestamps = tdc_base_dll.TDC_generateTimestamps
     generateTimestamps.restype = c_int
-    #TODO: enum
+    # TODO: enum
     generateTimestamps.argtypes = (c_int, POINTER(c_double), c_int32)
 
     # //////////////////////////////////////////////////////////////////////////
@@ -494,7 +486,13 @@ class TDC_BaseDLL:
     #                                               double *  threshold);///<Read back Signal Conditioning Parameters.
     getSignalConditioning = tdc_base_dll.TDC_getSignalConditioning
     getSignalConditioning.restype = c_int
-    getSignalConditioning.argtypes = (c_int32, POINTER(c_int32), POINTER(c_int32), POINTER(c_int32), POINTER(c_double))
+    getSignalConditioning.argtypes = (
+        c_int32,
+        POINTER(c_int32),
+        POINTER(c_int32),
+        POINTER(c_int32),
+        POINTER(c_double),
+    )
 
     # //////////////////////////////////////////////////////////////////////////
     # /*!
@@ -604,7 +602,7 @@ class TDC_BaseDLL:
     #                                        TDC_FileFormat  format);///<Read Timestamps.
     readTimestamps = tdc_base_dll.TDC_readTimestamps
     readTimestamps.restype = c_int
-    #TODO: enum
+    # TODO: enum
     readTimestamps.argtypes = (c_char_p, c_int)
 
     # //////////////////////////////////////////////////////////////////////////
@@ -747,9 +745,8 @@ class TDC_BaseDLL:
     #                                            TDC_FileFormat  format);///<Write Timestamp Values to File.
     writeTimestamps = tdc_base_dll.TDC_writeTimestamps
     writeTimestamps.restype = c_int
-    #TODO: enum
+    # TODO: enum
     writeTimestamps.argtypes = (c_char_p, c_int)
 
     def __init__(self):
         raise Exception("You probably don't want to instantiate this class!")
-

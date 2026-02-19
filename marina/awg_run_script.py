@@ -53,8 +53,9 @@ def main():
             title="Baseline — theoretical waveform sent directly",
         )
 
-
-        baseline.save_to_csv(os.path.join(cfg.output_dir, "baseline_measured_signal.csv"), to_save="measured")
+        baseline.save_to_csv(
+            os.path.join(cfg.output_dir, "baseline_measured_signal.csv"), to_save="measured"
+        )
 
     finally:
         runner.close()

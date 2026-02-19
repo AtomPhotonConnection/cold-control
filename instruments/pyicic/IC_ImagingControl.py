@@ -6,7 +6,6 @@ from .IC_GrabberDLL import IC_GrabberDLL
 
 
 class IC_ImagingControl:
-
     def __init__(self):
         self.initialised = False
 
@@ -25,16 +24,15 @@ class IC_ImagingControl:
         if err != 1:
             raise IC_Exception(err)
 
-        self.initialised=True
+        self.initialised = True
 
     def get_unique_device_names(self):
         """
         Gets unique names (i.e. model + label + serial) of devices.
-        
+
         :returns: list -- unique devices names.
         """
         if self._unique_device_names is None:
-
             # make new list
             self._unique_device_names = []
 
@@ -56,14 +54,12 @@ class IC_ImagingControl:
 
         :param device_name: string -- the unique name of the device.
 
-        :returns: IC_Camera object -- the camera device object requested.	
+        :returns: IC_Camera object -- the camera device object requested.
         """
         # check name is valid
         if unique_device_name in self.get_unique_device_names():
-
             # check if already have a ref to device
             if unique_device_name not in self._devices:
-
                 # if not, create one
                 self._devices[unique_device_name] = IC_Camera(unique_device_name)
 
@@ -92,5 +88,3 @@ class IC_ImagingControl:
 
         # close lib
         IC_GrabberDLL.close_library()
-
-

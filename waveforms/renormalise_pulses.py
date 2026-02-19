@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 
 # Parameters
-input_file = r'waveforms\marina\10_06\non_optimised\stokes_175ns_0.2.csv'       # Replace with your file path
-output_file = r'waveforms\marina\normalised\non_optimised\stokes_175ns_0.2.csv'     # Replace with your desired output path
-rescale_factor = 1           # Adjust this factor as needed
+input_file = (
+    r"waveforms\marina\10_06\non_optimised\stokes_175ns_0.2.csv"  # Replace with your file path
+)
+output_file = r"waveforms\marina\normalised\non_optimised\stokes_175ns_0.2.csv"  # Replace with your desired output path
+rescale_factor = 1  # Adjust this factor as needed
 
 # Step 1: Read CSV with a single row
 df = pd.read_csv(input_file, header=None)
