@@ -517,7 +517,7 @@ class ExperimentConfigReader:
             waveform_output_channel_lags=list(
                 map(float, self.config["AWG"]["waveform output channel lags"])
             ),
-            marked_channels=list(self.config["AWG"]["marked channels"]),
+            marked_channels=list(self.config["AWG"]["marked channels"]) if "marked channels" in self.config["AWG"] else None,
             marker_width=eval(self.config["AWG"]["marker width"]),
         )  # type: ignore
 
@@ -545,8 +545,8 @@ class ExperimentConfigReader:
             iterations=int(self.config["iterations"]),
             waveform_sequence=list(eval(self.config["waveform sequence"])),
             waveforms=waveforms,
-            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"])),
-            interleave_waveforms=toBool(self.config["interleave waveforms"]),
+            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"])) if "waveform stitch delays" in self.config else None,
+            interleave_waveforms=toBool(self.config["interleave waveforms"]) if "interleave waveforms" in self.config else None,
             awg_configuration=awg_config,
             tdc_configuration=tdc_config,
         )
@@ -613,10 +613,8 @@ class ExperimentConfigReader:
         if use_awg:
             awg = self.config["awg_settings"]
             config_path = awg["config_path"]
-            config_path_single = awg["config_path_single"]
 
             config = MyConfig(config_path)
-            config_single = MyConfig(config_path_single) if config_path_single else None
 
             # Reads the waveforms from the config object, and creates a list of Waveforms
             # with those properties
@@ -647,15 +645,15 @@ class ExperimentConfigReader:
             awg_config = AwgConfiguration(
                 waveform_sequence=list(eval(config["waveform sequence"])),
                 waveforms=waveforms,
-                interleave_waveforms=toBool(config["interleave waveforms"]),
-                waveform_stitch_delays=list(eval(config["waveform stitch delays"])),
+                interleave_waveforms=toBool(config["interleave waveforms"]) if "interleave waveforms" in config else None,
+                waveform_stitch_delays=list(eval(config["waveform stitch delays"])) if "waveform stitch delays" in config else None,
                 sample_rate=float(config["sample rate"]),
                 burst_count=int(config["burst count"]),
                 waveform_output_channels=output_channels,
                 waveform_output_channel_lags=list(
                     map(float, config["waveform output channel lags"])
                 ),
-                marked_channels=list(config["marked channels"]),
+                marked_channels=list(config["marked channels"]) if "marked channels" in config else None,
                 marker_width=eval(config["marker width"]),
             )
 

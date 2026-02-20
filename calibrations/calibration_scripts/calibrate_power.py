@@ -108,13 +108,13 @@ def default_calib(calib_tuples):
         print(f"Target Power for desired Rabi Freq: {target_power_d2 * 1e3} mW")
 
 
-        amplitude_cal, diff, power, results_dict = calibrate.finding_amplitude_from_power(
-            [freq],
+        amplitude_cal, diff, results_dict = calibrate.finding_amplitude_from_power(
+            [freq*10**6],  # convert MHz to Hz
             target_power_d2,
             channel,
             n_steps=20,
             repeats=300,
-            delay=0.5,
+            delay=1.0,
             calibration_lims=(0.1, 0.3),
             save_all=True,
             results_dict=results_dict,
@@ -163,7 +163,12 @@ def default_calib(calib_tuples):
         )
 
 
-calib_tuples = [(1, "pump", 60.8558), (2, "stokes", 80), (3, "P1", 54.8558), (2, "stokes", 74)]
+calib_tuples = [
+    (1, "pump", 60.8558),
+                # (2, "stokes", 80), 
+                # (3, "P1", 54.8558),
+                # (2, "stokes", 74)
+                ]
 
 using_flip_mirror = True
 pulse = "pump"  # 'stokes', 'pump', 'P1', 'P2'

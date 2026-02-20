@@ -589,35 +589,31 @@ def finding_amplitude_from_power(
             awg.play_sine_wave(awg_channel, frequency=freq, amplitude=level)
             awg.set_continuous(True)
             awg.enable_channel(awg_channel)
+            awg.wait_opc()
 
             time.sleep(delay)
-            read_value = float(power_meter.read)  # type: ignore
+            raw_value = float(power_meter.read)  # type: ignore
             if flip_mirror:
-                read_value = compensate_for_flip(read_value)
-            print(f"{level}V, {read_value * 1e3}mW")
+                value = compensate_for_flip(raw_value)
+            else:
+                value = raw_value
+            print(f"{level}V, {value * 1e3}mW (raw value: {raw_value * 1e3}mW)")
 
-            calData[i] = read_value
+            calData[i] = value
 
             awg.disable_channel(awg_channel)
 
-            diff = abs(read_value - target_power)
+            diff = abs(value - target_power)
             if diff < closest_diff:
                 closest_diff = diff
                 closest_level = level
-                last_read_value = read_value
+                last_read_value = value
 
             if save_all and results_dict is not None:
                 results_dict["level"].append(level)
-                results_dict["read_value"].append(read_value)
+                results_dict["read_value"].append(value)
 
-            if diff < 1e-8:  # Adjust the tolerance as needed
-                print(
-                    f"Target power {target_power} achieved with level {level}: {read_value}. Diff: {diff}"
-                )
-                awg.reset()
-                awg.close()
-                inst.close()
-                return level, diff, read_value, results_dict
+
 
         print("...finished taking data")
 
@@ -631,6 +627,5 @@ def finding_amplitude_from_power(
     return (
         closest_level,
         closest_diff,
-        read_value,
-        results_dict,
+        results_dict
     )  # Return the closest level found if the target power is not achieved
