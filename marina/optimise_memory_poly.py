@@ -20,14 +20,15 @@ Usage::
 
 import os
 import sys
+
 import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from marina.pulse_experiment import (
     PulseShapeConfig,
-    PulseShapeExperimentRunner,
     PulseShapeExperimentResult,
+    PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 
@@ -37,6 +38,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 # Memory Polynomial helpers
 # ---------------------------------------------------------------------------
+
 
 def build_memory_poly_matrix(
     signal: np.ndarray,
@@ -152,7 +154,7 @@ def invert_memory_poly(
             x = (x / np.max(np.abs(x))) * amplitude
 
         if np.max(np.abs(residual)) < tol:
-            print(f"  Inversion converged at iteration {i+1}")
+            print(f"  Inversion converged at iteration {i + 1}")
             break
 
     return x
@@ -171,6 +173,7 @@ def normalise_01(signal: np.ndarray) -> np.ndarray:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def run_memory_poly_optimisation(
     cfg: PulseShapeConfig,
 ) -> PulseShapeExperimentResult:
@@ -181,9 +184,7 @@ def run_memory_poly_optimisation(
         3. Invert model to compute pre-distorted waveform
         4. Validate with a second experiment
     """
-    theoretical = load_signal_from_path(
-        cfg.get_theoretical_signal_path(), cfg.amplitude
-    )
+    theoretical = load_signal_from_path(cfg.get_theoretical_signal_path(), cfg.amplitude)
 
     runner = PulseShapeExperimentRunner(cfg, theoretical)
 
@@ -222,12 +223,14 @@ def run_memory_poly_optimisation(
 
         # Evaluate model fit
         y_model = apply_memory_poly(
-            baseline._raw_waveform_sent, coeffs,
-            cfg.poly_degree, cfg.mem_depth,
+            baseline._raw_waveform_sent,
+            coeffs,
+            cfg.poly_degree,
+            cfg.mem_depth,
         )
         model_mse = float(
             np.mean((y_model - baseline._raw_measured_signal) ** 2)
-            / np.mean(baseline._raw_measured_signal ** 2)
+            / np.mean(baseline._raw_measured_signal**2)
         )
         print(f"  Model fit MSE: {model_mse:.6e}")
 
@@ -255,16 +258,13 @@ def run_memory_poly_optimisation(
         print(f"  Validation MSE: {validation.mse:.6e}")
         print(
             f"  Improvement: {baseline.mse:.4e} → {validation.mse:.4e} "
-            f"({(1 - validation.mse/baseline.mse)*100:.1f}%)"
+            f"({(1 - validation.mse / baseline.mse) * 100:.1f}%)"
         )
 
         validation.plot(
             output_dir=str(cfg.output_dir),
             filename="mempoly_02_validation.png",
-            title=(
-                f"Memory Polynomial — MSE = {validation.mse:.4e} "
-                f"(was {baseline.mse:.4e})"
-            ),
+            title=(f"Memory Polynomial — MSE = {validation.mse:.4e} (was {baseline.mse:.4e})"),
         )
 
         # Save optimised waveform
@@ -282,8 +282,10 @@ def run_memory_poly_optimisation(
 
 
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        SCRIPT_DIR, "config_pulse_experiment.ini"
+    config_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else os.path.join(SCRIPT_DIR, "config_pulse_experiment.ini")
     )
     print(f"Loading config: {config_path}")
     cfg = PulseShapeConfig(config_path)

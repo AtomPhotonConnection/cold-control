@@ -1,17 +1,18 @@
-
-from time import sleep
-import os
-import numpy as np
 import glob
+import os
 import re
+from time import sleep
 
-from classes.ExperimentalConfigs import AWGSequenceConfiguration, AwgConfiguration, Waveform
-from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
+import numpy as np
+from instruments.WX218x.WX218x_awg import WX218x_awg
 from instruments.WX218x.WX218x_DLL import (
-    WX218x_OutputMode, WX218x_OperationMode, WX218x_TriggerMode, WX218x_TriggerSlope, WX218x_TraceMode
+    WX218x_OperationMode,
+    WX218x_OutputMode,
+    WX218x_TriggerMode,
+    WX218x_TriggerSlope,
 )
-import matplotlib.pyplot as plt
 
+from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 
 MARKER_LOW = 0.0
 MARKER_HIGH = 1.2
@@ -24,6 +25,7 @@ DEFAULT_MARKER_OFFSET = 50  # Ajustado a un solo canal
 MARKER_WF_LEVS = (MARKER_WF_LOW, MARKER_WF_HIGH)
 MARKER_LEVS = (MARKER_LOW, MARKER_HIGH)
 
+
 def connect_awg():
     """Conectar al AWG y limpiar configuraciones previas."""
     print("Conectando al AWG...")
@@ -34,11 +36,13 @@ def connect_awg():
     print("...conectado")
     return awg
 
+
 def configure_awg_general(awg: WX218x_awg, sample_rate, burst_count):
     """Configurar parámetros generales del AWG."""
     awg.configure_sample_rate(sample_rate)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_couple_enabled(True)
+
 
 def configure_trigger(awg: WX218x_awg, awg_ch, burst_count):
     """Configurar el trigger para el canal seleccionado."""
@@ -50,22 +54,38 @@ def configure_trigger(awg: WX218x_awg, awg_ch, burst_count):
     awg.configure_trigger_level(awg_ch, 2)
     awg.configure_trigger_slope(awg_ch, WX218x_TriggerSlope.POSITIVE)
 
+
 def calculate_offsets(channel_lag, sample_rate):
     """Calcular los offsets para un solo canal."""
     absolute_offset = int(np.rint(channel_lag * ABSOLUTE_OFFSET_FACTOR * sample_rate))
     print("Offset absoluto en pasos AWG:", absolute_offset)
     return absolute_offset
 
+
 def write_markers(marker_data, awg: WX218x_awg, awg_ch, marker_width):
     """Escribir los marcadores para un solo canal."""
-    marker_start = next((i for i, (prev, curr) in enumerate(zip([0] + marker_data[:-1], marker_data)) if prev == 0 and curr > 0), None)
-    print('Inicio del marcador:', marker_start)
-    
+    marker_start = next(
+        (
+            i
+            for i, (prev, curr) in enumerate(zip([0] + marker_data[:-1], marker_data))
+            if prev == 0 and curr > 0
+        ),
+        None,
+    )
+    print("Inicio del marcador:", marker_start)
+
     if marker_start is not None:
-        awg.configure_marker(awg_ch, index=1, position=marker_start - marker_width // 4, levels=MARKER_LEVS, width=marker_width // 2)
-    
+        awg.configure_marker(
+            awg_ch,
+            index=1,
+            position=marker_start - marker_width // 4,
+            levels=MARKER_LEVS,
+            width=marker_width // 2,
+        )
+
     awg.clear_arbitrary_sequence()
     awg.clear_arbitrary_waveform()
+
 
 def write_channel(awg_ch, rel_offset, wf_data, awg: WX218x_awg):
     """Configurar y escribir datos en el canal seleccionado."""
@@ -81,6 +101,7 @@ def write_channel(awg_ch, rel_offset, wf_data, awg: WX218x_awg):
     awg.create_arbitrary_waveform_custom(wf_data)
     awg.enable_channel(awg_ch)
     awg.configure_arb_gain(awg_ch, 2)
+
 
 def load_waveform(awg: WX218x_awg, awg_ch, waveform_data):
     """Carga la forma de onda en el canal del AWG."""
@@ -102,6 +123,7 @@ def load_waveform(awg: WX218x_awg, awg_ch, waveform_data):
     awg.configure_arb_gain(awg_ch, 2)
     print("Forma de onda cargada.")
 
+
 def get_multiwaveform_marker_data(marker_length, marker_positions, marker_levels, marker_width):
     """Genera los datos del marcador cuando hay múltiples formas de onda en una secuencia."""
     marker_data = [marker_levels[0]] * marker_length
@@ -110,12 +132,15 @@ def get_multiwaveform_marker_data(marker_length, marker_positions, marker_levels
             marker_data[i] = marker_levels[1]
     return marker_data
 
+
 def get_waveform_calib_fnc(filename):
     """Carga la función de calibración desde un archivo de texto."""
+
     def calibration_function(waveform):
         return waveform  # Aquí se aplicaría la calibración real si se tienen datos
-    
+
     return calibration_function
+
 
 def stitch_waveforms(channel_list, waveform_stitch_delays, waveforms, sample_rate):
     """Une múltiples formas de onda considerando los retardos entre ellas."""
@@ -128,12 +153,13 @@ def stitch_waveforms(channel_list, waveform_stitch_delays, waveforms, sample_rat
                 delay = delay[0]
             delay = int(delay)
         else:
-            delay = 0  
+            delay = 0
         if delay < 0:
             raise ValueError(f"Delay en posición {i} no puede ser negativo: {delay}")
         waveform_data = waveform.get(sample_rate=sample_rate)
         stitched_waveforms.append(([0] * delay) + waveform_data)
     return stitched_waveforms
+
 
 def create_waveform_lists(waveforms, waveform_sequence, channels, sample_rate):
     """Crea las listas de formas de onda y sus datos asociados."""
@@ -141,31 +167,39 @@ def create_waveform_lists(waveforms, waveform_sequence, channels, sample_rate):
     wf_data = [[] for _ in channels]
     wf_stitched_delay = [0 for _ in channels]
     seq_marker_data = []
-    
+
     for waveform in waveforms:
         for i, channel in enumerate(channels):
             wf_list[i].append(waveform)
             wf_data[i] += waveform.get(sample_rate=sample_rate)
 
-    
     return wf_list, wf_data, wf_stitched_delay, seq_marker_data, []
+
 
 def load_marker_data(awg: WX218x_awg, awg_ch, marker_data, marker_width):
     """Carga los datos del marcador en el canal del AWG."""
     print(f"Cargando datos de marcador en {awg_ch}...")
 
-    marker_starts = [i for i, (prev, curr) in enumerate(zip([0] + marker_data[:-1], marker_data)) if prev == 0 and curr > 0]
-    
+    marker_starts = [
+        i
+        for i, (prev, curr) in enumerate(zip([0] + marker_data[:-1], marker_data))
+        if prev == 0 and curr > 0
+    ]
+
     if not marker_starts:
-        print("⚠️ Advertencia: No se encontraron marcadores en los datos. Asegúrate de que marker_data contenga pulsos.")
+        print(
+            "⚠️ Advertencia: No se encontraron marcadores en los datos. Asegúrate de que marker_data contenga pulsos."
+        )
         return
-    
-    marker_start = marker_starts[0] 
-    awg.configure_marker(awg_ch, 
-                         index=1, 
-                         position=marker_start - marker_width // 4,
-                         levels=MARKER_LEVS,
-                         width=marker_width // 2)
+
+    marker_start = marker_starts[0]
+    awg.configure_marker(
+        awg_ch,
+        index=1,
+        position=marker_start - marker_width // 4,
+        levels=MARKER_LEVS,
+        width=marker_width // 2,
+    )
 
     awg.clear_arbitrary_sequence()
     awg.clear_arbitrary_waveform()
@@ -173,21 +207,20 @@ def load_marker_data(awg: WX218x_awg, awg_ch, marker_data, marker_width):
     print(f"✔ Datos de marcador cargados en {awg_ch}. Posición: {marker_start}")
 
 
-
-
-
 def run_awg_single(awg_config: AwgConfiguration):
     """
     Configures the AWG for a single-channel experiment.
     """
     awg = connect_awg()
-    
+
     # General AWG settings
     configure_awg_general(awg, awg_config.sample_rate, awg_config.burst_count)
     configure_trigger(awg, awg_config.waveform_output_channels[0], awg_config.burst_count)
 
     # Calculate offsets
-    abs_offset = calculate_offsets(list(awg_config.waveform_output_channel_lags)[0], awg_config.sample_rate)
+    abs_offset = calculate_offsets(
+        list(awg_config.waveform_output_channel_lags)[0], awg_config.sample_rate
+    )
 
     # Process waveforms and markers
     marker_wid = int(awg_config.marker_width * 10**-6 * awg_config.sample_rate)
@@ -195,58 +228,75 @@ def run_awg_single(awg_config: AwgConfiguration):
         awg_config.waveforms,
         awg_config.waveform_sequence,
         [awg_config.waveform_output_channels[0]],
-        awg_config.sample_rate  # <-- Pasamos sample_rate
+        awg_config.sample_rate,  # <-- Pasamos sample_rate
     )
-    
+
     if awg_config.interleave_waveforms:
         wf_stitched_delay = stitch_waveforms(
             [awg_config.waveform_output_channels[0]],
             [awg_config.waveform_stitch_delays],
             awg_config.waveforms,
-            awg_config.sample_rate
+            awg_config.sample_rate,
         )[0]
     else:
         wf_stitched_delay = 0
-    
+
     channel = awg_config.waveform_output_channels[0]
     waveforms = wf_list[0]
     waveform_data = wf_data[0]
     delay = wf_stitched_delay
-    waveform : Waveform
+    waveform: Waveform
 
-    constant_V=False # IMPORTANT 
-    
+    constant_V = False  # IMPORTANT
+
     # Load calibration files
     waveform_aom_calibs = {}
     aom_calibration_loc = awg_config.waveform_aom_calibrations_locations[0]
-    for filename in glob.glob(os.path.join(aom_calibration_loc, '*MHz.txt')):
+    for filename in glob.glob(os.path.join(aom_calibration_loc, "*MHz.txt")):
         try:
-            waveform_aom_calibs[float(re.match(r'\d+\.*\d*', os.path.split(filename)[1]).group(0))] = get_waveform_calib_fnc(filename)
+            waveform_aom_calibs[
+                float(re.match(r"\d+\.*\d*", os.path.split(filename)[1]).group(0))
+            ] = get_waveform_calib_fnc(filename)
         except AttributeError:
             print("Warning, waveform_aom_calibs is undefined.")
-    
+
     # Process each waveform
     marker_data = []
     waveform_data = [[]]
-    
 
     for waveform in waveforms:
         if not waveform_aom_calibs:
             calib_fun = lambda x: x
         else:
-            calib_fun = waveform_aom_calibs[min(waveform_aom_calibs, key=lambda calib_freq: abs(calib_freq - waveform.get_mod_frequency() * 10**-6))]
-        
+            calib_fun = waveform_aom_calibs[
+                min(
+                    waveform_aom_calibs,
+                    key=lambda calib_freq: abs(calib_freq - waveform.get_mod_frequency() * 10**-6),
+                )
+            ]
+
         segment_length = waveform.get_n_samples() + abs(delay[0]) + abs(abs_offset)
         marker_pos = [abs_offset + DEFAULT_MARKER_OFFSET]
-        
+
         if len(waveforms) == 1:
-            waveform_data[0].extend(waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun))
-            marker_data += waveform.get_marker_data(marker_positions=marker_pos, marker_levels=MARKER_WF_LEVS, marker_width=marker_wid)
+            waveform_data[0].extend(
+                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+            )
+            marker_data += waveform.get_marker_data(
+                marker_positions=marker_pos, marker_levels=MARKER_WF_LEVS, marker_width=marker_wid
+            )
         else:
             marker_length = sum(waveform.get_n_samples() for w in waveforms)
-            marker_data = get_multiwaveform_marker_data(marker_length, marker_positions=marker_pos, marker_levels=MARKER_WF_LEVS, marker_width=marker_wid)
-            waveform_data[0].extend(waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun))
-    
+            marker_data = get_multiwaveform_marker_data(
+                marker_length,
+                marker_positions=marker_pos,
+                marker_levels=MARKER_WF_LEVS,
+                marker_width=marker_wid,
+            )
+            waveform_data[0].extend(
+                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+            )
+
     # Apply channel offset
     if abs_offset < 0:
         waveform_data[0] = [0] * abs(int(abs_offset)) + waveform_data[0]
@@ -254,18 +304,20 @@ def run_awg_single(awg_config: AwgConfiguration):
     else:
         waveform_data[0] = [0] * abs(int(abs_offset)) + waveform_data[0]
         marker_data = [0] * abs(int(abs_offset)) + marker_data
-    
+
     wf_data[0] = waveform_data[0]
-    seq_marker_data = marker_data if not seq_marker_data else [sum(x) for x in zip(seq_marker_data, marker_data)]
-    
+    seq_marker_data = (
+        marker_data if not seq_marker_data else [sum(x) for x in zip(seq_marker_data, marker_data)]
+    )
+
     # Load waveforms and markers into AWG
     print(f"Waveform length: {len(waveform_data)}")
 
     extra_points = (16 - (len(waveform_data[0]) % 16)) % 16
-    waveform_data[0] += [0] * extra_points 
+    waveform_data[0] += [0] * extra_points
 
     load_waveform(awg, channel, waveform_data[0])
     if channel in awg_config.marked_channels:
         load_marker_data(awg, channel, seq_marker_data, marker_wid)
-    
-    print(f'Configuration complete for channel {channel}')
+
+    print(f"Configuration complete for channel {channel}")

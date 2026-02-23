@@ -1,50 +1,50 @@
-'''
-Script to calibrate the power. Outputs the required input amplitude to achieve target power. 
+"""
+Script to calibrate the power. Outputs the required input amplitude to achieve target power.
 Additionally saves the Rabi frequency data corresponding to each amplitude value.
 Compensates for flip mirror if using_flip_mirror is set to True.
 
 @author: marina llano, Jan Ole Ernst, Matt King
-'''
-
+"""
 
 import os
 import sys
-import numpy as np
-from scipy.constants import c, epsilon_0, hbar
+
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
+from scipy.constants import c, epsilon_0, hbar
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))) # add parent directory to path
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+)  # add parent directory to path
 
-from instruments.WX218x.WX218x_awg import Channel
+
 import lab_control_functions.calibration_functions as calibrate
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
-
 # general coefficients
-#gamma_d1 = 5.746*np.pi
-gamma_d2= 6*np.pi
-typical_waist_size=450 #mu m
-#d_d1 = 2.537 * 10**(-29)
-d_d2= 2.853 * 10**(-29) 
+# gamma_d1 = 5.746*np.pi
+gamma_d2 = 6 * np.pi
+typical_waist_size = 450  # mu m
+# d_d1 = 2.537 * 10**(-29)
+d_d2 = 2.853 * 10 ** (-29)
 
 # V-STIRAP re-preparation coefficients
-cg_d2_stokes = np.sqrt(1/8)
-cg_d2_pump = -np.sqrt(1/12)
-#rabi_stirap_d1 = 41
-rabi_stirap_d2 = 50*2*np.pi
+cg_d2_stokes = np.sqrt(1 / 8)
+cg_d2_pump = -np.sqrt(1 / 12)
+# rabi_stirap_d1 = 41
+rabi_stirap_d2 = 50 * 2 * np.pi
 
 # OPT PUMPING coefficients
 cg_d2_p1 = 0.32
-cg_d2_p2 = np.sqrt(1/8)# NOT USED FOR THIS SCHEME
-#rabi_p1_d1 = 34 
-rabi_p1_d2 = 50*2*np.pi
-#rabi_p2_d1 = 24
-rabi_p2_d2 = 25.5# NOT USED FOR THIS SCHEME
+cg_d2_p2 = np.sqrt(1 / 8)  # NOT USED FOR THIS SCHEME
+# rabi_p1_d1 = 34
+rabi_p1_d2 = 50 * 2 * np.pi
+# rabi_p2_d1 = 24
+rabi_p2_d2 = 25.5  # NOT USED FOR THIS SCHEME
 
 # Calibration file for flip mirror compensation
 calib_csv = r"calibrations\miscellaneous\flip_mirror_calib.csv"
+
 
 def rabi_to_laserpower(omega, d, cg, beam_waist):
     """
@@ -55,9 +55,10 @@ def rabi_to_laserpower(omega, d, cg, beam_waist):
     cg: angular CG dependence
     beam_waist: beam waist in micron"""
 
-    efield=(hbar*(omega*10**6))/(np.abs(d*cg))
-    intensity=(efield**2*epsilon_0*c)/(2)
-    return (intensity*np.pi*(beam_waist*10**(-6))**2)*10**(3) # in mW
+    efield = (hbar * (omega * 10**6)) / (np.abs(d * cg))
+    intensity = (efield**2 * epsilon_0 * c) / (2)
+    return (intensity * np.pi * (beam_waist * 10 ** (-6)) ** 2) * 10 ** (3)  # in mW
+
 
 def laserpower_to_rabi(power, d, cg, beam_waist):
     """
@@ -68,13 +69,10 @@ def laserpower_to_rabi(power, d, cg, beam_waist):
     cg: angular CG dependence
     beam_waist: beam waist in micron"""
 
-    intensity=power/(np.pi*(beam_waist*10**(-6))**2*10**3)
-    efield=np.sqrt((2*intensity)/(epsilon_0*c))
-    omega=(d*cg*efield)/(hbar*10**6)
-    return np.abs(omega) #in MHz with angular dependence
-
-
-
+    intensity = power / (np.pi * (beam_waist * 10 ** (-6)) ** 2 * 10**3)
+    efield = np.sqrt((2 * intensity) / (epsilon_0 * c))
+    omega = (d * cg * efield) / (hbar * 10**6)
+    return np.abs(omega)  # in MHz with angular dependence
 
 
 def default_calib(calib_tuples):
@@ -82,75 +80,74 @@ def default_calib(calib_tuples):
     rab_results = []
 
     for channel, pulse, freq in calib_tuples:
-
         print(f"\n\nCalibrating {pulse} pulse on channel {channel} at {freq} MHz\n\n")
 
-        if channel==1:
-            config_save_path=r"calibrations\pulse_shaping_expt\STIRAP_ELYSA"
-        elif channel==2:
-            config_save_path=r"calibrations\pulse_shaping_expt\STIRAP_DL_PRO"
-        elif channel==3:
-            config_save_path=r"calibrations\pulse_shaping_expt\OPT_PUMP_ELYSA"
-        elif channel==4:
-            config_save_path=r"calibrations\pulse_shaping_expt\OPT_PUMP_DL_PRO"
+        if channel == 1:
+            config_save_path = r"calibrations\pulse_shaping_expt\STIRAP_ELYSA"
+        elif channel == 2:
+            config_save_path = r"calibrations\pulse_shaping_expt\STIRAP_DL_PRO"
+        elif channel == 3:
+            config_save_path = r"calibrations\pulse_shaping_expt\OPT_PUMP_ELYSA"
+        elif channel == 4:
+            config_save_path = r"calibrations\pulse_shaping_expt\OPT_PUMP_DL_PRO"
         else:
             raise ValueError("Channel must be 1, 2, 3 or 4")
-        
 
-        cg_d2_map = {'stokes': cg_d2_stokes,'pump': cg_d2_pump, 'P1': cg_d2_p1,\
-                      'P2': cg_d2_p2}
-        rabi_d2_map = {'stokes': rabi_stirap_d2,'pump': rabi_stirap_d2, 'P1': rabi_p1_d2,\
-                        'P2': rabi_p2_d2}
+        cg_d2_map = {"stokes": cg_d2_stokes, "pump": cg_d2_pump, "P1": cg_d2_p1, "P2": cg_d2_p2}
+        rabi_d2_map = {
+            "stokes": rabi_stirap_d2,
+            "pump": rabi_stirap_d2,
+            "P1": rabi_p1_d2,
+            "P2": rabi_p2_d2,
+        }
 
-        target_power_d2 = rabi_to_laserpower(rabi_d2_map[pulse], d_d2, cg_d2_map[pulse],\
-                                              typical_waist_size) # in mW
-        target_power_d2 *= 10**(-3) # to W
-        print(f'Target Power for desired Rabi Freq: {target_power_d2*1e3} mW')
+        target_power_d2 = rabi_to_laserpower(
+            rabi_d2_map[pulse], d_d2, cg_d2_map[pulse], typical_waist_size
+        )  # in mW
+        target_power_d2 *= 10 ** (-3)  # to W
+        print(f"Target Power for desired Rabi Freq: {target_power_d2 * 1e3} mW")
 
 
+        amplitude_cal, diff, results_dict = calibrate.finding_amplitude_from_power(
+            [freq*10**6],  # convert MHz to Hz
+            target_power_d2,
+            channel,
+            n_steps=20,
+            repeats=300,
+            delay=1.0,
+            calibration_lims=(0.1, 0.3),
+            save_all=True,
+            results_dict=results_dict,
+            flip_mirror=True,
+        )
 
-        awg_channels_dict = {1:Channel.CHANNEL_1, 2:Channel.CHANNEL_2, 3:Channel.CHANNEL_3,\
-                              4:Channel.CHANNEL_4}
-        amplitude_cal, diff, power, results_dict = calibrate.finding_amplitude_from_power(\
-                                                            [freq],
-                                                            target_power_d2,
-                                                            awg_channels_dict[channel],
-                                                            n_steps = 20,
-                                                            repeats=300,
-                                                            delay=0.5,
-                                                            calibration_lims = (0.1,0.3),
-                                                            save_all=True,
-                                                            results_dict=results_dict,
-                                                            flip_mirror=True,)
-        
         if results_dict is None:
             raise ValueError("results_dict returned from finding_amplitude_from_power is None.")
-        df = pd.DataFrame({'amplitude_cal': results_dict.get('level', []),\
-                           'power': results_dict.get('read_value', [])})
-        
+        df = pd.DataFrame(
+            {
+                "amplitude_cal": results_dict.get("level", []),
+                "power": results_dict.get("read_value", []),
+            }
+        )
 
-        df['rabi_measured_no_ang'] = df['power'].apply(lambda p: laserpower_to_rabi(\
-                                                        p * 1e3,
-                                                        d_d2,
-                                                        cg_d2_map[pulse],
-                                                        typical_waist_size))/np.abs(cg_d2_map[pulse])
-        df['target power']=target_power_d2
-        df['rabi_des_no_cg'] = np.abs(rabi_d2_map[pulse]/cg_d2_map[pulse])
-        df['closest level']=amplitude_cal
-        df['waist_size'] = typical_waist_size
-        df['cg_ang']=cg_d2_map[pulse]
+        df["rabi_measured_no_ang"] = df["power"].apply(
+            lambda p: laserpower_to_rabi(p * 1e3, d_d2, cg_d2_map[pulse], typical_waist_size)
+        ) / np.abs(cg_d2_map[pulse])
+        df["target power"] = target_power_d2
+        df["rabi_des_no_cg"] = np.abs(rabi_d2_map[pulse] / cg_d2_map[pulse])
+        df["closest level"] = amplitude_cal
+        df["waist_size"] = typical_waist_size
+        df["cg_ang"] = cg_d2_map[pulse]
 
-        #join config_save_path with a new folder with today's date
-        #today = datetime.datetime.now().strftime("%d-%m")
+        # join config_save_path with a new folder with today's date
+        # today = datetime.datetime.now().strftime("%d-%m")
 
-        #config_path_date = os.path.join(config_save_path, today)
+        # config_path_date = os.path.join(config_save_path, today)
         full_folder_path = os.path.join(config_save_path, f"{freq:.0f}MHz")
         if not os.path.exists(full_folder_path):
             os.makedirs(full_folder_path)
 
-        
-
-        output_file = os.path.join(full_folder_path, f'rabi_data.csv')
+        output_file = os.path.join(full_folder_path, "rabi_data.csv")
         df.to_csv(output_file, index=False)
 
         print("Instantiating RabiFreqVoltageConverter...")
@@ -161,34 +158,30 @@ def default_calib(calib_tuples):
     # Print summary of Rabi frequency ranges
     print("\n\nRabi Frequency Ranges Summary:")
     for channel, freq, rab_max, rab_min in rab_results:
-        print(f"Channel {channel}, Frequency {freq} MHz: Rabi Frequency Range = {rab_min:.2f} MHz to {rab_max:.2f} MHz")
-
-
-
-
+        print(
+            f"Channel {channel}, Frequency {freq} MHz: Rabi Frequency Range = {rab_min:.2f} MHz to {rab_max:.2f} MHz"
+        )
 
 
 calib_tuples = [
     (1, "pump", 60.8558),
-    (2, "stokes", 80),
-    (3, "P1", 54.8558),
-    (2, "stokes", 74)
-]
+                # (2, "stokes", 80), 
+                # (3, "P1", 54.8558),
+                # (2, "stokes", 74)
+                ]
 
 using_flip_mirror = True
-pulse = 'pump'  # 'stokes', 'pump', 'P1', 'P2'
+pulse = "pump"  # 'stokes', 'pump', 'P1', 'P2'
 channel = 1  # AWG channel
 amplitude = 0.2
 amplitude_cal = 0.00
 diff = 1
 results_dict = {}
 # Finding the voltage amplitude that corresponds to this power
-#awg_chan_freqs_map = {1: [126], 2: [80], 3: [62.35], 4: [82.5]}
+# awg_chan_freqs_map = {1: [126], 2: [80], 3: [62.35], 4: [82.5]}
 
 
 if __name__ == "__main__":
-
-
     try:
         experiment = sys.argv[1]
     except IndexError:
@@ -198,9 +191,3 @@ if __name__ == "__main__":
         if using_flip_mirror:
             input("is the flip mirror in the beam path?")
         default_calib(calib_tuples)
-
-
-
-        
-
-

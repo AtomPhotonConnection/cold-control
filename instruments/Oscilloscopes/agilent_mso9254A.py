@@ -5,26 +5,28 @@ Created on 06/02/2026.
 @description: This script contains the OscilloscopeManager class, updated to manage
 the connection to and data acquisition from an Agilent Infiniium 9000 Series Oscilloscope.
 """
-from datetime import datetime
+
+import logging
 import os
 import time
-import logging
+from datetime import datetime
+from typing import cast
 
-import numpy as np
-import pyvisa as visa
-import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pyvisa as visa
+from pyvisa.resources import MessageBasedResource
 
 # Robustness: retries and delays for flaky USB/SCPI
 DEFAULT_WRITE_QUERY_RETRIES = 3
 RETRY_DELAY_SEC = 0.15
-COMMAND_DELAY_SEC = 0.05 # Increased slightly for 9000 series processing
-DEFAULT_TIMEOUT_MS = 60000  # 60 s for long acquisitions
+COMMAND_DELAY_SEC = 0.05  # Increased slightly for 9000 series processing
+DEFAULT_TIMEOUT_MS = 10e3  # 10 s for long acquisitions
 
 
 class OscilloscopeManager:
-
-    def __init__(self, scope_id="USB0::0x0957::0x9009::MY12345678::0::INSTR", read_speed=False): 
+    def __init__(self, scope_id="USB0::0x0957::0x9009::MY12345678::0::INSTR", read_speed=False):
         # Note: Default ID is a placeholder for 9000 series. Update with your specific address.
         self.scope_id = scope_id
         self.read_speed = read_speed
@@ -32,16 +34,17 @@ class OscilloscopeManager:
 
         try:
             self.rm = visa.ResourceManager()
-            self.scope = self.rm.open_resource(scope_id)
+            scope = self.rm.open_resource(scope_id)
+            self.scope = cast(MessageBasedResource, scope)
             self.scope.timeout = DEFAULT_TIMEOUT_MS
 
             self.scope.chunk_size = 1024 * 1024
-            self.scope.read_termination = '\n'
-            self.scope.write_termination = '\n'
+            self.scope.read_termination = "\n"
+            self.scope.write_termination = "\n"
 
             # Clear interface and buffer
             self.scope.clear()
-            
+
             _ = self._query_with_retry("*IDN?")
             print("Connected to the scope: ", _)
 
@@ -58,6 +61,7 @@ class OscilloscopeManager:
         last_exc = None
         for attempt in range(retries):
             try:
+                self.scope = cast(MessageBasedResource, self.scope)
                 self.scope.write(cmd)
                 self._delay()
                 return
@@ -66,13 +70,15 @@ class OscilloscopeManager:
                 self._log.warning("Scope write attempt %d failed: %s", attempt + 1, e)
                 if attempt < retries - 1:
                     time.sleep(RETRY_DELAY_SEC)
-        raise last_exc
+        if last_exc:
+            raise last_exc
 
     def _query_with_retry(self, cmd, retries=DEFAULT_WRITE_QUERY_RETRIES):
         """Send SCPI query with retries. Returns response string. Raises last exception on failure."""
         last_exc = None
         for attempt in range(retries):
             try:
+                self.scope = cast(MessageBasedResource, self.scope)
                 resp = self.scope.query(cmd)
                 self._delay()
                 return resp
@@ -81,14 +87,16 @@ class OscilloscopeManager:
                 self._log.warning("Scope query attempt %d failed: %s", attempt + 1, e)
                 if attempt < retries - 1:
                     time.sleep(RETRY_DELAY_SEC)
-        raise last_exc
+        if last_exc:
+            raise last_exc
 
     def clear_error_queue(self):
         """Read and clear the instrument error queue. Returns list of (code, message) or empty."""
         errors = []
         try:
             while True:
-                s = self._query_with_retry(":SYSTem:ERRor?", retries=2).strip()
+                s = self._query_with_retry(":SYSTem:ERRor?", retries=2)
+                s = cast(str, s).strip()
                 if s.startswith("0") or "No error" in s:
                     break
                 parts = s.split(",", 1)
@@ -104,6 +112,7 @@ class OscilloscopeManager:
     def is_connected(self):
         """Return True if the scope responds to *IDN?."""
         try:
+            self.scope = cast(MessageBasedResource, self.scope)
             self.scope.query("*IDN?")
             return True
         except Exception:
@@ -126,11 +135,10 @@ class OscilloscopeManager:
         except Exception as e:
             self._log.warning("Error closing resource manager: %s", e)
 
-
     @staticmethod
     def save_data(dataframe, filename, window):
         """
-        Static method to save a dataframe to a file. 
+        Static method to save a dataframe to a file.
         """
         # Get current date and time
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -138,7 +146,7 @@ class OscilloscopeManager:
 
         # Ensure the new directory exists
         directory = os.path.join("data", current_date)
-        os.makedirs(directory, exist_ok=True) 
+        os.makedirs(directory, exist_ok=True)
 
         # Creates full file name including time and parent folders
         full_name = f"{window}_{current_time}_{filename}"
@@ -148,7 +156,6 @@ class OscilloscopeManager:
         dataframe.to_csv(full_name, index=False)
         print(f"Data saved to {full_name}")
         return full_name
-
 
     @staticmethod
     def csv_analysis(filename):
@@ -161,31 +168,30 @@ class OscilloscopeManager:
 
         # Plot the data
         plt.figure(figsize=(10, 6))
-        plt.plot(data['Time (s)'], data['Voltage (V)'], linestyle="None", marker=".", color="black")
-        plt.xlabel('Time (s)')
-        plt.ylabel('Voltage (V)')
+        plt.plot(data["Time (s)"], data["Voltage (V)"], linestyle="None", marker=".", color="black")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Voltage (V)")
         plt.title(title)
         plt.grid(True)
         plt.show()
-
 
     @staticmethod
     def process_scope_data(filename):
         # Read the CSV file into a DataFrame
         df = pd.read_csv(filename)
-        
+
         # Display basic information about the data
         print("Data Overview:")
         print(df.head())
         print("\nSummary Statistics:")
         print(df.describe())
-        
+
         # Plot each channel's voltage data over time
         plt.figure(figsize=(10, 6))
         for column in df.columns:
             if "Voltage (V)" in column:
-                plt.plot(df['Time (s)'], df[column], label=column)
-        
+                plt.plot(df["Time (s)"], df[column], label=column)
+
         # Customize the plot
         plt.title("Oscilloscope Data")
         plt.xlabel("Time (s)")
@@ -195,69 +201,68 @@ class OscilloscopeManager:
         plt.tight_layout()
         plt.show()
 
-
-    def configure_scope(self, data_chs, samp_rate=None, timebase_range=(-2.5e-3, 2.5e-3),\
-                        high_impedance=True):
+    def configure_scope(
+        self, data_chs, samp_rate=None, timebase_range=(-2.5e-3, 2.5e-3), high_impedance=True
+    ):
         """
         Function to configure the general scope settings for Agilent 9000 Series.
         Inputs:
          - data_chs: Dict mapping channel number to settings (range, impedance, coupling).
-         - samp_rate: (Not always directly settable on 9000 without specific mode, 
+         - samp_rate: (Not always directly settable on 9000 without specific mode,
            controlled via memory depth/timebase, but left for interface consistency).
          - timebase_range: Start and stop time for the timebase.
          - high_impedance: used if data_chs is simple tuple format.
         """
         print("configuring the scope settings")
         self.clear_error_queue()
-        
-        self._write_with_retry(':ACQuire:MODE HRESolution') 
+
+        self._write_with_retry(":ACQuire:MODE HRESolution")
 
         # set timebase
         t_start, t_stop = timebase_range
         time_span = t_stop - t_start
         time_center = (t_start + t_stop) / 2
-        self._write_with_retry(':TIMebase:REFerence CENTer')
+        self._write_with_retry(":TIMebase:REFerence CENTer")
         self._write_with_retry(f":TIMebase:RANGe {time_span}")
         self._write_with_retry(f":TIMebase:POSition {time_center}")
 
         for channel, ch_cfg in data_chs.items():
             if isinstance(ch_cfg, dict):
-                lower, upper = ch_cfg['range']
-                impedance = ch_cfg.get('impedance', 'high').lower()
-                coupling = ch_cfg.get('coupling', 'DC').upper()
+                lower, upper = ch_cfg["range"]
+                impedance = ch_cfg.get("impedance", "high").lower()
+                coupling = ch_cfg.get("coupling", "DC").upper()
             else:
                 lower, upper = ch_cfg[0], ch_cfg[1]
-                impedance = 'high' if high_impedance else 'low'
-                coupling = 'DC'
+                impedance = "high" if high_impedance else "low"
+                coupling = "DC"
 
             # Explicitly enable the channel on screen
             self._write_with_retry(f":CHANnel{channel}:DISPlay ON")
 
             # Impedance logic for 9000 Series
-            if impedance in ('high', '1meg', '1m'):
+            if impedance in ("high", "1meg", "1m"):
                 self._write_with_retry(f":CHANnel{channel}:IMPedance ONEMeg")
-            elif impedance in ('low', '50', '50ohm'):
+            elif impedance in ("low", "50", "50ohm"):
                 self._write_with_retry(f":CHANnel{channel}:IMPedance FIFTy")
             else:
                 raise ValueError(f"Invalid impedance for channel {channel}: {impedance!r}")
 
-            if coupling not in ('AC', 'DC'):
+            if coupling not in ("AC", "DC"):
                 raise ValueError(f"Invalid coupling for channel {channel}: {coupling!r}")
             self._write_with_retry(f":CHANnel{channel}:COUPling {coupling}")
 
             # Voltage Range/Scale
             v_range = upper - lower
             self._write_with_retry(f":CHANnel{channel}:RANGe {v_range}")
-            
+
             v_offset = (upper + lower) / 2
             self._write_with_retry(f":CHANnel{channel}:OFFSet {v_offset}")
 
         # Set Waveform Format preferences
-        self._write_with_retry(':WAVeform:FORMat WORD')
-        self._write_with_retry(':WAVeform:BYTeorder LSBFirst')
+        self._write_with_retry(":WAVeform:FORMat WORD")
+        self._write_with_retry(":WAVeform:BYTeorder LSBFirst")
         self.clear_error_queue()
         print("scope settings configured")
-
 
     def configure_trigger(self, trigger_channel, trigger_level, trigger_slope="+"):
         """
@@ -275,58 +280,57 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
-    
     def set_to_digitize(self, channels=[1, 2]):
         """
-        Function to set the scope to digitize mode. 
+        Function to set the scope to digitize mode.
         For Agilent 9000, DIGitize clears memory, starts acquisition, and waits for completion.
         """
         # Construct channel string like "CHANnel1,CHANnel2"
-        # chan_str = ",".join([f"CHANnel{c}" for c in channels])
-        # cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
-        cmd = ":DIGitize"
-        
-        #print(f"Digitizing channels {channels}...")
+        chan_str = ",".join([f"CHANnel{c}" for c in channels])
+        cmd = f":DIGitize {chan_str}" if channels else ":DIGitize"
+        # cmd = ":DIGitize"
+
+        # print(f"Digitizing channels {channels}...")
         print("Digitizing displayed channels...")
         # Use *OPC? to wait for digitize to finish
         query_result = self._query_with_retry(f"{cmd};*OPC?")
-        ok = query_result.strip() == '1'
+        ok = cast(str, query_result).strip() == "1"
         if ok:
             print("Digitize complete.")
         return ok
 
     def set_to_stop(self):
         """Stop the scope."""
-        self._write_with_retry(':STOP')
+        self._write_with_retry(":STOP")
         print("Oscilloscope set to stop mode.")
         return True
 
     def set_to_run(self):
         """Set the scope to free-running (continuous) acquisition mode."""
         self.clear_error_queue()
-        self._write_with_retry(':RUN')
+        self._write_with_retry(":RUN")
         print("Oscilloscope set to run mode.")
         return True
 
     def reset_scope(self):
         """Reset the oscilloscope."""
         try:
-            self.scope.clear()
+            cast(MessageBasedResource, self.scope).clear()
+            # self.scope.clear()
         except Exception:
             pass
-        self._write_with_retry('*RST')
+        self._write_with_retry("*RST")
 
     def clear_scope(self):
         """Clear scope display/data."""
         try:
-            self.scope.clear()
+            cast(MessageBasedResource, self.scope).clear()
         except Exception:
             pass
         self.clear_error_queue()
         print("Oscilloscope cleared.")
 
-
-    def read_slow_return_data(self, channels):   
+    def read_slow_return_data(self, channels):
         """
         Function to read data from multiple channels after acquisition is complete.
         Adapted for Agilent/Keysight 9000 Series.
@@ -339,29 +343,31 @@ class OscilloscopeManager:
         """
         collected_data = None
         self.clear_error_queue()
-        
+
         # Waveform transfer setup for 9000 series
-        self._write_with_retry(':WAVeform:FORMat WORD')       # 16-bit integers
-        self._write_with_retry(':WAVeform:BYTeorder LSBFirst')
-        self._write_with_retry(':WAVeform:STReaming OFF')      # Disable streaming for query_binary_values compatibility
+        self._write_with_retry(":WAVeform:FORMat WORD")  # 16-bit integers
+        self._write_with_retry(":WAVeform:BYTeorder LSBFirst")
+        self._write_with_retry(
+            ":WAVeform:STReaming OFF"
+        )  # Disable streaming for query_binary_values compatibility
 
         time_vector_created = False
         data_dict = {}
 
         for channel in channels:
-            self._write_with_retry(f':WAVeform:SOURCe CHANnel{channel}')
+            self._write_with_retry(f":WAVeform:SOURCe CHANnel{channel}")
 
             print(f"Collecting data from channel {channel}...")
-            
+
             errs = self.clear_error_queue()
             if errs:
                 for code, msg in errs:
                     print(f"  Scope error (pre-read): {code}, {msg}")
-            
+
             # Preamble: format, type, points, count, xinc, xorg, xref, yinc, yorg, yref
-            preamble = self._query_with_retry(':WAVeform:PREamble?')
-            pre = preamble.split(',')
-            
+            preamble = cast(str, self._query_with_retry(":WAVeform:PREamble?"))
+            pre = preamble.split(",")
+
             num_points = int(pre[2])
             x_incr = float(pre[4])
             x_orig = float(pre[5])
@@ -375,16 +381,21 @@ class OscilloscopeManager:
                 errs = self.clear_error_queue()
                 for code, msg in errs:
                     print(f"  Scope error: {code}, {msg}")
-                raise ValueError(f"Preamble reports 0 points for channel {channel}. "
-                                 "Check that acquisition completed and channel is enabled.")
+                raise ValueError(
+                    f"Preamble reports 0 points for channel {channel}. "
+                    "Check that acquisition completed and channel is enabled."
+                )
 
             # Binary read — WORD format on 9000 series is signed 16-bit ('h')
             raw_data = None
             for attempt in range(DEFAULT_WRITE_QUERY_RETRIES):
                 try:
-                    raw_data = self.scope.query_binary_values(
-                        ':WAVeform:DATA?', datatype='h', container=np.array,
-                        is_big_endian=False, chunk_size=1024 * 1024
+                    raw_data = cast(MessageBasedResource, self.scope).query_binary_values(
+                        ":WAVeform:DATA?",
+                        datatype="h",
+                        container=np.array,  # type: ignore
+                        is_big_endian=False,
+                        chunk_size=1024 * 1024,
                     )
                     break
                 except Exception as e:
@@ -400,29 +411,29 @@ class OscilloscopeManager:
                 errs = self.clear_error_queue()
                 for code, msg in errs:
                     print(f"  Scope error (post-read): {code}, {msg}")
-                raise ValueError(f"No data collected from channel {channel}. "
-                                 f"Expected {num_points} points.")
+                raise ValueError(
+                    f"No data collected from channel {channel}. Expected {num_points} points."
+                )
 
             print(f"  Received {len(raw_data)} samples")
 
             # Convert to voltage
+            raw_data = cast(np.ndarray, raw_data)
             y_data = (raw_data - y_ref) * y_incr + y_orig
-            data_dict[f'Channel {channel} Voltage (V)'] = y_data
+            data_dict[f"Channel {channel} Voltage (V)"] = y_data
 
             # Create time vector once (from first channel)
             if not time_vector_created:
                 time_data = x_orig + x_incr * np.arange(len(y_data))
-                data_dict['Time (s)'] = time_data
+                data_dict["Time (s)"] = time_data
                 time_vector_created = True
 
         # Construct DataFrame with Time first
         if data_dict:
-            cols = ['Time (s)'] + [k for k in data_dict.keys() if k != 'Time (s)']
+            cols = ["Time (s)"] + [k for k in data_dict.keys() if k != "Time (s)"]
             collected_data = pd.DataFrame({k: data_dict[k] for k in cols})
 
-
         return collected_data
-        
 
     def read_slow_return_data_avgd(self, channels, averages=16):
         """
@@ -467,8 +478,7 @@ class OscilloscopeManager:
         # 3. Read the (hardware-averaged) waveform
         return self.read_slow_return_data(channels)
 
-
-    def acquire_slow_save_data(self, channels, window=00):   
+    def acquire_slow_save_data(self, channels, window=00):
         """
         Wrapper to acquire and save data.
         """
@@ -478,24 +488,24 @@ class OscilloscopeManager:
         channels_str = "_".join(map(str, channels))
         filename = self.save_data(collected_data, f"channels_{channels_str}_data", window)
         return filename
-    
 
     def arm_scope(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
         """
         Arms the scope (Single Trigger) and waits for it to be armed.
         """
         self.clear_error_queue()
-        self._write_with_retry(':SINGLE')
+        self._write_with_retry(":SINGLE")
 
         # Poll :AER? (Arm Event Register) [cite: 1563]
         print("Waiting for oscilloscope to arm...")
         start_time = time.perf_counter()
-        
+
         while (time.perf_counter() - start_time) <= max_acq_wait_sec:
             time.sleep(poll_interval_sec)
             try:
                 # AER? reads and clears the register. Returns 1 if armed.
                 aer = self._query_with_retry(":AER?")
+                aer = cast(str, aer)
                 if aer.strip() == "1":
                     print("Oscilloscope is armed and ready for trigger!")
                     return True
@@ -504,16 +514,15 @@ class OscilloscopeManager:
 
         print("Oscilloscope did not arm within timeout.")
         return False
-    
 
     def wait_for_acquisition(self, max_acq_wait_sec=10, poll_interval_sec=0.1):
         """
         Waits for acquisition to complete by polling status registers.
-        
+
         For Keysight 9000 series:
         - :PDER? returns 1 when processing is done (clears on read).
         - :ADER? returns 1 when the acquisition is done (clears on read).
-        
+
         We check both: PDER=1 OR ADER=1, since after a :SINGLE the scope
         transitions to stopped once the trigger is received and acquisition completes.
         """
@@ -526,7 +535,7 @@ class OscilloscopeManager:
             try:
                 # PDER? (Process Done Event Register) returns 1 when done
                 try:
-                    pder = self._query_with_retry(":PDER?", retries=2).strip()
+                    pder = cast(str, self._query_with_retry(":PDER?", retries=2)).strip()
                     print(f"Polled :PDER? = {pder}")
                     if pder == "1":
                         success = True
@@ -535,7 +544,7 @@ class OscilloscopeManager:
                     pass
 
                 # Fallback: check Acquisition Done Event Register
-                ader = self._query_with_retry(":ADER?", retries=2).strip()
+                ader = cast(str, self._query_with_retry(":ADER?", retries=2)).strip()
                 print(f"Polled :ADER? = {ader}")
                 if ader == "1":
                     success = True

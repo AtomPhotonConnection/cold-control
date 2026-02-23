@@ -14,6 +14,7 @@ NLMS, Wiener, gradient descent, etc.  The experiment runner is agnostic.
 
 import os
 import sys
+
 import numpy as np
 
 # Ensure the parent directory is on the path so imports resolve
@@ -62,9 +63,7 @@ def main():
         # Renormalise to the target amplitude
         if np.max(np.abs(corrected_waveform)) > 0:
             corrected_waveform = (
-                corrected_waveform
-                / np.max(np.abs(corrected_waveform))
-                * cfg.amplitude
+                corrected_waveform / np.max(np.abs(corrected_waveform)) * cfg.amplitude
             )
 
         # ── 5. Validation experiment ─────────────────────────────────────

@@ -1,15 +1,15 @@
-from typing import Optional
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from pathlib import Path
-import numpy as np
+from typing import Optional
 
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 DATA_CH = 3  # Channel to plot (e.g., fluorescence channel)
 
-def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
+
+def plot_averaged_shot(shot_folder: str, suffix="_averaged.csv", save=True):
     """
     Plot all iterations in grey and the averaged shot in color.
 
@@ -21,15 +21,20 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     shot_path = Path(shot_folder)
     files = sorted(shot_path.glob("iteration_*_data.csv"))
     avg_file = shot_path / f"{shot_path.name}{suffix}"
-    
+
     # Plot all raw iterations
     plt.figure(figsize=(10, 6))
     for file in files:
         df = pd.read_csv(file)
-        plt.plot(df["Time (s)"], df[f"Channel {DATA_CH} Voltage (V)"].rolling(window=64).mean(),
-                 color='gray', alpha=0.3, label='Individual Shots' if file == files[0] else None)
+        plt.plot(
+            df["Time (s)"],
+            df[f"Channel {DATA_CH} Voltage (V)"].rolling(window=64).mean(),
+            color="gray",
+            alpha=0.3,
+            label="Individual Shots" if file == files[0] else None,
+        )
 
-    if suffix == '_aligned.csv':
+    if suffix == "_aligned.csv":
         time_correction = 0.6e-3
     else:
         time_correction = 0.0
@@ -37,7 +42,12 @@ def plot_averaged_shot(shot_folder: str, suffix='_averaged.csv', save=True):
     # Plot the averaged CSV
     if avg_file.exists():
         avg_df = pd.read_csv(avg_file)
-        plt.plot(avg_df["Time (s)"]+time_correction, avg_df[f"Channel {DATA_CH} Voltage (V)"], color='blue', label=f'{suffix[1:-4]}')
+        plt.plot(
+            avg_df["Time (s)"] + time_correction,
+            avg_df[f"Channel {DATA_CH} Voltage (V)"],
+            color="blue",
+            label=f"{suffix[1:-4]}",
+        )
 
     plt.xlabel("Time (s)")
     plt.ylabel(f"Channel {DATA_CH} Voltage (V)")
@@ -59,26 +69,27 @@ def plot_experiment_summary(summary_path: str, save_path: Optional[str] = None):
         save_path (str): Path to save the plot image. If None, doesn't save.
     """
     df = pd.read_csv(summary_path)
-    df['shot_number'] = df['shot_folder'].str.extract(r'(\d+)').astype(int)
+    df["shot_number"] = df["shot_folder"].str.extract(r"(\d+)").astype(int)
 
     plt.figure(figsize=(12, 6))
     sns.set(style="whitegrid")
 
-    grouped = df.groupby('parameter_folder')
+    grouped = df.groupby("parameter_folder")
 
     for name, group in grouped:
-        sorted_group = group.sort_values('shot_number')
+        sorted_group = group.sort_values("shot_number")
         plt.errorbar(
-            sorted_group['shot_number'],
-            sorted_group['integral_value'],
-            yerr=sorted_group['integral_uncertainty'],
-            fmt='-o', label=name
+            sorted_group["shot_number"],
+            sorted_group["integral_value"],
+            yerr=sorted_group["integral_uncertainty"],
+            fmt="-o",
+            label=name,
         )
 
     plt.xlabel("Shot Number")
     plt.ylabel("Integrated Value (Channel 4)")
     plt.title("Integrated Fluorescence vs Shot Number")
-    plt.legend(title="Parameter Folder", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend(title="Parameter Folder", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
 
     if save_path:
@@ -86,7 +97,7 @@ def plot_experiment_summary(summary_path: str, save_path: Optional[str] = None):
     plt.show()
 
 
-def plot_all_shots_in_folder(root_folder: Path, suffix='_averaged.csv'):
+def plot_all_shots_in_folder(root_folder: Path, suffix="_averaged.csv"):
     """
     Iterate through all shots in parameter folders and generate individual plots.
 
@@ -121,7 +132,7 @@ if __name__ == "__main__":
 
     while True:
         user_input = input("Enter the root folder path or 'exit' to quit: ")
-        if user_input.lower() in ['exit', "x", "e"]:
+        if user_input.lower() in ["exit", "x", "e"]:
             break
         if Path(user_input).is_dir():
             root = Path(user_input)
@@ -131,19 +142,23 @@ if __name__ == "__main__":
             # Plot experiment summary
             print(f"Plotting summaries for {root}...")
             try:
-                plot_experiment_summary(summary_csv_averaged, save_path=os.path.join(root, "summary_plot_averaged.png"))
+                plot_experiment_summary(
+                    summary_csv_averaged, save_path=os.path.join(root, "summary_plot_averaged.png")
+                )
             except Exception as e:
                 print(f"Failed to plot averaged summary: {e}")
             try:
-                plot_experiment_summary(summary_csv_aligned, save_path=os.path.join(root, "summary_plot_aligned.png"))
+                plot_experiment_summary(
+                    summary_csv_aligned, save_path=os.path.join(root, "summary_plot_aligned.png")
+                )
             except Exception as e:
                 print(f"Failed to plot aligned summary: {e}")
             print("Summaries plotted successfully.")
 
             # Plot all shots
             print(f"Plotting all shots in {root}...")
-            plot_all_shots_in_folder(root, suffix='_averaged.csv')
-            plot_all_shots_in_folder(root, suffix='_aligned.csv')
+            plot_all_shots_in_folder(root, suffix="_averaged.csv")
+            plot_all_shots_in_folder(root, suffix="_aligned.csv")
             print("All shots plotted successfully.")
         else:
             print("Invalid folder path. Please try again.")
