@@ -1238,9 +1238,10 @@ class MotFluoresceExperiment(GenericExperiment):
         Configures the AWG for the experiment, loads data for all channels
         """
         start_time = time.time()
+        print("Connecting to AWG...")
         awg = awg_manager.AWGManager()
-        awg.reboot()
-        awg.close()
+        # awg.reboot()
+        # awg.close()
 
         awg.upload_and_arm(self.awg_config)
 

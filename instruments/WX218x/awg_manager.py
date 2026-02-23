@@ -835,12 +835,19 @@ class AWGManager:
             raise DeprecationWarning("Interleaving waveforms is deprecated")
         if awg_cfg.marked_channels is not None:
             raise DeprecationWarning("Marked channels are deprecated")
+        
+        no_err = self.check_errors()
+        print(f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}")
+
+        print("resetting AWG...")
+        self.reset()
+        print("AWG reset complete.")
 
         # --- Process waveforms ---
         all_ch_data = process_waveforms(
             outp_channels, channel_lags, waveform_sequence, waveforms_list, sample_rate
         )
-
+        print("Waveforms processed and ready for upload.")
         # --- Configure the scope for triggered output ---
         self.configure_for_triggered_output(
             sample_rate, outp_channels, burst_count, ch_amplitudes, ch_offsets
