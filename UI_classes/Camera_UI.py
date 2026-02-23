@@ -12,7 +12,10 @@ from tkinter import messagebox as tkMessageBox
 import numpy as np
 from PIL import Image, ImageTk
 
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+try:
+    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+except (OSError, FileNotFoundError, ImportError):
+    IC_ImagingControl = None  # type: ignore[assignment, misc]
 from UI_classes.UI_helpers import ImageButton
 
 
@@ -38,16 +41,18 @@ class Camera_UI(tk.LabelFrame):
             self.ic_ic = ic_imaging_control
             if not self.ic_ic.initialised:
                 self.ic_ic.init_library()
-        else:
+        elif IC_ImagingControl is not None:
             self.ic_ic = IC_ImagingControl()
             self.ic_ic.init_library()
+        else:
+            self.ic_ic = None
 
         # Calculate the aspect ratio of the requested video dimensions so we keep this when re-sizing the picture.
         self.video_dims = video_dims
         self.video_aspect_ratio = float(self.video_dims[0]) / float(self.video_dims[1])
 
         # Select the first available camera - TODO make camera dropdown
-        self.cam_names = self.ic_ic.get_unique_device_names()
+        self.cam_names = self.ic_ic.get_unique_device_names() if self.ic_ic else []
         if self.cam_names != []:
             self.cam = self.ic_ic.get_device(self.cam_names[0])
         self.is_live = False

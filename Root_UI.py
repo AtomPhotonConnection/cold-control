@@ -76,6 +76,7 @@ class ColdControl_UI(tk.Frame):
             self.photon_production_config_fname,
             self.absorbtion_imaging_config_fname,
             ic_imaging_control=self.camera_UI.ic_ic,
+            development_mode=self.development_mode,
         )
 
         """Initialise the labook UI"""
