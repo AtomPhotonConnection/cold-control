@@ -1785,8 +1785,8 @@ class ExperimentalAutomationRunner:
             start_val, new_val, self.experimental_automation_configuration.daq_channel_update_steps
         ):
             self.daq_controller.updateChannelValue(
-                channel.chNum, val if not channel.isCalibrated else channel.calibrationToVFunc(val)
-            )  # type: ignore
+                channel.chNum, val if not channel.isCalibrated else channel.calibrationToVFunc(val) # type: ignore
+            )
             time.sleep(self.experimental_automation_configuration.daq_channel_update_delay)
             print(".")
         print(f"channel {channel_number} update.")
@@ -1817,9 +1817,9 @@ class ExperimentalAutomationRunner:
                             chNum,
                             orig_val
                             if not channel.isCalibrated
-                            else channel.calibrationFromVFunc(orig_val),
+                            else channel.calibrationFromVFunc(orig_val),# type: ignore
                         )
-                    )  # type: ignore
+                    )
 
         print(f"Resetting DAQ channels {[x[0] for x in channel_values_to_reset]}")
         for args in channel_values_to_reset:
