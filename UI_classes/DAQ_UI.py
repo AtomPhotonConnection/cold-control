@@ -643,7 +643,7 @@ class DAQ_configuration_UI:
         self.channels[channelLabel].grid()
 
     def getChannelDropdownLabel(self, chNum, chName):
-        return f"Ch {str(chNum)}: {chName}"
+        return f"Ch {chNum!s}: {chName}"
 
     def chNameUpdated(self, event, ch, wid):
         """Updates the channel dictionary and the channel dropdown with the new channel name"""

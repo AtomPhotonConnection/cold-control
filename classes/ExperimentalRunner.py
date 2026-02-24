@@ -28,8 +28,15 @@ from typing import Any, Generic, Optional, TypeVar, cast
 import numpy as np
 from PIL import Image
 
-import instruments.Oscilloscopes.keysight_3104A as osc
-import instruments.WX218x.awg_manager as awg_manager
+try:
+    import instruments.Oscilloscopes.keysight_3104A as osc
+except (ImportError, ModuleNotFoundError):
+    osc = None  # type: ignore[assignment]
+
+try:
+    import instruments.WX218x.awg_manager as awg_manager
+except (ImportError, ModuleNotFoundError):
+    awg_manager = None  # type: ignore[assignment]
 from classes.DAQ import DAQ_channel, DAQ_controller
 from classes.ExperimentalConfigs import (
     AbsorbtionImagingConfiguration,
@@ -42,9 +49,15 @@ from classes.ExperimentalConfigs import (
     Waveform,
 )
 from classes.Sequence import IntervalStyle, Sequence
-from instruments.pyicic.IC_Camera import IC_Camera
-from instruments.pyicic.IC_Exception import IC_Exception
-from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+
+try:
+    from instruments.pyicic.IC_Camera import IC_Camera
+    from instruments.pyicic.IC_Exception import IC_Exception
+    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+except (OSError, FileNotFoundError, ImportError):
+    IC_Camera = None  # type: ignore[assignment, misc]
+    IC_Exception = Exception  # type: ignore[assignment, misc]
+    IC_ImagingControl = None  # type: ignore[assignment, misc]
 
 # from instruments.WX218x.WX218x_awg import WX218x_awg, Channel
 # from instruments.WX218x.WX218x_DLL import WX218x_MarkerSource, WX218x_OutputMode, WX218x_OperationMode, \
@@ -76,13 +89,20 @@ class GenericExperiment(Generic[T]):
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     """
 
-    def __init__(self, daq_controller: DAQ_controller, sequence: Sequence, configuration: T):
+    def __init__(
+        self,
+        daq_controller: DAQ_controller,
+        sequence: Sequence,
+        configuration: T,
+        development_mode: bool = False,
+    ):
         """
         Constructor
         """
         self.daq_controller = daq_controller
         self.sequence = sequence
         self.config: T = configuration
+        self.development_mode = development_mode
 
     def configure(self):
         raise NotImplementedError()
@@ -597,7 +617,9 @@ Needs to be reworked to use the new AWG manager.
 
 
 class PhotonProductionExperiment(GenericExperiment):
-    def __init__(self, daq_controller, sequence, photon_production_configuration):
+    def __init__(
+        self, daq_controller, sequence, photon_production_configuration, development_mode=False
+    ):
         self.forced_stop = False
         self.data_saver: PhotonProductionDataSaver
         self.iterations = 0
@@ -1110,9 +1132,12 @@ class MotFluoresceExperiment(GenericExperiment):
         mot_fluoresce_configuration: MotFluoresceConfiguration,
         ic_imaging_control: Optional[IC_ImagingControl] = None,
         sweep=True,
+        development_mode: bool = False,
     ):
 
-        super().__init__(daq_controller, sequence, mot_fluoresce_configuration)
+        super().__init__(
+            daq_controller, sequence, mot_fluoresce_configuration, development_mode=development_mode
+        )
         # the configuration object is a MotFluoresceConfiguration object and called self.config
         assert isinstance(self.config, MotFluoresceConfiguration), (
             "mot_fluoresce_configuration must be a MotFluoresceConfiguration object."
@@ -1217,7 +1242,12 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_scope:
             print("connecting to scope")
             start_time = time.time()
-            self.scope = osc.OscilloscopeManager()
+            if self.development_mode:
+                from instruments.dummy import DummyOscilloscopeManager
+
+                self.scope = DummyOscilloscopeManager()
+            else:
+                self.scope = osc.OscilloscopeManager()
             # self.scope.reset_scope()
             self.scope.configure_scope(
                 self.data_chs, samp_rate=self.samp_rate, timebase_range=self.time_range
@@ -1239,7 +1269,12 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         start_time = time.time()
         print("Connecting to AWG...")
-        awg = awg_manager.AWGManager()
+        if self.development_mode:
+            from instruments.dummy import DummyAWGManager
+
+            awg = DummyAWGManager()
+        else:
+            awg = awg_manager.AWGManager()
         # awg.reboot()
         # awg.close()
 
@@ -1431,10 +1466,14 @@ class MotFluoresceExperiment(GenericExperiment):
 
 class MotFluoresceSweepExperiment:
     def __init__(
-        self, sweep_config: MotFluoresceConfigurationSweep, daq_controller: DAQ_controller
+        self,
+        sweep_config: MotFluoresceConfigurationSweep,
+        daq_controller: DAQ_controller,
+        development_mode: bool = False,
     ):
         self.sweep_config = sweep_config
         self.daq_controller = daq_controller
+        self.development_mode = development_mode
 
     def run(self):
         """
@@ -1446,7 +1485,13 @@ class MotFluoresceSweepExperiment:
         for i, (config, sequence) in enumerate(self.sweep_config):
             print(f"Running experiment with configuration: {i}")
             # Create a new MotFluoresceExperiment with the current configuration
-            experiment = MotFluoresceExperiment(self.daq_controller, sequence, config, sweep=True)
+            experiment = MotFluoresceExperiment(
+                self.daq_controller,
+                sequence,
+                config,
+                sweep=True,
+                development_mode=self.development_mode,
+            )
 
             experiment.run()
             print(f"Experiment {i} completed and closed.")
