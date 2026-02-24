@@ -223,7 +223,7 @@ class OscilloscopeManager:
          - timebase_range (tuple): Start and stop time for the timebase
          - high_impedance (bool): Used only when data_chs values are plain (lower, upper) tuples.
         """
-        print("configuring the scope settings")
+        #print("configuring the scope settings")
         self.clear_error_queue()
         self._write_with_retry("ACQUIRE:TYPE HRESOLUTION")
 
@@ -368,7 +368,7 @@ class OscilloscopeManager:
             self._write_with_retry(f"WAVEFORM:SOURCE CHANNEL{channel}")
             print(f"Collecting data from channel {channel}...")
             errs = self.clear_error_queue()
-            if errs:
+            if errs and any(code != 0 for code, _ in errs):
                 for code, msg in errs:
                     print(f"Scope errors: {code}, {msg}")
             opc = self._query_with_retry("*OPC?")
@@ -379,7 +379,7 @@ class OscilloscopeManager:
                 )
             preamble = cast(str, self._query_with_retry("WAVEFORM:PREAMBLE?"))
             pre = preamble.split(",")
-            print(f"Preamble info: {pre}")
+            #print(f"Preamble info: {pre}")
             num_points = int(pre[2])
             x_incr = float(pre[4])  # XINCREMENT is at index 4
             x_orig = float(pre[5])  # XORIGIN is at index 5
@@ -456,7 +456,7 @@ class OscilloscopeManager:
         self._write_with_retry(":SINGLE")
 
         # Poll :AER? (Trigger Armed Event Register); returns 1 when armed.
-        print("Waiting for oscilloscope to arm (polling :AER?)...\n")
+        #print("Waiting for oscilloscope to arm (polling :AER?)...\n")
         start_time = time.perf_counter()
         armed_status = 0
         acq_started = False
@@ -490,7 +490,7 @@ class OscilloscopeManager:
         """
         Wait for acquisition to complete after trigger. Polls :ACQuire:COMPlete?, :TER?, :RSTATE?.
         """
-        print("Waiting for acquisition to complete...")
+        #print("Waiting for acquisition to complete...")
         start_time = time.perf_counter()
         triggered = False
         success = False
@@ -530,9 +530,9 @@ class OscilloscopeManager:
         if not success:
             print("Acquisition did not complete within the maximum wait time.")
 
-        print(f"Acquisition complete: {acq_complete_bool}, {acq_pct}% complete.")
-        print(f"Triggered: {triggered}, result from :TER? is {ter_str}")
-        print(f"Stopped: {run_state_bool}, run state is {run_state}")
+        # print(f"Acquisition complete: {acq_complete_bool}, {acq_pct}% complete.")
+        # print(f"Triggered: {triggered}, result from :TER? is {ter_str}")
+        # print(f"Stopped: {run_state_bool}, run state is {run_state}")
 
         print("Acquisition complete. Ready to retrieve data.\n")
         return success

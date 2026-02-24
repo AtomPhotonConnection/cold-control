@@ -45,7 +45,7 @@ import numpy as np
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
 
-from classes.ExperimentalConfigs import AwgConfiguration
+from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -87,7 +87,7 @@ def process_waveforms(
 
         # build full waveform from sequence
         ch_wf_ids = _waveform_sequence[i]
-        ch_waveforms = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
+        ch_waveforms: list[Waveform] = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
         raw_chunks = [np.array(w.get(sample_rate=_sample_rate)) for w in ch_waveforms]
         full_wf = np.concatenate(raw_chunks)
 
@@ -184,6 +184,19 @@ def create_binary_block_header(num_bytes):
     header = f"#{num_digits}{byte_count_str}"
     return header
 
+
+def force_even_round(value: float) -> int:
+    """
+    Round a value to the nearest non-zero even integer. 
+    Used to ensure that marker width in samples is even, as required by the AWG.
+    """
+    res = int(round(value/2.0)*2)
+    if res == 0 and value > 0:
+        res = 2
+    elif res == 0 and value < 0:
+        raise ValueError(f"Marker width in samples must be positive (got {value})")
+    
+    return res
 
 # =========================================================================
 # MARK:AWGManager
@@ -401,33 +414,14 @@ class AWGManager:
 
     # ----- clock / sample rate -----------------------------------------------
 
-    def configure_sample_rate(self, sample_rate: float) -> None:
-        """
-        Set the sample clock frequency in Sa/s.
 
-        Valid range: 10 MSa/s … 2.3 GSa/s.
-        """
-        self._write(f":FREQ:RAST {sample_rate:.10g}")
 
     def get_sample_rate(self) -> float:
         return float(self._query(":FREQ:RAST?"))
 
     # ----- output mode -------------------------------------------------------
 
-    def set_output_mode(self, mode: str = "USER") -> None:
-        """
-        Select the function mode for all channels.
 
-        Parameters
-        ----------
-        mode : str
-            One of ``"FIX"`` (standard), ``"USER"`` (arbitrary), ``"SEQ"``
-            (sequenced), ``"ASEQ"`` (advanced seq), ``"MOD"``, ``"PULS"``,
-            ``"PATT"``.
-        """
-        if mode not in ("FIX", "USER", "SEQ", "ASEQ", "MOD", "PULS", "PATT"):
-            raise ValueError(f"Invalid output mode {mode}.")
-        self._write(f":FUNC:MODE {mode}")
 
     # ----- run mode (continuous / triggered) ----------------------------------
 
@@ -474,23 +468,9 @@ class AWGManager:
 
     # ----- amplitude / gain / offset -----------------------------------------
 
-    def set_amplitude(self, channel: int, amplitude: float) -> None:
-        """
-        Set peak-to-peak amplitude for *channel* in volts.
-
-        DC path: 50 mV … 2 V.  HV path: 50 mV … 4 V.
-        """
-        self.select_channel(channel)
-        self._write(f":VOLT {amplitude}")
-
     def set_amplitude_all(self, amplitude: float) -> None:
         """Set amplitude for ALL channels."""
         self._write(f":VOLT:ALL {amplitude}")
-
-    def set_offset(self, channel: int, offset: float) -> None:
-        """Set DC offset for *channel* (−1 V … +1 V)."""
-        self.select_channel(channel)
-        self._write(f":VOLT:OFFS {offset}")
 
     def set_output_coupling(self, mode: str = "DC") -> None:
         """Select output amplifier path for all channels: ``"DC"`` or ``"HV"``."""
@@ -550,7 +530,6 @@ class AWGManager:
     def clear_all(self) -> None:
         """Delete all segments and all sequences."""
         self.delete_all_segments()
-        self.delete_all_sequences()
 
     # ----- waveform upload ---------------------------------------------------
     def upload_waveform(
@@ -667,11 +646,11 @@ class AWGManager:
 
     def configure_marker(
         self,
+        channel:int = 1,
         marker: int = 2,
         position: int = 0,
         width: int = 4,
         delay: float = 0.0,
-        channel: Optional[int] = None,
     ) -> None:
         """
         Configure a marker output on the currently selected (or specified)
@@ -679,6 +658,8 @@ class AWGManager:
 
         Parameters
         ----------
+        channel : int
+            ``select_channel`` is called first.
         marker : int
             Marker index (1 or 2).
         position : int
@@ -689,11 +670,10 @@ class AWGManager:
             Marker high voltage (0.5 … 1.2 V).
         delay : float
             Delay from SYNC in seconds (0 … 3 ns).
-        channel : int or None
-            If given, ``select_channel`` is called first.
+
         """
-        if channel is not None:
-            self.select_channel(channel)
+        
+        self.select_channel(channel)
 
         if marker not in (1, 2):
             raise ValueError(f"Marker must be 1 or 2, got {marker}.")
@@ -728,38 +708,7 @@ class AWGManager:
         self._write(f":MARK:SEL {marker}")
         self._write(":MARK:STAT OFF")
 
-    # ----- sequence commands -------------------------------------------------
 
-    def define_sequence_step(self, step: int, segment: int, loops: int = 1, jump: int = 0) -> None:
-        """
-        Define one step of a sequence table.
-
-        Parameters
-        ----------
-        step : int
-            Step number (1-based, ascending, min 3 steps total).
-        segment : int
-            Segment number to play at this step.
-        loops : int
-            Number of times to repeat this segment.
-        jump : int
-            Jump flag (0 = no jump, 1 = wait for event before advancing).
-        """
-        self._write(f":SEQ:DEF {step},{segment},{loops},{jump}")
-
-    def set_sequence_advance(self, mode: str = "AUTO") -> None:
-        """Set sequence advance mode: ``"AUTO"`` | ``"ONCE"`` | ``"STEP"``."""
-        self._write(f":SEQ:ADV {mode}")
-
-    def set_sequence_length(self, length: int) -> None:
-        self._write(f":SEQ:LENG {length}")
-
-    def select_sequence(self, seq_num: int) -> None:
-        self._write(f":SEQ:SEL {seq_num}")
-
-    def delete_all_sequences(self) -> None:
-        """Delete all sequences."""
-        self._write(":SEQ:DEL:ALL")
 
     # ----- MARK:compound methods
 
@@ -783,6 +732,7 @@ class AWGManager:
         trigger_level = 1.6  # V, typical for external trigger from scope or pulse generator
         trigger_slope = "POS"  # positive edge trigger
         trigger_source = "EXT"  # external trigger input
+        output_mode = "USER"  # arbitrary waveform mode
 
         self.abort()
         for ch in _channels:
@@ -791,20 +741,22 @@ class AWGManager:
 
         self.delete_all_segments()
 
-        self.configure_sample_rate(_sample_rate)
-        self.set_output_mode("USER")  # arbitrary
         self.enable_coupling()
+        #self.disable_coupling() 
+
+        self.set_continuous(False)  # triggered mode
+        self.set_trigger_level(trigger_level)
+        self.set_trigger_source(trigger_source)
+        self.set_trigger_slope(trigger_slope)
+        self.set_burst_count(_burst_count)
 
         for i, ch in enumerate(_channels):
             self.select_channel(ch)
-            self.set_continuous(False)
-            self.set_trigger_level(trigger_level)
-            self.set_trigger_source(trigger_source)
-            self.set_trigger_slope(trigger_slope)
+            self._write(f":FREQ:RAST {_sample_rate:.10g}")
+            self._write(f":FUNC:MODE {output_mode}")
+            self._write(f":VOLT {_amplitudes[i]}")
+            self._write(f":VOLT:OFFS {_offsets[i]}")
 
-            self.set_burst_count(_burst_count)
-            self.set_amplitude(ch, _amplitudes[i])
-            self.set_offset(ch, _offsets[i])
 
     def upload_and_arm(self, awg_cfg: AwgConfiguration) -> None:
         """
@@ -818,6 +770,8 @@ class AWGManager:
         -------
         None
         """
+        self.delete_all_segments()  # clear waveform memory
+
         waveform_sequence = awg_cfg.waveform_sequence
         sample_rate = awg_cfg.sample_rate
         burst_count = awg_cfg.burst_count
@@ -838,23 +792,29 @@ class AWGManager:
 
         no_err = self.check_errors()
         print(f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}")
+        if not no_err:
+            self.clear_error_queue()
 
-        print("resetting AWG...")
+        self._log.info("resetting AWG...")
         self.reset()
-        print("AWG reset complete.")
+        self._log.info("AWG reset complete.")
 
         # --- Process waveforms ---
         all_ch_data = process_waveforms(
             outp_channels, channel_lags, waveform_sequence, waveforms_list, sample_rate
         )
-        print("Waveforms processed and ready for upload.")
+        self._log.info(f"self.check_errors(): {self.check_errors()}")
+        self._log.info("Waveforms processed and ready for upload.")
         # --- Configure the scope for triggered output ---
         self.configure_for_triggered_output(
             sample_rate, outp_channels, burst_count, ch_amplitudes, ch_offsets
         )
 
+        self._log.info(f"self.check_errors(): {self.check_errors()}")
+
         self.wait_opc()
-        print("AWG configured for triggered output.")
+        self._log.info("AWG configured for triggered output.")
+        print("\n--- Starting waveform upload ---\n")
 
         # --- Upload waveforms for each channel ---
         for ch in outp_channels:
@@ -862,14 +822,21 @@ class AWGManager:
             success = self.upload_waveform(data, segment=1, channel=ch)
             if not success:
                 raise RuntimeError(f"Failed to upload waveform for channel {ch}")
-            print(f"Waveform for channel {ch} uploaded successfully.")
+            self._log.info(f"Waveform for channel {ch} uploaded successfully.")
+
+        self._log.info(f"self.check_errors(): {self.check_errors()}")
 
         # --- Configure markers ---
-        self.configure_marker(width=marker_width_us * sample_rate * 1e-6)
+        self._log.info("Marker width is %g us → %d samples", marker_width_us, force_even_round(marker_width_us * sample_rate * 1e-6))
+        self.configure_marker(channel= 1, width=force_even_round(marker_width_us * sample_rate * 1e-6))
+
+        self._log.info(f"self.check_errors(): {self.check_errors()}")
+
 
         # --- Enable outputs and arm ---
         for ch in outp_channels:
             self.enable_channel(ch)
+            self.select_segment(1)  # ensure segment 1 is selected for output
 
         self.initiate()
         self._log.info("AWG armed and waiting for trigger.")

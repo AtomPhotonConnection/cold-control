@@ -802,7 +802,7 @@ class AwgConfiguration:
         burst_count: int,
         waveform_output_channels: list[int],
         waveform_output_channel_lags: list[float],
-        marker_width: int,
+        marker_width: float,
         waveform_stitch_delays: Optional[list[list[Any]]] = None,
         interleave_waveforms: Optional[bool] = None,
         marked_channels: Optional[list[int]] = None,

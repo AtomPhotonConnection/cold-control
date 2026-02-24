@@ -3,6 +3,7 @@
 import logging
 import os
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox as tkMessageBox
 
 import classes.Styles as Styles
@@ -13,7 +14,12 @@ from UI_classes.Experimental_UI import Experimental_UI
 from UI_classes.Labbook_UI import Labbook_UI
 from UI_classes.Sequence_UI import Sequence_UI
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename=r"C:\pulse_shaping_data\logging\cold_control.log",
+    filemode="a",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 
 class ColdControl_UI(tk.Frame):
