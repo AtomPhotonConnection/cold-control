@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox as tkMessageBox
@@ -11,6 +12,8 @@ from UI_classes.DAQ_UI import DAQ_UI
 from UI_classes.Experimental_UI import Experimental_UI
 from UI_classes.Labbook_UI import Labbook_UI
 from UI_classes.Sequence_UI import Sequence_UI
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class ColdControl_UI(tk.Frame):

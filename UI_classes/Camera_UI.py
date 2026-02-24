@@ -196,7 +196,8 @@ class Camera_UI(tk.LabelFrame):
         if self.is_live:
             self.cam.stop_live()
             self.cam.close()
-        self.ic_ic.close_library()
+        if self.ic_ic is not None:
+            self.ic_ic.close_library()
 
 
 class Camera_configuration_UI(tk.Toplevel):
