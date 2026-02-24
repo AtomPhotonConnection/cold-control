@@ -165,7 +165,7 @@ def default_calib(calib_tuples):
 
 calib_tuples = [
     (1, "pump", 60.8558),
-                # (2, "stokes", 80), 
+                # (2, "stokes", 80),
                 # (3, "P1", 54.8558),
                 # (2, "stokes", 74)
                 ]

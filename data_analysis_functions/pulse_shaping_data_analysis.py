@@ -158,9 +158,7 @@ class ExperimentalDataProcessor:
         # Filter valid data
         valid_dfs = []
         for df in dataframes:
-            if not validate_data:
-                valid_dfs.append(df)
-            elif self.validate_data(
+            if not validate_data or self.validate_data(
                 df, marker_time_range, fluor_drop_voltage, fluor_drop_time_range
             ):
                 valid_dfs.append(df)

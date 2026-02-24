@@ -267,7 +267,7 @@ class DummyOscilloscopeManager:
         for ch in channels:
             data[f"Channel {ch} Voltage (V)"] = np.zeros(n_points)
         self._log.info(
-            "[DummyScope] read_slow_return_data → %d pts × %d chs", n_points, len(channels)
+            "[DummyScope] read_slow_return_data → %d pts x %d chs", n_points, len(channels)
         )
         return pd.DataFrame(data)
 
@@ -297,7 +297,7 @@ class DummyAWGManager:
 
     # -- context manager --
 
-    def __enter__(self) -> "DummyAWGManager":
+    def __enter__(self) -> DummyAWGManager:
         return self
 
     def __exit__(self, *exc) -> None:

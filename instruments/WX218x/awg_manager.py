@@ -835,7 +835,7 @@ class AWGManager:
             raise DeprecationWarning("Interleaving waveforms is deprecated")
         if awg_cfg.marked_channels is not None:
             raise DeprecationWarning("Marked channels are deprecated")
-        
+
         no_err = self.check_errors()
         print(f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}")
 

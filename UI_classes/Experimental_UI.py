@@ -289,9 +289,7 @@ class Experimental_UI(tk.LabelFrame):
         self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
 
         def set_run_tone_freq(ch, freq):
-            if ch == 2:
-                self.run_tone_freqs[ch] = freq
-            elif ch == 4:
+            if ch == 2 or ch == 4:
                 self.run_tone_freqs[ch] = freq
             else:
                 self.run_tone_freqs[ch] = freq * 10**6
@@ -1963,7 +1961,7 @@ class Absorbtion_imaging_configuration_UI:
         self.top.after(delay, warningLabel.destroy)
 
     def getChannelDropdownLabel(self, chNum, chName):
-        return f"Ch {str(chNum)}: {chName}"
+        return f"Ch {chNum!s}: {chName}"
 
     def apply(self):
         self.apply_changes = True

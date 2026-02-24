@@ -817,13 +817,9 @@ class ExperimentConfigReader:
                 for key, value in sweep.items():
                     if key == "title":
                         continue
-                    elif key == "rabi_frequencies":
+                    elif key == "rabi_frequencies" or key == "modulation_frequencies":
                         sweep_changes[key] = toFloatList(value)
-                    elif key == "modulation_frequencies":
-                        sweep_changes[key] = toFloatList(value)
-                    elif key == "waveforms":
-                        sweep_changes[key] = ensure_list(value)
-                    elif key == "calibration_paths":
+                    elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
                     if wave_idxs is not None:
                         assert len(sweep_changes[key]) == len(wave_idxs), (

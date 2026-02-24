@@ -17,10 +17,15 @@ select = [
     "B",   # flake8-bugbear (logic guardrails)
     "N",   # pep8-naming
     "I",   # import sorting
+    "SIM",  # flake8-simplify
+    "PTH",  # flake8-use-pathlib
+    "RUF",  # Ruff-specific rules
 ]
 
 ignore = [
     "E501",  # Line too long (handled by formatter)
+    "UP007", # Allow Union for 3.9 compatibility
+    "UP045", # Allow Optional for 3.9 compatibility
 ]
 
 fixable = ["ALL"]

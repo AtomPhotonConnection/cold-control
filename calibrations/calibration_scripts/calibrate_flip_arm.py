@@ -147,7 +147,7 @@ def fit_and_interpolate(
         "b": float(b),
         "r2": float(r2),
         "rmse": float(rmse),
-        "n": int(len(x)),
+        "n": len(x),
     }
 
     if out_png:
