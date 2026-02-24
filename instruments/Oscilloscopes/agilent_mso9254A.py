@@ -430,7 +430,7 @@ class OscilloscopeManager:
 
         # Construct DataFrame with Time first
         if data_dict:
-            cols = ["Time (s)"] + [k for k in data_dict.keys() if k != "Time (s)"]
+            cols = ["Time (s)"] + [k for k in data_dict if k != "Time (s)"]
             collected_data = pd.DataFrame({k: data_dict[k] for k in cols})
 
         return collected_data

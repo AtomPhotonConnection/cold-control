@@ -330,7 +330,7 @@ class Sequence_UI(tk.Toplevel):
         except MultipleInvalidSequenceChannelException as mulErr:
             errMsg = str(mulErr) + "\n"
             for i in range(0, len(mulErr.errors)):
-                errMsg += f"\nChannel {mulErr.errorChannels[i]} - {str(mulErr.errors[i])}"
+                errMsg += f"\nChannel {mulErr.errorChannels[i]} - {mulErr.errors[i]!s}"
                 print(mulErr.errorChannels[i], str(mulErr.errors[i]))
 
             tkMessageBox.showwarning("Unable to applySamplingConfiguration changes", errMsg)

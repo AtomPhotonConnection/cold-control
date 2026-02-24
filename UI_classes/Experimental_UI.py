@@ -40,7 +40,11 @@ from classes.ExperimentalRunner import (
     MotFluoresceSweepExperiment,
     PhotonProductionExperiment,
 )
-from instruments.WX218x.awg_manager import AWGManager
+
+try:
+    from instruments.WX218x.awg_manager import AWGManager
+except (ImportError, ModuleNotFoundError):
+    AWGManager = None  # type: ignore[assignment, misc]
 from UI_classes.DAQ_UI import DAQ_UI
 from UI_classes.Sequence_UI import Sequence_UI
 from UI_classes.ToolTip_UI import ToolTip
@@ -78,6 +82,7 @@ class Experimental_UI(tk.LabelFrame):
             self.expt_config_reader.get_correct_config()
         )
         self.ic_ic = ic_imaging_control
+        self.development_mode = development_mode
 
         """Add buttons to set and run the experimental sequence"""
         butt_opts = {"font": ("Helvetica", 12), "height": 25, "width": 150, "compound": tk.LEFT}
@@ -284,9 +289,7 @@ class Experimental_UI(tk.LabelFrame):
         self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
 
         def set_run_tone_freq(ch, freq):
-            if ch == 2:
-                self.run_tone_freqs[ch] = freq
-            elif ch == 4:
+            if ch == 2 or ch == 4:
                 self.run_tone_freqs[ch] = freq
             else:
                 self.run_tone_freqs[ch] = freq * 10**6
@@ -420,6 +423,7 @@ class Experimental_UI(tk.LabelFrame):
                 daq_controller=self.daq_ui.daq_controller,
                 sequence=self.sequence_ui.sequence,
                 photon_production_configuration=self.photon_production_config,
+                development_mode=self.development_mode,
             )
 
         elif isinstance(self.photon_production_config, MotFluoresceConfiguration):
@@ -440,6 +444,7 @@ class Experimental_UI(tk.LabelFrame):
                 mot_fluoresce_configuration=self.photon_production_config,
                 ic_imaging_control=camera_control,
                 sweep=False,
+                development_mode=self.development_mode,
             )
             # The mot fluoresce experiment is a special case where the Live UI is not set up.
             liveUI = False
@@ -482,7 +487,9 @@ class Experimental_UI(tk.LabelFrame):
                 parameter_list[1],
                 parameter_list[2],
             )
-            sweep_experiment = MotFluoresceSweepExperiment(sweep_config, self.daq_ui.daq_controller)
+            sweep_experiment = MotFluoresceSweepExperiment(
+                sweep_config, self.daq_ui.daq_controller, development_mode=self.development_mode
+            )
 
             print("Running MOT Fluoresce Sweep experiment")
             sweep_experiment.run()
@@ -663,7 +670,12 @@ class Experimental_UI(tk.LabelFrame):
 
         if self.run_tone_output_states[i_ch] == False:
             if self.run_tone_awg == None:
-                self.run_tone_awg = awg = AWGManager()
+                if self.development_mode:
+                    from instruments.dummy import DummyAWGManager
+
+                    self.run_tone_awg = awg = DummyAWGManager()
+                else:
+                    self.run_tone_awg = awg = AWGManager()
                 for i in [1, 2, 3, 4]:
                     awg.disable_channel(i)
 
@@ -1949,7 +1961,7 @@ class Absorbtion_imaging_configuration_UI:
         self.top.after(delay, warningLabel.destroy)
 
     def getChannelDropdownLabel(self, chNum, chName):
-        return f"Ch {str(chNum)}: {chName}"
+        return f"Ch {chNum!s}: {chName}"
 
     def apply(self):
         self.apply_changes = True

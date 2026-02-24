@@ -20,10 +20,8 @@ from instruments.ThorlabsPM100 import ThorlabsPM100
 """
 Load required classes for awg driven AOM calibration
 """
-from instruments.WX218x import awg_manager
-from instruments.WX218x.awg_manager import AWGManager
-
 from classes.DAQ import DAQ_controller
+from instruments.WX218x import awg_manager
 
 # helper functions in a separate file
 from lab_control_functions.calibration_helper_functions import *

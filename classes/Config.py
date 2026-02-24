@@ -10,7 +10,6 @@ import re
 import time
 import warnings
 from typing import Any, Optional
-from unittest.mock import patch
 
 import numpy as np
 from configobj import ConfigObj
@@ -214,9 +213,8 @@ class DaqReader:
         self.fname = fname
         self.config: dict[str, Any] = ConfigObj(fname)
 
-    def load_DAQ_controller(self) -> DAQ_controller:
-        """Returns a DAQ controller object as configured in the config file."""
-
+    def _load_channels(self) -> list:
+        """Parse DAQ channel definitions from the config file."""
         channels = []
         for _, v in self.config["DAQ channels"].items():
             channelArgs: tuple[int, str, tuple[float, float], float, bool, str] = (
@@ -228,7 +226,10 @@ class DaqReader:
                 str(v["calibrationFname"]),  # calibrationFname (str)
             )
             channels.append(DAQ_channel(*channelArgs))
+        return channels
 
+    def _load_dios(self) -> list:
+        """Parse DIO definitions from the config file."""
         dios = []
         for _, v in self.config["DIOs"].items():
             dio_name = str(v["dioName"])
@@ -264,6 +265,13 @@ class DaqReader:
                 enabled_state = int(v["enabled state"])
 
             dios.append(DAQ_dio(dio_name, dio_num, port, line, direction, enabled_state))
+        return dios
+
+    def load_DAQ_controller(self) -> DAQ_controller:
+        """Returns a DAQ controller object as configured in the config file."""
+
+        channels = self._load_channels()
+        dios = self._load_dios()
 
         DAQ_master = DAQ_card(
             card_number=int(self.config["DAQ cards"]["master"]["card number"]),
@@ -309,10 +317,17 @@ class DaqReader:
 
         return DAQ_controller(DAQ_master, DAQ_slaves)
 
-    @patch("DAQ.DAQ2502")
-    @patch("DAQ.DAQ_controller.enslave")
-    def load_dummy_DAQ_controller(self, *varArgs):
-        return self.load_DAQ_controller()
+    def load_dummy_DAQ_controller(self):
+        """Create a DummyDAQController with channels and DIOs parsed from the config file.
+
+        This avoids any hardware interaction while retaining the real
+        channel definitions (names, limits, calibrations, DIOs).
+        """
+        from instruments.dummy import DummyDAQController
+
+        channels = self._load_channels()
+        dios = self._load_dios()
+        return DummyDAQController(channels=channels, dios=dios)
 
 
 class DaqWriter:
@@ -517,7 +532,9 @@ class ExperimentConfigReader:
             waveform_output_channel_lags=list(
                 map(float, self.config["AWG"]["waveform output channel lags"])
             ),
-            marked_channels=list(self.config["AWG"]["marked channels"]) if "marked channels" in self.config["AWG"] else None,
+            marked_channels=list(self.config["AWG"]["marked channels"])
+            if "marked channels" in self.config["AWG"]
+            else None,
             marker_width=eval(self.config["AWG"]["marker width"]),
         )  # type: ignore
 
@@ -545,8 +562,12 @@ class ExperimentConfigReader:
             iterations=int(self.config["iterations"]),
             waveform_sequence=list(eval(self.config["waveform sequence"])),
             waveforms=waveforms,
-            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"])) if "waveform stitch delays" in self.config else None,
-            interleave_waveforms=toBool(self.config["interleave waveforms"]) if "interleave waveforms" in self.config else None,
+            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"]))
+            if "waveform stitch delays" in self.config
+            else None,
+            interleave_waveforms=toBool(self.config["interleave waveforms"])
+            if "interleave waveforms" in self.config
+            else None,
             awg_configuration=awg_config,
             tdc_configuration=tdc_config,
         )
@@ -645,15 +666,21 @@ class ExperimentConfigReader:
             awg_config = AwgConfiguration(
                 waveform_sequence=list(eval(config["waveform sequence"])),
                 waveforms=waveforms,
-                interleave_waveforms=toBool(config["interleave waveforms"]) if "interleave waveforms" in config else None,
-                waveform_stitch_delays=list(eval(config["waveform stitch delays"])) if "waveform stitch delays" in config else None,
+                interleave_waveforms=toBool(config["interleave waveforms"])
+                if "interleave waveforms" in config
+                else None,
+                waveform_stitch_delays=list(eval(config["waveform stitch delays"]))
+                if "waveform stitch delays" in config
+                else None,
                 sample_rate=float(config["sample rate"]),
                 burst_count=int(config["burst count"]),
                 waveform_output_channels=output_channels,
                 waveform_output_channel_lags=list(
                     map(float, config["waveform output channel lags"])
                 ),
-                marked_channels=list(config["marked channels"]) if "marked channels" in config else None,
+                marked_channels=list(config["marked channels"])
+                if "marked channels" in config
+                else None,
                 marker_width=eval(config["marker width"]),
             )
 
@@ -790,13 +817,9 @@ class ExperimentConfigReader:
                 for key, value in sweep.items():
                     if key == "title":
                         continue
-                    elif key == "rabi_frequencies":
+                    elif key == "rabi_frequencies" or key == "modulation_frequencies":
                         sweep_changes[key] = toFloatList(value)
-                    elif key == "modulation_frequencies":
-                        sweep_changes[key] = toFloatList(value)
-                    elif key == "waveforms":
-                        sweep_changes[key] = ensure_list(value)
-                    elif key == "calibration_paths":
+                    elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
                     if wave_idxs is not None:
                         assert len(sweep_changes[key]) == len(wave_idxs), (
