@@ -361,4 +361,4 @@ Subsections `[[0]]`, `[[1]]`, … per channel. Channel numbers and order must ma
 
 ---
 
-*Generated for the cold-control codebase. Config readers live in `classes/Config.py`; experiment and sweep logic in `classes/ExperimentalConfigs.py` and `classes/ExperimentalRunner.py`.*
+*Generated for the cold-control codebase. Config readers live in `classes/Config.py`; experiment and sweep logic in `classes/experimental_configs.py` and `classes/experimental_runner.py`.*

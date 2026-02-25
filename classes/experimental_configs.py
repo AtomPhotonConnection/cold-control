@@ -1,6 +1,6 @@
 """
 This file contains the configuration objects that are loaded by the experiment objects in
-the ExperimentalRunner.py file. The configuration objects should be loaded by reading from
+the experimental_runner.py file. The configuration objects should be loaded by reading from
 a configuration file (see Config.py) and then they can be passed to the experiment object
 which will run the experiment with the specified configuration.
 

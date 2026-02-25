@@ -32,7 +32,7 @@ from classes.experimental_configs import (
     MotFluoresceConfigurationSweep,
     PhotonProductionConfiguration,
 )
-from classes.ExperimentalRunner import (
+from classes.experimental_runner import (
     AbsorbtionImagingExperiment,
     ExperimentalAutomationRunner,
     GenericExperiment,
