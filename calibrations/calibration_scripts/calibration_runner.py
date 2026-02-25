@@ -54,7 +54,7 @@ if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
 
     config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
     daq_config_fname = config_reader.get_daq_config_fname()
-    daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+    daq_controller = DaqReader(daq_config_fname).load_daq_controller()
     daq_controller.continuousOutput = True
 
     calibrate.daq_driven_aom_response(
@@ -106,7 +106,7 @@ elif __name__ == "__main__" and CALIB_TYPE == "another one":
         freq_ch = 14
         config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
         daq_config_fname = config_reader.get_daq_config_fname()
-        daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+        daq_controller = DaqReader(daq_config_fname).load_daq_controller()
         daq_controller.continuousOutput=True
         daq_controller.updateChannelValue(15, 1) # for manual control of amplitude input (in V)
 

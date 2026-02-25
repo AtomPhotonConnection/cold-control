@@ -173,7 +173,7 @@ if __name__ == "__main__":
     config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_reader = DaqReader(daq_config_fname)
-    daq: DAQ_controller = daq_reader.load_DAQ_controller()
+    daq: DAQ_controller = daq_reader.load_daq_controller()
     daq.continuousOutput = True
 
     freq_channel = 3

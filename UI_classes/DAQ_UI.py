@@ -29,10 +29,10 @@ class DAQ_UI(tk.Frame):
         self.parent = parent
         self.reader = DaqReader(config_fname)
         if not development_mode:
-            self.daq_controller: DAQ_controller = self.reader.load_DAQ_controller()
+            self.daq_controller: DAQ_controller = self.reader.load_daq_controller()
         else:
             print("Running in development mode...\nLoading Dummy DAQ cards")
-            self.daq_controller = self.reader.load_dummy_DAQ_controller()
+            self.daq_controller = self.reader.load_dummy_daq_controller()
 
         self.Frame_Channels = tk.LabelFrame(self, text="DAQ channels", font=font)
         self.Frame_DIOs = tk.LabelFrame(self, text="Digital outputs", font=font)
@@ -802,7 +802,7 @@ class DAQ_configuration_UI:
     #         # Check for empty filenames (i.e. when the user cancelled the action)
     #         if fname!= '':
     #             self.controller.releaseAll()
-    #             self.controller = DaqReader(fname).load_DAQ_controller()
+    #             self.controller = DaqReader(fname).load_daq_controller()
     #
     #             self.configureForCurrentController()
     #

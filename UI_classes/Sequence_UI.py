@@ -78,7 +78,7 @@ class Sequence_UI(tk.Toplevel):
         self.sequence_fname: str = sequence_fname
         print(f"Loading sequence from file: {self.sequence_fname}")
         self.sequence_reader = SequenceReader(self.sequence_fname)
-        self.sequence: Sequence = self.sequence_reader.loadSequence()
+        self.sequence: Sequence = self.sequence_reader.load_sequence()
         self.configured_channel_labels: dict = configured_channel_labels
         self.configured_channel_calibrations: dict = configured_channel_calibrations
 
@@ -187,7 +187,7 @@ class Sequence_UI(tk.Toplevel):
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname != "":
             self.sequence_reader = SequenceReader(fname)
-            self.sequence: Sequence = self.sequence_reader.loadSequence()
+            self.sequence: Sequence = self.sequence_reader.load_sequence()
 
             self.configureForCurrentSequence()
 

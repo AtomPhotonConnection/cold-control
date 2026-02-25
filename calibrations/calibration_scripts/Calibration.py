@@ -754,7 +754,7 @@ if __name__ == "__main__":
     aom_freqs = [90, 95, 100, 102]
     config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
     daq_config_fname = config_reader.get_daq_config_fname()
-    daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+    daq_controller = DaqReader(daq_config_fname).load_daq_controller()
     daq_controller.continuousOutput = True
 
     for freq, v in zip(aom_freqs, freq_v):
@@ -788,7 +788,7 @@ if __name__ == "__main__":
     freq_ch = 14
     config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
     daq_config_fname = config_reader.get_daq_config_fname()
-    daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+    daq_controller = DaqReader(daq_config_fname).load_daq_controller()
     daq_controller.continuousOutput=True
     daq_controller.updateChannelValue(15, 1) # for manual control of amplitude input (in V)
 

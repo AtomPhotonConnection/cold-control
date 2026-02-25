@@ -155,7 +155,7 @@ Per-waveform:
 
 **Purpose:** Defines the DAQ sequence: total time, step, global timings (labels), and per-channel time–voltage pairs and interval styles. This is what the sequence UI edits and what the DAQ runs.
 
-**Reader:** `SequenceReader` in `classes/Config.py`; `loadSequence()` builds a `Sequence` object. The root config’s `sequence_filename` points to this file.
+**Reader:** `SequenceReader` in `classes/Config.py`; `load_sequence()` builds a `Sequence` object. The root config’s `sequence_filename` points to this file.
 
 ### Section: `[notes]`
 
@@ -241,7 +241,7 @@ Sweep dict is built from sections that define ranges:
 
 **Purpose:** Defines which DAQ cards exist, which channels belong to which card, channel names, limits, calibrations, and DIOs. Used to build the `DAQ_controller` and the DAQ UI.
 
-**Reader:** `DaqReader.load_DAQ_controller()` in `classes/Config.py`.
+**Reader:** `DaqReader.load_daq_controller()` in `classes/Config.py`.
 
 ### Section: `[DAQ cards]`
 

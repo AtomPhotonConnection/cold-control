@@ -5,10 +5,13 @@ Created on 22 Apr 2016
 """
 
 import ast
+import functools
+import operator
 import os
 import re
 import time
 import warnings
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -46,8 +49,8 @@ GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
 def get_config_root() -> str:
     """Return the directory used as the base for resolving relative config paths.
-    Uses environment variable COLD_CONTROL_CONFIG_ROOT if set, otherwise os.getcwd()."""
-    return os.environ.get("COLD_CONTROL_CONFIG_ROOT", os.getcwd())
+    Uses environment variable COLD_CONTROL_CONFIG_ROOT if set, otherwise Path.cwd()."""
+    return os.environ.get("COLD_CONTROL_CONFIG_ROOT", str(Path.cwd()))
 
 
 def resolve_config_path(path: str, base: Optional[str] = None) -> str:
@@ -57,37 +60,37 @@ def resolve_config_path(path: str, base: Optional[str] = None) -> str:
     path = str(path).strip()
     if base is None:
         base = get_config_root()
-    if os.path.isabs(path):
-        return os.path.normpath(path)
-    return os.path.normpath(os.path.join(base, path))
+    if Path(path).is_absolute():
+        return str(Path(path).resolve())
+    return str((Path(base) / path).resolve())
 
 
-def toBool(string):
+def to_bool(string):
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
 
 
-def toIntList(arg):
+def to_int_list(arg):
     if arg is None:
         return None
     else:
         return list(map(int, arg))
 
 
-def toFloatTuple(arg):
-    return tuple(toFloatList(arg))
+def to_float_tuple(arg):
+    return tuple(to_float_list(arg))
 
 
-def toIntTuple(arg):
+def to_int_tuple(arg):
     return tuple(map(int, arg))
 
 
-def toFloatList(arg):
+def to_float_list(arg):
     if isinstance(arg, str):
-        Warning("toFloatList received a string input. This may lead to unexpected behavior.")
+        Warning("to_float_list received a string input. This may lead to unexpected behavior.")
         return [float(arg)]
     return list(map(float, arg))
 
-    # def toFloatList(arg):
+    # def to_float_list(arg):
     #     if arg is None:
     #         return None
     #     if isinstance(arg, list):
@@ -101,14 +104,15 @@ def toFloatList(arg):
     #         except ValueError as e:
     #             raise ValueError(f"Could not convert one of the entries to float: {items}") from e
     #     else:
-    #         raise TypeError(f"Unsupported input type for toFloatList: {type(arg)}")
+    #         raise TypeError(f"Unsupported input type for to_float_list: {type(arg)}")
 
 
 class ConfigReader:
     def __init__(self, fname):
         self.fname = fname
         self.config = ConfigObj(fname)
-        self._config_dir = os.path.dirname(os.path.abspath(fname))
+        fpath = Path(fname)
+        self._config_dir = str(fpath.resolve().parent)
 
     def _resolve(self, path):
         if path is None or path == "":
@@ -217,7 +221,7 @@ class DaqReader:
         """Parse DAQ channel definitions from the config file."""
         channels = []
         for _, v in self.config["DAQ channels"].items():
-            channelArgs: tuple[int, str, tuple[float, float], float, bool, str] = (
+            channel_args: tuple[int, str, tuple[float, float], float, bool, str] = (
                 int(v["chNum"]),  # chNum (int)
                 str(v["chName"]),  # chName (str)
                 (float(v["chLimits"][0]), float(v["chLimits"][1])),  # chLimits (tuple[float,float])
@@ -225,7 +229,7 @@ class DaqReader:
                 bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
                 str(v["calibrationFname"]),  # calibrationFname (str)
             )
-            channels.append(DAQ_channel(*channelArgs))
+            channels.append(DAQ_channel(*channel_args))
         return channels
 
     def _load_dios(self) -> list:
@@ -267,13 +271,13 @@ class DaqReader:
             dios.append(DAQ_dio(dio_name, dio_num, port, line, direction, enabled_state))
         return dios
 
-    def load_DAQ_controller(self) -> DAQ_controller:
+    def load_daq_controller(self) -> DAQ_controller:
         """Returns a DAQ controller object as configured in the config file."""
 
         channels = self._load_channels()
         dios = self._load_dios()
 
-        DAQ_master = DAQ_card(
+        daq_master = DAQ_card(
             card_number=int(self.config["DAQ cards"]["master"]["card number"]),
             channels=[
                 next(ch for ch in channels if ch.chNum == int(x))
@@ -285,14 +289,14 @@ class DaqReader:
                     next((dio for dio in dios if dio.dio_num == int(x)), None)
                     for x in self.config["DAQ cards"]["master"]["dios"]
                 ]
-                if x != None
+                if x is not None
             ],
         )
-        DAQ_slaves = []
+        daq_slaves = []
 
         for _, v in self.config["DAQ cards"]["slaves"].items():
             try:
-                DAQ_slaves.append(
+                daq_slaves.append(
                     DAQ_card(
                         card_number=int(v["card number"]),
                         channels=[
@@ -304,7 +308,7 @@ class DaqReader:
                                 next((dio for dio in dios if dio.dio_num == int(x)), None)
                                 for x in v["dios"]
                             ]
-                            if x != None
+                            if x is not None
                         ],
                     )
                 )
@@ -315,9 +319,9 @@ class DaqReader:
                 print([ch.chNum for ch in channels])
                 raise err
 
-        return DAQ_controller(DAQ_master, DAQ_slaves)
+        return DAQ_controller(daq_master, daq_slaves)
 
-    def load_dummy_DAQ_controller(self):
+    def load_dummy_daq_controller(self):
         """Create a DummyDAQController with channels and DIOs parsed from the config file.
 
         This avoids any hardware interaction while retaining the real
@@ -354,9 +358,10 @@ class DaqWriter:
 
         daq_channels = {}
 
-        i = 0
         # Note sum(x,[]) is a cheeky way to flatten a list of lists (x).
-        for ch in sum([card.channels for card in [master] + list(slaves)], []):
+        for i, ch in enumerate(
+            functools.reduce(operator.iadd, [card.channels for card in [master, *list(slaves)]], [])
+        ):
             daq_channels[str(i)] = {
                 "chNum": ch.chNum,
                 "chName": ch.chName,
@@ -365,7 +370,6 @@ class DaqWriter:
                 "UIvisible": ch.isUIVisable,
                 "calibrationFname": ch.calibrationFname if ch.isCalibrated else "",
             }
-            i += 1
 
         self.config["DAQ channels"] = daq_channels
 
@@ -377,17 +381,17 @@ class SequenceReader:
         self.fname = fname
         self.config = MyConfig(self.fname)
 
-    def loadSequence(self):
+    def load_sequence(self):
         seq = Sequence(*self.get_sequence_init_args())
         sequence_channels: dict[str, Any] = {}
         sequence_channels = self.config["sequence channels"]
 
         for _, v in sequence_channels.items():
             ch = int(v["chNum"])
-            tV_pairs = [tuple(ast.literal_eval(x)) for x in v["tV_pairs"]]
-            V_interval_styles = [int(x) for x in v["V_interval_styles"]]
+            tv_pairs = [tuple(ast.literal_eval(x)) for x in v["tv_pairs"]]
+            v_interval_styles = [int(x) for x in v["V_interval_styles"]]
 
-            seq.addChannelSeq(ch, tV_pairs, V_interval_styles)
+            seq.addChannelSeq(ch, tv_pairs, v_interval_styles)
 
         return seq
 
@@ -438,9 +442,9 @@ class SequenceWriter:
 
         self.config["sequence channels"] = {}
 
-        for chNum, ch in sequence.chSeqs.items():
-            self.config["sequence channels"][str(chNum)] = {
-                "chNum": chNum,
+        for ch_num, ch in sequence.chSeqs.items():
+            self.config["sequence channels"][str(ch_num)] = {
+                "chNum": ch_num,
                 "tV_pairs": ch.tV_pairs,
                 "V_interval_styles": ch.V_interval_styles,
             }
@@ -545,7 +549,7 @@ class ExperimentConfigReader:
         )
 
         waveforms = []
-        for x, v in self.config["waveforms"].items():
+        for _x, v in self.config["waveforms"].items():
             _phases = [(float(p), i) for i, p in enumerate(v["phases"])]
             waveforms.append(
                 Waveform(
@@ -565,7 +569,7 @@ class ExperimentConfigReader:
             waveform_stitch_delays=list(eval(self.config["waveform stitch delays"]))
             if "waveform stitch delays" in self.config
             else None,
-            interleave_waveforms=toBool(self.config["interleave waveforms"])
+            interleave_waveforms=to_bool(self.config["interleave waveforms"])
             if "interleave waveforms" in self.config
             else None,
             awg_configuration=awg_config,
@@ -579,9 +583,9 @@ class ExperimentConfigReader:
         Method to extract the mot fluorescence configuration from the config file.
         """
 
-        use_camera = toBool(self.config["use_cam"])
-        use_scope = toBool(self.config["use_scope"])
-        use_awg = toBool(self.config["use_awg"])
+        use_camera = to_bool(self.config["use_cam"])
+        use_scope = to_bool(self.config["use_scope"])
+        use_awg = to_bool(self.config["use_awg"])
 
         if use_camera:
             camera = self.config["camera_settings"]
@@ -589,9 +593,9 @@ class ExperimentConfigReader:
                 "cam_exposure": int(camera["cam_exposure"]),
                 "cam_gain": int(camera["cam_gain"]),
                 "camera_trig_ch": int(camera["camera_trig_ch"]),
-                "camera_trig_levs": toFloatTuple(camera["camera_trig_levs"]),
+                "camera_trig_levs": to_float_tuple(camera["camera_trig_levs"]),
                 "camera_pulse_width": float(camera["camera_pulse_width"]),
-                "save_images": toBool(camera["save_images"]),
+                "save_images": to_bool(camera["save_images"]),
             }
 
         else:
@@ -625,7 +629,7 @@ class ExperimentConfigReader:
                 "trigger_channel": int(scope["trigger_channel"]),
                 "trigger_level": float(scope["trigger_level"]),
                 "sample_rate": float(scope["sample_rate"]),
-                "time_range": toFloatTuple(scope["time_range"]),
+                "time_range": to_float_tuple(scope["time_range"]),
                 "data_channels": data_chs,
             }
         else:
@@ -640,7 +644,7 @@ class ExperimentConfigReader:
             # Reads the waveforms from the config object, and creates a list of Waveforms
             # with those properties
             waveforms = []
-            for x, v in config["waveforms"].items():
+            for _x, v in config["waveforms"].items():
                 if v["phases"]:
                     phases_str = " ".join(v["phases"])
                     phases_str = re.sub(r"\(([^)]+) ([^)]+)\)", r"(\1, \2)", phases_str)
@@ -666,7 +670,7 @@ class ExperimentConfigReader:
             awg_config = AwgConfiguration(
                 waveform_sequence=list(eval(config["waveform sequence"])),
                 waveforms=waveforms,
-                interleave_waveforms=toBool(config["interleave waveforms"])
+                interleave_waveforms=to_bool(config["interleave waveforms"])
                 if "interleave waveforms" in config
                 else None,
                 waveform_stitch_delays=list(eval(config["waveform stitch delays"]))
@@ -704,7 +708,7 @@ class ExperimentConfigReader:
             #     awg_config_single = AwgConfiguration(\
             #         waveform_sequence=list(eval(config_single['waveform sequence'])),
             #         waveforms=waveforms_single,
-            #         interleave_waveforms=toBool(config_single['interleave waveforms']),
+            #         interleave_waveforms=to_bool(config_single['interleave waveforms']),
             #         waveform_stitch_delays=list(eval(config_single['waveform stitch delays'])),
             #         sample_rate=float(config_single['sample rate']),
             #         burst_count=int(config_single['burst count']),
@@ -776,7 +780,7 @@ class ExperimentConfigReader:
             step = float(self.config[section]["step"])
 
             if step == 0:
-                return [int(round(start))]
+                return [round(start)]
 
             return list(np.round(np.arange(start, stop + step, step)).astype(int))
 
@@ -804,9 +808,9 @@ class ExperimentConfigReader:
 
         if sweep_type == "awg_sequence":
             defaults = self.config["defaults"]
-            wave_idxs = toIntList(defaults.get("waveform_indices", None))
-            rabi_freqs = toFloatList(defaults.get("rabi_frequencies", None))
-            mod_freqs = toFloatList(defaults.get("modulation_frequencies", None))
+            wave_idxs = to_int_list(defaults.get("waveform_indices", None))
+            rabi_freqs = to_float_list(defaults.get("rabi_frequencies", None))
+            mod_freqs = to_float_list(defaults.get("modulation_frequencies", None))
             waveforms = ensure_list(defaults.get("waveforms", None))
             calib_paths = ensure_list(defaults.get("calibration_paths", None))
 
@@ -818,7 +822,7 @@ class ExperimentConfigReader:
                     if key == "title":
                         continue
                     elif key == "rabi_frequencies" or key == "modulation_frequencies":
-                        sweep_changes[key] = toFloatList(value)
+                        sweep_changes[key] = to_float_list(value)
                     elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
                     if wave_idxs is not None:
@@ -860,25 +864,25 @@ class ExperimentConfigReader:
         return AbsorbtionImagingConfiguration(
             scan_abs_img_freq=eval(self.config["scan_abs_img_freq"]),
             abs_img_freq_ch=int(self.config["abs_img_freq_ch"]),
-            abs_img_freqs=toFloatList(self.config["abs_img_freqs"]),
+            abs_img_freqs=to_float_list(self.config["abs_img_freqs"]),
             camera_trig_ch=int(self.config["camera_trig_ch"]),
             imag_power_ch=int(self.config["imag_power_ch"]),
-            camera_trig_levs=toFloatTuple(self.config["camera_trig_levs"]),
-            imag_power_levs=toFloatTuple(self.config["imag_power_levs"]),
+            camera_trig_levs=to_float_tuple(self.config["camera_trig_levs"]),
+            imag_power_levs=to_float_tuple(self.config["imag_power_levs"]),
             camera_pulse_width=float(self.config["camera_pulse_width"]),
             imag_pulse_width=float(self.config["imag_pulse_width"]),
-            t_imgs=toFloatList(self.config["t_imgs"]),
+            t_imgs=to_float_list(self.config["t_imgs"]),
             mot_reload=float(self.config["mot_reload_time"]),
             n_backgrounds=int(self.config["n_backgrounds"]),
-            bkg_off_channels=toIntList(self.config["bkg_off_channels"]),
+            bkg_off_channels=to_int_list(self.config["bkg_off_channels"]),
             cam_gain=int(self.config["cam_gain"]),
             cam_exposure=int(self.config["cam_exposure"]),
-            cam_gain_lims=toIntTuple(self.config["cam_gain_lims"]),
-            cam_exposure_lims=toIntTuple(self.config["cam_exposure_lims"]),
+            cam_gain_lims=to_int_tuple(self.config["cam_gain_lims"]),
+            cam_exposure_lims=to_int_tuple(self.config["cam_exposure_lims"]),
             save_location=self.config["save_location"],
-            save_raw_images=toBool(self.config["save_raw_images"]),
-            save_processed_images=toBool(self.config["save_processed_images"]),
-            review_processed_images=toBool(self.config["review_processed_images"]),
+            save_raw_images=to_bool(self.config["save_raw_images"]),
+            save_processed_images=to_bool(self.config["save_processed_images"]),
+            review_processed_images=to_bool(self.config["review_processed_images"]),
         )
 
     def get_correct_config(self):
@@ -963,7 +967,7 @@ class ExperimentalAutomationReader:
                         if v["daq_channel_static_values"] != []
                         else [],
                     ),
-                    sequence=SequenceReader(v["sequence_fname"]).loadSequence(),
+                    sequence=SequenceReader(v["sequence_fname"]).load_sequence(),
                     sequence_fname=v["sequence_fname"],
                     iterations=int(v["iterations"]),
                     mot_reload=eval(v["mot_reload"]),
@@ -994,25 +998,27 @@ class ExperimentalAutomationWriter:
         pass
 
 
-def _makeRootConfig():
+def _make_root_config():
     config = ConfigObj()
-    config.filename = os.getcwd() + "/configs/rootConfig.ini"
+    base_path = str(Path.cwd())
+    config.filename = base_path + "/configs/rootConfig.ini"
 
-    config["sequence_filename"] = os.getcwd() + "/configs/sequence/sequenceConfig2DAQ"
-    config["daq_config_filename"] = os.getcwd() + "/configs/daq/configCalibs"
+    config["sequence_filename"] = base_path + "/configs/sequence/sequenceConfig2DAQ"
+    config["daq_config_filename"] = base_path + "/configs/daq/configCalibs"
     config["absorbtion_images_config_filename"] = (
-        os.getcwd() + "/configs/absorbtion imaging/defaultAbsImgConfig"
+        base_path + "/configs/absorbtion imaging/defaultAbsImgConfig"
     )
     config["photon_production_config_filename"] = (
-        os.getcwd() + "/configs/photon production/defaultPhotonProductionConfig"
+        base_path + "/configs/photon production/defaultPhotonProductionConfig"
     )
     config["development_mode"] = False
 
     config.write()
 
 
-def _makeDaqConfig():
-    filename = os.getcwd() + "/configs/daq/configCalibs"
+def _make_daq_config():
+    base_path = str(Path.cwd())
+    filename = base_path + "/configs/daq/configCalibs"
     config = MyConfig(filename)
 
     config["DAQ cards"] = {}
@@ -1227,8 +1233,9 @@ def _makeDaqConfig():
     config.write()
 
 
-def _makePhotonProductionConfig():
-    filename = os.getcwd() + "/configs/photon production/freqScanPhotonProductionConfig"
+def _make_photon_production_config():
+    base_path = str(Path.cwd())
+    filename = base_path + "/configs/photon production/freqScanPhotonProductionConfig"
     config = MyConfig(filename)
 
     config["date"] = time.strftime("%d/%m/%y")
@@ -1278,7 +1285,7 @@ def _makePhotonProductionConfig():
     }
 
     config["waveform stitch delays"] = [192] * 6 + [192 * 10]
-    config["waveform aom calibrations location"] = os.getcwd() + "/calibrations/stirap_awg"
+    config["waveform aom calibrations location"] = base_path + "/calibrations/stirap_awg"
     config["marker levels"] = (0, 1)
     config["marker width"] = 50 * 10**-3  # us
     config["marker delay"] = 0.853  # us
@@ -1296,8 +1303,9 @@ def _makePhotonProductionConfig():
     config.write()
 
 
-def _makeSequenceConfig():
-    filename = os.getcwd() + "/configs/sequence/abs_img/feb24_just_flash.ini"
+def _make_sequence_config():
+    base_path = str(Path.cwd())
+    filename = base_path + "/configs/sequence/abs_img/feb24_just_flash.ini"
     config = MyConfig(filename)
 
     config["date"] = time.strftime("%d/%m/%y")
@@ -1455,14 +1463,15 @@ def _makeSequenceConfig():
 
 # if __name__ == "__main__":
 #
-#     _makeRootConfig()
-#     _makeDaqConfig()
-#     _makeSequenceConfig()
+#     _make_root_config()
+#     _make_daq_config()
+#     _make_sequence_config()
 
 
-def _makeAbsorbtionImagingConfig():
+def _make_absorption_imaging_config():
     config = ConfigObj()
-    config.filename = os.getcwd() + "/configs/absorbtion imaging/defaultAbsImgConfig"
+    base_path = str(Path.cwd())
+    config.filename = base_path + "/configs/absorbtion imaging/defaultAbsImgConfig"
 
     config["scan_abs_img_freq"] = False
     config["abs_img_freq_ch"] = 12
@@ -1477,7 +1486,7 @@ def _makeAbsorbtionImagingConfig():
     config["mot_reload_time"] = 5000 * 10**3
     config["n_backgrounds"] = 3
     config["bkg_off_channels"] = [7]
-    config["save_location"] = os.getcwd() + "/data/Absorbtion images/"
+    config["save_location"] = base_path + "/data/Absorbtion images/"
     config["save_raw_images"] = False
     config["save_processed_images"] = False
     config["review_processed_images"] = True
@@ -1489,11 +1498,11 @@ def _makeAbsorbtionImagingConfig():
     config.write()
 
 
-def _makeExperimentalAutomationConfig():
+def _make_experimental_automation_config():
 
     seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans\-22.5 MHz offset"
-
-    filename = os.getcwd() + "/configs/experimental automation/JuanExperimentalAutomationConfig"
+    base_path = str(Path.cwd())
+    filename = base_path + "/configs/experimental automation/JuanExperimentalAutomationConfig"
     config = MyConfig(filename)
 
     config["save_location"] = "Z:/Results017_New/data"
@@ -1506,7 +1515,7 @@ def _makeExperimentalAutomationConfig():
 
     config["experiments"]["0"] = {
         "daq_channel_static_values": [(10, 75.25)],
-        "sequence_fname": os.path.join(seq_folder, "cav_75_25"),
+        "sequence_fname": str(Path(seq_folder) / "cav_75_25"),
         "iterations": 50,
         "mot_reload": 1000 * 10**3,
         "modulation_frequencies": [],
@@ -1514,7 +1523,7 @@ def _makeExperimentalAutomationConfig():
 
     config["experiments"]["1"] = {
         "daq_channel_static_values": [(10, 75.75)],
-        "sequence_fname": os.path.join(seq_folder, "cav_75_75"),
+        "sequence_fname": str(Path(seq_folder) / "cav_75_75"),
         "iterations": 50,
         "mot_reload": 1000 * 10**3,
         "modulation_frequencies": [],
@@ -1522,7 +1531,7 @@ def _makeExperimentalAutomationConfig():
 
     config["experiments"]["2"] = {
         "daq_channel_static_values": [(10, 76.25)],
-        "sequence_fname": os.path.join(seq_folder, "cav_76_25"),
+        "sequence_fname": str(Path(seq_folder) / "cav_76_25"),
         "iterations": 50,
         "mot_reload": 1000 * 10**3,
         "modulation_frequencies": [],
@@ -1531,11 +1540,14 @@ def _makeExperimentalAutomationConfig():
     config.write()
 
 
-def _makeExperimentalAutomationConfig_cavityScan(
-    cavity_freqs=[], cav_daq_channel=10, iterations=500, mot_reload=1000 * 10**3
+def _make_experimental_automation_config_cavity_scan(
+    cavity_freqs=None, cav_daq_channel=10, iterations=500, mot_reload=1000 * 10**3
 ):
 
     #     seq_folder =  r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\cavity scans'
+    if cavity_freqs is None:
+        cavity_freqs = []
+
     seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction"
 
     min_freq, max_freq = map(
@@ -1545,8 +1557,9 @@ def _makeExperimentalAutomationConfig_cavityScan(
     #     config.filename =  os.getcwd() + '/configs/experimental automation/resonant driving scans/Juan_scan_cav__{0}_to_{1}'.\
     #                                         format(min_freq, max_freq)
 
+    base_path = str(Path.cwd())
     filename = (
-        os.getcwd() + f"/configs/experimental automation/Juan_scan_cav__{min_freq}_to_{max_freq}"
+        base_path + f"/configs/experimental automation/Juan_scan_cav__{min_freq}_to_{max_freq}"
     )
     config = MyConfig(filename)
 
@@ -1560,33 +1573,34 @@ def _makeExperimentalAutomationConfig_cavityScan(
 
     config["experiments"] = {}
 
-    i = 0
-    for freq in sorted(cavity_freqs):
+    for i, freq in enumerate(sorted(cavity_freqs)):
         config["experiments"][str(i)] = {
             "daq_channel_static_values": [(cav_daq_channel, freq)],
-            "sequence_fname": os.path.join(
-                seq_folder, "CavLock_{0}".format(str(freq).replace(".", "_"))
+            "sequence_fname": str(
+                Path(seq_folder) / "CavLock_{}".format(str(freq).replace(".", "_"))
             ),
             "iterations": iterations,
             "mot_reload": mot_reload,
             "modulation_frequencies": [],
         }
 
-        i += 1
-
     config.write()
 
 
-def _makeExperimentalAutomationConfig_xBiasScan(
-    x_biases=[], iterations=50, mot_reload=500 * 10**3, n_repeat=1
+def _make_experimental_automation_config_x_bias_scan(
+    x_biases=None, iterations=50, mot_reload=500 * 10**3, n_repeat=1
 ):
+
+    if x_biases is None:
+        x_biases = []
 
     seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\x bias scans"
 
     min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(x_biases), max(x_biases)])
 
+    base_path = str(Path.cwd())
     filename = (
-        os.getcwd()
+        base_path
         + f"/configs/experimental automation/scans/x bias scan/scan_x_bias__{min_bias}A_to_{max_bias}A"
     )
     config = MyConfig(filename)
@@ -1604,8 +1618,8 @@ def _makeExperimentalAutomationConfig_xBiasScan(
         for bias in sorted(x_biases):
             config["experiments"][str(i)] = {
                 "daq_channel_static_values": [],
-                "sequence_fname": os.path.join(
-                    seq_folder, "{0}A_xBias".format(str(bias).replace(".", "_"))
+                "sequence_fname": str(
+                    Path(seq_folder) / "{}A_xBias".format(str(bias).replace(".", "_"))
                 ),
                 "iterations": iterations,
                 "mot_reload": mot_reload,
@@ -1618,16 +1632,20 @@ def _makeExperimentalAutomationConfig_xBiasScan(
     config.write()
 
 
-def _makeExperimentalAutomationConfig_yBiasScan(
-    y_biases=[], iterations=50, mot_reload=500 * 10**3, n_repeat=1
+def _make_experimental_automation_config_y_bias_scan(
+    y_biases=None, iterations=50, mot_reload=500 * 10**3, n_repeat=1
 ):
+
+    if y_biases is None:
+        y_biases = []
 
     seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\y bias scans"
 
     min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(y_biases), max(y_biases)])
 
+    base_path = str(Path.cwd())
     filename = (
-        os.getcwd()
+        base_path
         + f"/configs/experimental automation/scans/y bias scan/scan_y_bias__{min_bias}A_to_{max_bias}A"
     )
     config = MyConfig(filename)
@@ -1645,8 +1663,8 @@ def _makeExperimentalAutomationConfig_yBiasScan(
         for bias in sorted(y_biases):
             config["experiments"][str(i)] = {
                 "daq_channel_static_values": [],
-                "sequence_fname": os.path.join(
-                    seq_folder, "{0}A_yBias".format(str(bias).replace(".", "_"))
+                "sequence_fname": str(
+                    Path(seq_folder) / "{}A_yBias".format(str(bias).replace(".", "_"))
                 ),
                 "iterations": iterations,
                 "mot_reload": mot_reload,
@@ -1659,16 +1677,18 @@ def _makeExperimentalAutomationConfig_yBiasScan(
     config.write()
 
 
-def _makeExperimentalAutomationConfig_zBiasScan(
-    z_biases=[], iterations=500, mot_reload=500 * 10**3, n_repeat=1
+def _make_experimental_automation_config_z_bias_scan(
+    z_biases=None, iterations=500, mot_reload=500 * 10**3, n_repeat=1
 ):
 
+    if z_biases is None:
+        z_biases = []
     seq_folder = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F1 line\z bias scans"
 
     min_bias, max_bias = map(lambda x: str(x).replace(".", "_"), [min(z_biases), max(z_biases)])
-
+    base_path = str(Path.cwd())
     filename = (
-        os.getcwd()
+        base_path
         + f"/configs/experimental automation/scans/z bias scan/scan_z_bias__{min_bias}A_to_{max_bias}A"
     )
     config = MyConfig(filename)
@@ -1686,8 +1706,8 @@ def _makeExperimentalAutomationConfig_zBiasScan(
         for bias in sorted(z_biases):
             config["experiments"][str(i)] = {
                 "daq_channel_static_values": [],
-                "sequence_fname": os.path.join(
-                    seq_folder, "{0}A_zBias".format(str(bias).replace(".", "_"))
+                "sequence_fname": str(
+                    Path(seq_folder) / "{}A_zBias".format(str(bias).replace(".", "_"))
                 ),
                 "iterations": iterations,
                 "mot_reload": mot_reload,
@@ -1700,14 +1720,17 @@ def _makeExperimentalAutomationConfig_zBiasScan(
     config.write()
 
 
-def _makeExperimentalAutomationConfig_stirapFreqScan(
-    stirap_freqs=[], iterations=100, mot_reload=1000 * 10**3
+def _make_experimental_automation_config_stirap_freq_scan(
+    stirap_freqs=None, iterations=100, mot_reload=1000 * 10**3
 ):
 
+    if stirap_freqs is None:
+        stirap_freqs = []
     seq_loc = r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction"
 
     filename = (
-        os.getcwd() + "/configs/experimental automation/resonant driving scans/scan_stirap_freqs"
+        str(Path.cwd())
+        + "/configs/experimental automation/resonant driving scans/scan_stirap_freqs"
     )
     config = MyConfig(filename)
 
@@ -1719,9 +1742,8 @@ def _makeExperimentalAutomationConfig_stirapFreqScan(
 
     config["experiments"] = {}
 
-    i = 0
     print(stirap_freqs)
-    for freqs in sorted(stirap_freqs):
+    for i, freqs in enumerate(sorted(stirap_freqs)):
         config["experiments"][str(i)] = {
             "daq_channel_static_values": [],
             "sequence_fname": seq_loc,
@@ -1730,42 +1752,41 @@ def _makeExperimentalAutomationConfig_stirapFreqScan(
             "modulation_frequencies": freqs,
         }
 
-        i += 1
-
     config.write()
     print("Done")
 
 
 def __copy_scan_seq_params(
-    channels_to_copy=[17],
+    channels_to_copy=None,
     seq_folder=r"C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\JuanPhotonProduction",
     base_seq_fname=r"CavLock_90",
 ):
 
-    base_seq_reader = SequenceReader(os.path.join(seq_folder, base_seq_fname))
+    if channels_to_copy is None:
+        channels_to_copy = [17]
+    base_seq_reader = SequenceReader(Path(seq_folder) / base_seq_fname)
 
-    seq = base_seq_reader.loadSequence()
+    seq = base_seq_reader.load_sequence()
 
     ch_settings = {}
     for ch in channels_to_copy:
         ch_settings[ch] = (seq.get_tV_pairs(ch), seq.get_V_intervalStyles(ch))
 
-    from os import listdir
-    from os.path import isfile, join
+    seq_folder_path = Path(seq_folder)
 
-    for fname in [join(seq_folder, f) for f in listdir(seq_folder) if isfile(join(seq_folder, f))]:
-        print(fname)
-        seq_reader = SequenceReader(fname)
-        seq = seq_reader.loadSequence()
+    for fpath in [f for f in seq_folder_path.iterdir() if f.is_file()]:
+        print(fpath)
+        seq_reader = SequenceReader(fpath)
+        seq = seq_reader.load_sequence()
 
         for ch in channels_to_copy:
             seq.updateChannel(ch, *ch_settings[ch])
 
         sequence_channel_labels = {}
-        for chNum in seq.getChannelNums():
-            sequence_channel_labels[chNum] = "Unconfigured channel"
+        for ch_num in seq.getChannelNums():
+            sequence_channel_labels[ch_num] = "Unconfigured channel"
 
-        seq_writer = SequenceWriter(fname)
+        seq_writer = SequenceWriter(fpath)
         seq_writer.save(
             seq,
             sequence_channel_labels,
@@ -1776,27 +1797,27 @@ def __copy_scan_seq_params(
 
 if __name__ == "__main__":
     pass
-    _makeSequenceConfig()
-    # _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(87,91.1,0.2), cav_daq_channel = 10, iterations=150, mot_reload = 1000*10**3)
+    _make_sequence_config()
+    # _make_experimental_automation_config_cavity_scan(cavity_freqs=np.arange(87,91.1,0.2), cav_daq_channel = 10, iterations=150, mot_reload = 1000*10**3)
 
     #     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
 
-    #     _makeAbsorbtionImagingConfig()
-    #     _makeSequenceConfig()
-    #     _makePhotonProductionConfig()
-    #     _makeExperimentalAutomationConfig()
+    #     _make_absorption_imaging_config()
+    #     _make_sequence_config()
+    #     _make_photon_production_config()
+    #     _make_experimental_automation_config()
     #     e = ExperimentalAutomationReader(os.getcwd() + '/configs/experimental automation/defaultExperimentalAutomationConfig')
     #     e.get_experimental_automation_configuration()
     #
 
-    #     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=np.arange(90.25,100.24,1))
-    # #     _makeExperimentalAutomationConfig_cavityScan(cavity_freqs=[x for x in np.arange(92.75,100,0.5) if x not in (92.75, 93.25,97.75,98.25,98.75,99.25,99.75,93.75,94.25,94.75)])
+    #     _make_experimental_automation_config_cavity_scan(cavity_freqs=np.arange(90.25,100.24,1))
+    # #     _make_experimental_automation_config_cavity_scan(cavity_freqs=[x for x in np.arange(92.75,100,0.5) if x not in (92.75, 93.25,97.75,98.25,98.75,99.25,99.75,93.75,94.25,94.75)])
     #
     #
     #     __copy_scan_seq_params(channels_to_copy=[17,21], base_seq_fname = r'cav_99_25')
 
     #
-    #     _makeExperimentalAutomationConfig_xBiasScan()
+    #     _make_experimental_automation_config_x_bias_scan()
     #     freqs=np.arange(59.5,90.5,1.75)*10**6
     #     freqs=np.array([73.25,74.25,75.25,76.25,77.25])*10**6
 
@@ -1804,14 +1825,14 @@ if __name__ == "__main__":
     x bias scan
     """
     #     x_biases = [3,4.5,6]
-    #     _makeExperimentalAutomationConfig_xBiasScan(x_biases, iterations=500, mot_reload=400*10**3, n_repeat=2)
+    #     _make_experimental_automation_config_x_bias_scan(x_biases, iterations=500, mot_reload=400*10**3, n_repeat=2)
 
     """
     y bias scan
     """
     #     y_biases = [0,1,2,3,4,5]
     #     y_biases = [3.5,3.75,4.25,4.5]
-    #     _makeExperimentalAutomationConfig_yBiasScan(y_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
+    #     _make_experimental_automation_config_y_bias_scan(y_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
     #
     #     __copy_scan_seq_params(channels_to_copy=[10,21],
     #                            seq_folder=r'C:\Users\apc\workspace\Cold Control Heavy\configs\sequence\photon production\F0 line\y bias scan',
@@ -1821,13 +1842,13 @@ if __name__ == "__main__":
     z bias scan
     """
     #     z_biases = [3.1,3.2,3.3,3.4,3.5]
-    #     _makeExperimentalAutomationConfig_zBiasScan(z_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
+    #     _make_experimental_automation_config_z_bias_scan(z_biases, iterations=333, mot_reload=500*10**3, n_repeat=3)
 
     """
     driving freq scan
     """
     #     freqs=np.linspace(72.25,78.25,7)*10**6
     # #     freqs=np.linspace(70.25,80.25,5)*10**6
-    #     _makeExperimentalAutomationConfig_stirapFreqScan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
+    #     _make_experimental_automation_config_stirap_freq_scan(stirap_freqs=zip(freqs,freqs), iterations=50, mot_reload = 1000*10**3)
 
     print("Done")
