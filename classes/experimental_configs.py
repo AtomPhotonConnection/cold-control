@@ -84,6 +84,9 @@ class Waveform:
         # Infer modulated flag when not explicitly provided
         if modulated is None:
             self.__modulated = mod_frequency != 0.0
+            print(
+                f"WARNING: Modulated flag not provided for waveform '{fname}'; inferred as {self.__modulated} based on mod_frequency."
+            )
         else:
             self.__modulated = modulated
 
@@ -158,6 +161,10 @@ class Waveform:
             carrier at ``self.mod_frequency``.
         """
         if not self.__modulated:
+            if sample_rate is not None:
+                logger.warning(
+                    "Sample rate provided to get() but modulation is disabled for this waveform.  Sample rate will be ignored."
+                )
             return list(self.data)
 
         if sample_rate is None:
@@ -218,7 +225,7 @@ class Waveform:
 
     def get_t_length(self, sample_rate: float) -> float:
         """Returns the duration of the waveform at a given sample rate."""
-        return len(self.data) * sample_rate
+        return len(self.data) / sample_rate
 
     def set_mod_frequency(self, value: float):
         """Sets the modulation frequency."""
