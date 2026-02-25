@@ -5,11 +5,13 @@ Helper functions for the calibration functions.
 """
 
 import os
+from typing import Optional, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyvisa as visa
+from pyvisa.resources import MessageBasedResource
 
 from instruments.ThorlabsPM100 import ThorlabsPM100
 
@@ -40,6 +42,7 @@ class testWaveform(Waveform):
 
     def __init__(self, samp_rate, level: float = 1.0, mod_freq=75.25 * 10**6):
         self.mod_frequency = mod_freq
+        self.modulated = True
         self.phases = []
         self.t_step = 2 * np.pi / samp_rate
         self.calib(level, self.mod_frequency)
@@ -75,6 +78,7 @@ def get_power_meter(debug_mode=False):
     rm = visa.ResourceManager()
     all_res = rm.list_resources()
     power_meter = None
+    inst: Optional[MessageBasedResource] = None
     # the VISA addresses of the 3 thorlabs powermeters we have are in the list below:
     pm_addresses = [
         "USB0::0x1313::0x8079::P1002563::0::INSTR",
@@ -90,7 +94,7 @@ def get_power_meter(debug_mode=False):
 
     for resource in pm_addresses:
         try:
-            inst = rm.open_resource(resource)
+            inst = cast(MessageBasedResource, rm.open_resource(resource))
             # inst = rm.get_instrument(resource)
             print(inst.query("*IDN?").split(","))
             if inst.query("*IDN?").split(",")[1] == "PM100A":
@@ -101,7 +105,7 @@ def get_power_meter(debug_mode=False):
             if debug_mode:
                 print(f"error message: {e}")
 
-    if power_meter == None:
+    if power_meter is None:
         print("Calibration failed - power meter could not be found")
         raise CalibrationException("Calibration failed - power meter could not be found")
 

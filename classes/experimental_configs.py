@@ -12,6 +12,7 @@ created: 2025-05-30
 from __future__ import annotations
 
 import csv
+import logging
 import re
 import shutil
 import warnings
@@ -25,6 +26,8 @@ import numpy as np
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 from classes.Sequence import Sequence
+
+logger = logging.getLogger(__name__)
 
 
 def make_property(attr_name):
@@ -42,12 +45,230 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", name)
 
 
+class Waveform:
+    """Represents a single waveform envelope loaded from a CSV file.
+
+    Parameters
+    ----------
+    fname : str
+        Path to a CSV file containing the waveform envelope.  The file may be
+        formatted as either:
+        * **Single row, many columns** - one row of comma-separated float values.
+        * **Single column, many rows** - one float value per line.
+        Ambiguous files (multiple rows *and* multiple columns) are rejected.
+    modulated : bool | None, optional
+        Whether sinusoidal modulation should be applied to the envelope when
+        :meth:`get` is called.  If ``None`` (the default), inferred automatically:
+        ``True`` when ``mod_frequency`` is non-zero, ``False`` otherwise.
+        Pass an explicit ``True`` or ``False`` to override.
+    mod_frequency : float, optional
+        The carrier / modulation frequency in Hz.  Only used when
+        ``modulated`` is ``True``.  Defaults to ``0.0``.
+    phases : list[tuple[float, int]] | None, optional
+        Optional list of ``(phase_radians, sample_index)`` tuples that introduce
+        mid-waveform phase jumps during modulation.  Defaults to ``[]`` (no phase
+        jumps).  This parameter is rarely needed; most waveforms should omit it.
+    """
+
+    def __init__(
+        self,
+        fname: str,
+        modulated: bool | None = None,
+        mod_frequency: float = 0.0,
+        phases: list[tuple[float, int]] | None = None,
+    ):
+        self.__fname = fname
+        self.__mod_frequency = mod_frequency
+        self.__phases = sorted(phases, key=lambda x: x[1]) if phases else []
+
+        # Infer modulated flag when not explicitly provided
+        if modulated is None:
+            self.__modulated = mod_frequency != 0.0
+        else:
+            self.__modulated = modulated
+
+        if self.__modulated and self.__mod_frequency == 0.0:
+            raise ValueError(
+                "Waveform is marked as modulated but mod_frequency is 0.  "
+                "Either set modulated=False or provide a non-zero mod_frequency."
+            )
+
+        self.data = self.__load_data()
+
+    def __load_data(self) -> list[float]:
+        """Load waveform data from a CSV file.
+
+        Supported layouts:
+        * **Single-row CSV** - one row with many comma-separated float values.
+        * **Single-column CSV** - many rows, each containing a single float value.
+
+        If the file contains multiple rows *and* multiple columns the format is
+        ambiguous and a ``ValueError`` is raised.
+        """
+        with Path(self.__fname).open() as csvfile:
+            reader = csv.reader(csvfile, delimiter=",")
+            rows: list[list[str]] = [row for row in reader if row]  # skip blank lines
+
+        if not rows:
+            raise ValueError(f"Waveform file {self.__fname} is empty or invalid.")
+
+        n_rows = len(rows)
+        max_cols = max(len(r) for r in rows)
+
+        # Detect and validate CSV layout
+        if n_rows == 1 and max_cols > 1:
+            # Single-row, many-columns
+            data = list(map(float, rows[0]))
+            logger.info("Loaded single-row CSV (%d samples): %s", len(data), self.__fname)
+        elif max_cols == 1 and n_rows > 1:
+            # Single-column, many-rows
+            data = [float(r[0]) for r in rows]
+            logger.info("Loaded single-column CSV (%d samples): %s", len(data), self.__fname)
+        elif n_rows == 1 and max_cols == 1:
+            # Single value
+            data = [float(rows[0][0])]
+            logger.info("Loaded single-value CSV (1 sample): %s", self.__fname)
+        else:
+            raise ValueError(
+                f"Ambiguous CSV format in {self.__fname}: the file has {n_rows} rows "
+                f"and up to {max_cols} columns.  Waveform CSV files must be either a "
+                f"single row of comma-separated values OR a single column with one "
+                f"value per row."
+            )
+
+        if len(data) == 0:
+            raise ValueError(f"Waveform file {self.__fname} is empty or invalid.")
+
+        return data
+
+    def get(self, sample_rate: float | None = None) -> list[float]:
+        """Return the waveform data, with sinusoidal modulation applied if enabled.
+
+        Parameters
+        ----------
+        sample_rate : float or None
+            The AWG sample rate in samples per second.  Required when
+            ``self.modulated`` is ``True`` (needed to compute the modulation
+            time-step).  May be omitted for unmodulated waveforms.
+
+        Returns
+        -------
+        list[float]
+            A copy of the envelope data, optionally multiplied by a sine
+            carrier at ``self.mod_frequency``.
+        """
+        if not self.__modulated:
+            return list(self.data)
+
+        if sample_rate is None:
+            raise ValueError(
+                "sample_rate is required for modulated waveforms.  "
+                "Either pass a sample_rate or set modulated=False."
+            )
+
+        t_step = 2 * np.pi / sample_rate
+        phi = 0.0
+        phases = list(self.__phases)  # work on a copy
+        next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
+
+        mod_data = list(self.data)
+        for i in range(len(mod_data)):
+            if i == next_i_flip:
+                phi = next_phi
+                next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
+            if phi is None:
+                raise ValueError("Phase not set before modulation.")
+            mod_data[i] *= np.sin(i * t_step * self.__mod_frequency + phi)
+
+        return mod_data
+
+    def get_marker_data(
+        self,
+        marker_positions=None,
+        marker_levels=(0, 1),
+        marker_width=50,
+        n_pad_right=0,
+        n_pad_left=0,
+    ) -> list[int]:
+        """
+        Returns a marker waveform.
+
+        Pads with zeros on both sides, and marks selected positions with high levels.
+        """
+        if marker_positions is None:
+            marker_positions = []
+        data = np.array([marker_levels[0]] * (n_pad_left + len(self.data) + n_pad_right))
+        for pos in marker_positions:
+            pos = int(pos)
+            data[pos : pos + int(marker_width)] = marker_levels[1]
+
+        # Fix for high-start issue
+        if data[0] == 1:
+            data[0] = 0
+
+        return data.tolist()
+
+    def get_profile(self) -> list[float]:
+        """Returns the raw waveform data."""
+        return self.data
+
+    def get_n_samples(self) -> int:
+        """Returns the number of samples in the waveform."""
+        return len(self.data)
+
+    def get_t_length(self, sample_rate: float) -> float:
+        """Returns the duration of the waveform at a given sample rate."""
+        return len(self.data) * sample_rate
+
+    def set_mod_frequency(self, value: float):
+        """Sets the modulation frequency."""
+        self.__mod_frequency = value
+
+    # --- Properties ---
+
+    @property
+    def fname(self) -> str:
+        return self.__fname
+
+    @fname.setter
+    def fname(self, value: str):
+        self.__fname = value
+        self.data = self.__load_data()
+
+    @property
+    def modulated(self) -> bool:
+        """Whether sinusoidal modulation is applied when :meth:`get` is called."""
+        return self.__modulated
+
+    @modulated.setter
+    def modulated(self, value: bool):
+        self.__modulated = value
+
+    @property
+    def mod_frequency(self) -> float:
+        return self.__mod_frequency
+
+    @mod_frequency.setter
+    def mod_frequency(self, value: float):
+        self.__mod_frequency = value
+
+    @property
+    def phases(self) -> list[tuple[float, int]]:
+        return self.__phases
+
+    @phases.setter
+    def phases(self, value: list[tuple[float, int]]):
+        self.__phases = sorted(value, key=lambda x: x[1]) if value else []
+
+
 class AwgConfiguration:
     """
     Configuration for an Arbitrary Waveform Generator (AWG), including sample rate,
     output channels, timing lags, marker widths, and calibration locations.
     It also includes the waveform sequence and associated waveforms that the AWG will
     play.
+
+    Can be read from a filepath using the AwgConfigReader class in config_readers.py.
 
     Structure of the AWG configuration file:
     waveform sequence: A list of lists. Each inner list corresponds to a channel and
@@ -62,11 +283,17 @@ class AwgConfiguration:
     marker width: Width of the marker pulse in us. TODO switch to samples.
 
     waveforms:
-    A list of waveform configurations, including: TODO make a dictionary instead of a list to avoid confusion about which waveform is which.
-        modulation frequency: The "carrier" frequency for the waveform
-        phases: DEPRECATED
-        filename: The path to the CSV file containing the waveform data. The CSV should
-            contain a single row of voltage values, one per column.
+    A list of waveform configurations, each containing:
+        filename (required): Path to the CSV file containing the waveform envelope.
+            The CSV may be either a single row of comma-separated values or a single
+            column with one value per row.
+        modulated (optional): Boolean indicating whether sinusoidal modulation should
+            be applied.  If omitted, inferred as True when a non-zero modulation
+            frequency is present, False otherwise.
+        modulation frequency (optional): The carrier frequency in Hz for the waveform.
+            Defaults to 0.0 if omitted.
+        phases (optional): Mid-waveform phase-jump specification.  Rarely needed;
+            defaults to empty.
 
     """
 
@@ -698,133 +925,6 @@ class SingleExperimentConfig(GenericConfiguration):
     mot_reload_time = make_property("_mot_reload_time")
     sequence = make_property("_sequence")
     modulation_frequencies = make_property("_modulation_frequencies")
-
-
-class Waveform:
-    def __init__(self, fname: str, mod_frequency: float, phases: list[tuple[float, int]]):
-        self.__fname = fname
-        self.__mod_frequency = mod_frequency
-        self.__phases = sorted(phases, key=lambda x: x[1])  # Sort by index
-        self.data = self.__load_data()
-
-    def __load_data(self) -> list[float]:
-        """Loads waveform data from a CSV file."""
-        with Path(self.__fname).open() as csvfile:
-            print("Loading waveform:", self.__fname)
-            reader = csv.reader(csvfile, delimiter=",")
-            data = []
-            for row in reader:
-                if len(row) > 1:
-                    data += list(map(float, row))
-                else:
-                    data.append(float(row[0]))
-
-        if len(data) == 0:
-            raise ValueError(f"Waveform file {self.__fname} is empty or invalid.")
-
-        return data
-
-    def get(
-        self,
-        sample_rate: float,
-        calibration_function=lambda level: level,
-        constant_voltage=False,
-        double_pass=False,
-    ) -> list[float]:
-        """
-        Returns the modulated waveform data.
-
-        - Applies the calibration function.
-        - If constant_voltage is False, applies sinusoidal modulation.
-        """
-        mod_data = [calibration_function(x) for x in self.data]
-        if constant_voltage or float(self.__mod_frequency) == 0.0:
-            return mod_data
-
-        t_step = 2 * np.pi / sample_rate
-        phi = 0.0
-        # Divided phases by two for double passed AOM.
-        phases = [(x[0] / 2 if double_pass else x[0], x[1]) for x in self.__phases]
-        next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
-
-        for i in range(len(mod_data)):
-            if i == next_i_flip:
-                phi = next_phi
-                next_phi, next_i_flip = (None, None) if not phases else phases.pop(0)
-            if phi is None:
-                raise ValueError("Phase not set before modulation.")
-            mod_data[i] *= np.sin(i * t_step * self.__mod_frequency + phi)
-
-        return mod_data
-
-    def get_marker_data(
-        self,
-        marker_positions=None,
-        marker_levels=(0, 1),
-        marker_width=50,
-        n_pad_right=0,
-        n_pad_left=0,
-    ) -> list[int]:
-        """
-        Returns a marker waveform.
-
-        Pads with zeros on both sides, and marks selected positions with high levels.
-        """
-        if marker_positions is None:
-            marker_positions = []
-        data = np.array([marker_levels[0]] * (n_pad_left + len(self.data) + n_pad_right))
-        for pos in marker_positions:
-            pos = int(pos)
-            data[pos : pos + int(marker_width)] = marker_levels[1]
-
-        # Fix for high-start issue
-        if data[0] == 1:
-            data[0] = 0
-
-        return data.tolist()
-
-    def get_profile(self) -> list[float]:
-        """Returns the raw waveform data."""
-        return self.data
-
-    def get_n_samples(self) -> int:
-        """Returns the number of samples in the waveform."""
-        return len(self.data)
-
-    def get_t_length(self, sample_rate: float) -> float:
-        """Returns the duration of the waveform at a given sample rate."""
-        return len(self.data) * sample_rate
-
-    def set_mod_frequency(self, value: float):
-        """Sets the modulation frequency."""
-        self.__mod_frequency = value
-
-    # --- Properties ---
-
-    @property
-    def fname(self) -> str:
-        return self.__fname
-
-    @fname.setter
-    def fname(self, value: str):
-        self.__fname = value
-        self.data = self.__load_data()
-
-    @property
-    def mod_frequency(self) -> float:
-        return self.__mod_frequency
-
-    @mod_frequency.setter
-    def mod_frequency(self, value: float):
-        self.__mod_frequency = value
-
-    @property
-    def phases(self) -> list[tuple[float, int]]:
-        return self.__phases
-
-    @phases.setter
-    def phases(self, value: list[tuple[float, int]]):
-        self.__phases = sorted(value, key=lambda x: x[1])
 
 
 class TdcConfiguration:

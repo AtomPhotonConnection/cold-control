@@ -513,15 +513,37 @@ class AwgConfigReader:
     # ------------------------------------------------------------------
 
     def _parse_waveforms(self) -> tuple[Waveform, ...]:
-        """Read the ``[waveforms]`` section and return a tuple of ``Waveform`` objects."""
+        """Read the ``[waveforms]`` section and return a tuple of ``Waveform`` objects.
+
+        Each waveform sub-section supports the following keys:
+
+        ``filename`` (required)
+            Path to a CSV file containing the waveform envelope.
+        ``modulated`` (optional)
+            Boolean indicating whether sinusoidal modulation should be applied.
+            If omitted, inferred as ``True`` when a non-zero ``modulation frequency``
+            is present, ``False`` otherwise.
+        ``modulation frequency`` (optional)
+            Carrier frequency in Hz.  Defaults to ``0.0``.
+        ``phases`` (optional)
+            Mid-waveform phase-jump specification.  Defaults to ``[]``.
+        """
         waveforms: list[Waveform] = []
         for _key, v in self.config["waveforms"].items():
             phases = self._parse_phases(v.get("phases"))
             fname = resolve_config_path(v["filename"])
+
+            # Parse modulation frequency (optional, defaults to 0.0)
+            mod_frequency = float(v["modulation frequency"]) if "modulation frequency" in v else 0.0
+
+            # Parse modulated flag (optional, inferred from mod_frequency if absent)
+            modulated = to_bool(v["modulated"]) if "modulated" in v else None
+
             waveforms.append(
                 Waveform(
                     fname=fname,
-                    mod_frequency=float(v["modulation frequency"]),
+                    modulated=modulated,
+                    mod_frequency=mod_frequency,
                     phases=phases,
                 )
             )
@@ -537,10 +559,6 @@ class AwgConfigReader:
         - A string like ``"(0.0, 0) (1.57, 100)"`` -> parsed accordingly
         """
         if raw_phases is None:
-            warnings.warn(
-                "Phases field is missing in waveform config; defaulting to empty list.",
-                stacklevel=2,
-            )
             return []
 
         # ConfigObj may return a list of strings (e.g. ['', ''] for "phases = ,")

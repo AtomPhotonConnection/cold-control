@@ -381,6 +381,7 @@ def calibrate_awg_driven_aom_response(
 
         def __init__(self, level=1, mod_freq=75.25 * 10**6):
             self.mod_frequency = mod_freq
+            self.modulated = True
             self.phases = []
             self.t_step = 2 * np.pi / sample_rate
             self.calib(level, self.mod_frequency)
@@ -645,6 +646,7 @@ def test_stirap_aom_freq_response(
 
         def __init__(self, level=1, mod_freq=75.25 * 10**6):
             self.mod_frequency = mod_freq
+            self.modulated = True
             self.phases = []
             self.t_step = 2 * np.pi / sample_rate
             self.calib(level, self.mod_frequency)
@@ -661,8 +663,6 @@ def test_stirap_aom_freq_response(
     awg = WX218x_awg()
     print("Connecting...")
     awg.open(reset=False)
-
-    awg.configure_operation_mode(Channel.CHANNEL_1, WX218x_OperationMode.CONTINUOUS)
     awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
     awg.configure_sample_rate(sample_rate)
     awg.configure_arb_gain(Channel.CHANNEL_1, 2)

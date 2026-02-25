@@ -908,7 +908,7 @@ r"""
 
                 print('\tWriting markers at', marker_pos)
                 print('\tWriting waveform {0} with stitch delay {1}'.format(os.path.split(waveform.fname)[1], delay))
-                waveform_data += waveform.get(sample_rate=self.awg_config.sample_rate, calibration_function=calib_fun) + [0]*delay
+                waveform_data += [calib_fun(x) for x in waveform.get(sample_rate=self.awg_config.sample_rate)] + [0]*delay
                 marker_data   += waveform.get_marker_data(marker_positions=marker_pos, marker_levels=marker_waveform_levs, marker_width=marker_wid, n_pad_right=delay)
     #             marker_data   += waveform.get(sample_rate=self.awg_config.sample_rate) + [0]*delay
                 queud_markers = [x-seg_length for x in queud_markers]

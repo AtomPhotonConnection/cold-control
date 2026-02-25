@@ -316,8 +316,10 @@ from lab_control_functions.awg_control_functions_psh_v2 import run_awg, disconne
 
 # Create configuration (normally loaded from file)
 waveforms = [
-    Waveform('path/to/wf1.csv', 1e6, []),
-    Waveform('path/to/wf2.csv', 2e6, []),
+    Waveform('path/to/wf1.csv', mod_frequency=1e6),          # modulated inferred as True
+    Waveform('path/to/wf2.csv', mod_frequency=2e6),          # modulated inferred as True
+    Waveform('path/to/envelope_only.csv'),                    # no modulation (default)
+    Waveform('path/to/raw.csv', modulated=False),             # explicitly unmodulated
 ]
 
 awg_config = AwgConfiguration(

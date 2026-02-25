@@ -280,7 +280,7 @@ def run_awg_single(awg_config: AwgConfiguration):
 
         if len(waveforms) == 1:
             waveform_data[0].extend(
-                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+                [calib_fun(x) for x in waveform.get(sample_rate=awg_config.sample_rate)]
             )
             marker_data += waveform.get_marker_data(
                 marker_positions=marker_pos, marker_levels=MARKER_WF_LEVS, marker_width=marker_wid
@@ -294,7 +294,7 @@ def run_awg_single(awg_config: AwgConfiguration):
                 marker_width=marker_wid,
             )
             waveform_data[0].extend(
-                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+                [calib_fun(x) for x in waveform.get(sample_rate=awg_config.sample_rate)]
             )
 
     # Apply channel offset
