@@ -9,7 +9,7 @@ from ExperimentalConfigs import (
     Waveform,
 )
 
-from classes.config_generators import ConfigReader, DaqReader
+from classes.config_readers import ConfigReader, DaqReader
 from lab_control_functions.awg_control_functions import run_awg
 
 path_to_config = r"configs\photon production\newPhotonProductionConfigJan"

@@ -7,7 +7,7 @@ from tkinter import messagebox as tk_message_box
 from typing import Any
 
 import classes.Styles as Styles
-from classes.config_generators import ConfigReader
+from classes.config_readers import ConfigReader
 from UI_classes.Camera_UI import Camera_UI
 from UI_classes.DAQ_UI import DAQ_UI
 from UI_classes.Experimental_UI import Experimental_UI
