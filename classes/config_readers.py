@@ -477,19 +477,19 @@ class AwgConfigReader:
             raw_channels=self.config["waveform output channels"]
         )
 
+        cfg = self.config
+
         raw_seq = eval(self.config["waveform sequence"])
         waveform_sequence = tuple(tuple(ch) for ch in raw_seq)
 
         awg_config = AwgConfiguration(
             waveform_sequence=waveform_sequence,
             waveforms=tuple(waveforms),
-            sample_rate=float(self.config["sample rate"]),
-            burst_count=int(self.config["burst count"]),
+            sample_rate=float(cfg["sample rate"]),
+            burst_count=int(cfg["burst count"]),
             waveform_output_channels=tuple(output_channels),
-            waveform_output_channel_lags=tuple(
-                map(float, self.config["waveform output channel lags"])
-            ),
-            marker_width=eval(self.config["marker width"]),
+            waveform_output_channel_lags=self._extract_lags(cfg),
+            marker_width_samps=self._extract_marker_width(cfg),
             waveform_stitch_delays=tuple(
                 tuple(x) if isinstance(x, list) else (x,)
                 for x in eval(self.config["waveform stitch delays"])
@@ -575,6 +575,37 @@ class AwgConfigReader:
         return tuple(
             int(str(ch).replace(" ", "").lower().replace("channel", "")) for ch in raw_channels
         )
+
+    @staticmethod
+    def _extract_lags(cfg: MyConfig) -> tuple[float, ...]:
+        if "waveform output channel lags" not in cfg:
+            return tuple(0.0 for _ in cfg["waveform output channels"])
+        else:
+            return tuple(map(float, cfg["waveform output channel lags"]))
+
+    @staticmethod
+    def _extract_marker_width(cfg: MyConfig) -> Optional[int]:
+        if "marker width samples" in cfg:
+            return int(cfg["marker width samples"])
+        elif "marker width samps" in cfg:
+            return int(cfg["marker width samps"])
+        elif "marker width us" in cfg:
+            marker_width_us = float(cfg["marker width"])
+            sample_rate = float(cfg["sample rate"])
+            # Round to nearest even integer, minimum 2 samples
+            return max(2, round((marker_width_us * sample_rate / 1e6) / 2) * 2)
+        elif "marker width" in cfg:
+            print(
+                "WARNING: Assuming marker width in microseconds; converting to samples."
+                + " To avoid this warning, specify marker width in samples using 'marker width samples'"
+                + " or 'marker width samps' in the config file."
+            )
+            marker_width_us = float(cfg["marker width"])
+            sample_rate = float(cfg["sample rate"])
+            # Round to nearest even integer, minimum 2 samples
+            return max(2, round((marker_width_us * sample_rate / 1e6) / 2) * 2)
+        else:
+            return None
 
 
 class ExperimentConfigReader:

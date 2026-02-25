@@ -42,6 +42,115 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", name)
 
 
+class AwgConfiguration:
+    """
+    Configuration for an Arbitrary Waveform Generator (AWG), including sample rate,
+    output channels, timing lags, marker widths, and calibration locations.
+    It also includes the waveform sequence and associated waveforms that the AWG will
+    play.
+
+    Structure of the AWG configuration file:
+    waveform sequence: A list of lists. Each inner list corresponds to a channel and
+        contains the indices of the waveforms to play on that channel.
+    waveform stitch delays: DEPRECATED
+    interleave waveforms: DEPRECATED
+    sample rate: Sample rate for the AWG output in samples per second.
+    burst count: Number of times to repeat the waveform sequence in a single trigger.
+    waveform output channels: Channels on the AWG that will be used for outputting waveforms.
+    waveform output channel lags: Timing lags for each output channel to synchronize them.
+    marked channels: DEPRECATED
+    marker width: Width of the marker pulse in us. TODO switch to samples.
+
+    waveforms:
+    A list of waveform configurations, including: TODO make a dictionary instead of a list to avoid confusion about which waveform is which.
+        modulation frequency: The "carrier" frequency for the waveform
+        phases: DEPRECATED
+        filename: The path to the CSV file containing the waveform data. The CSV should
+            contain a single row of voltage values, one per column.
+
+    """
+
+    def __init__(
+        self,
+        waveform_sequence: tuple[tuple[int, ...], ...],
+        waveforms: tuple[Waveform, ...],
+        sample_rate: float,
+        burst_count: int,
+        waveform_output_channels: tuple[int, ...],
+        marker_width_samps: Optional[int],
+        waveform_output_channel_lags: Optional[tuple[float, ...]] = None,
+        waveform_stitch_delays: Optional[tuple[tuple[Any, ...], ...]] = None,
+        interleave_waveforms: Optional[bool] = None,
+        marked_channels: Optional[tuple[int, ...]] = None,
+    ):
+
+        self._waveform_sequence = waveform_sequence
+        self.waveforms = waveforms
+
+        self._sample_rate = sample_rate
+        self._burst_count = burst_count
+        self._waveform_output_channels = waveform_output_channels
+
+        if waveform_output_channel_lags is None:
+            waveform_output_channel_lags = tuple(0.0 for _ in waveform_output_channels)
+        else:
+            self.waveform_output_channel_lags = waveform_output_channel_lags
+
+        if marker_width_samps is None or self._verify_marker_width(marker_width_samps):
+            self.marker_width_samps = marker_width_samps
+        else:
+            raise ValueError(
+                f"Marker width in samples must be even and greater than zero, got {marker_width_samps}"
+            )
+
+        if waveform_stitch_delays is not None:
+            warnings.warn(
+                "waveform_stitch_delays is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
+        if interleave_waveforms is not None:
+            warnings.warn(
+                "interleave_waveforms is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
+        if marked_channels is not None:
+            warnings.warn(
+                "marked_channels is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
+
+    sample_rate: property = make_property("_sample_rate")
+    burst_count: property = make_property("_burst_count")
+    waveform_output_channels: property = make_property("_waveform_output_channels")
+
+    def set_burst_count(self, value: int):
+        self._burst_count = value
+
+    def set_sample_rate(self, value: float):
+        self._sample_rate = value
+
+    @property
+    def waveform_sequence(self):
+        return self._waveform_sequence
+
+    @waveform_sequence.setter
+    def waveform_sequence(self, value):
+        print("Setting waveform sequence to", value, [type(x) for x in value])
+        self._waveform_sequence = value
+
+    @waveform_sequence.deleter
+    def waveform_sequence(self):
+        del self._waveform_sequence
+
+    @staticmethod
+    def _verify_marker_width(marker_width_samps: int) -> bool:
+        """Ensures the marker width in samples is valid (even and greater than zero)."""
+        return marker_width_samps > 0 and marker_width_samps % 2 == 0
+
+
 class ExperimentSessionConfig:
     """
     ExperimentSessionConfig manages high-level configuration for an automated experimental session.
@@ -716,101 +825,6 @@ class Waveform:
     @phases.setter
     def phases(self, value: list[tuple[float, int]]):
         self.__phases = sorted(value, key=lambda x: x[1])
-
-
-class AwgConfiguration:
-    """
-    Configuration for an Arbitrary Waveform Generator (AWG), including sample rate,
-    output channels, timing lags, marker widths, and calibration locations.
-    It also includes the waveform sequence and associated waveforms that the AWG will
-    play.
-
-    Structure of the AWG configuration file:
-    waveform sequence: A list of lists. Each inner list corresponds to a channel and
-        contains the indices of the waveforms to play on that channel.
-    waveform stitch delays: DEPRECATED
-    interleave waveforms: DEPRECATED
-    sample rate: Sample rate for the AWG output in samples per second.
-    burst count: Number of times to repeat the waveform sequence in a single trigger.
-    waveform output channels: Channels on the AWG that will be used for outputting waveforms.
-    waveform output channel lags: Timing lags for each output channel to synchronize them.
-    marked channels: DEPRECATED
-    marker width: Width of the marker pulse in us. TODO switch to samples.
-
-    waveforms:
-    A list of waveform configurations, including: TODO make a dictionary instead of a list to avoid confusion about which waveform is which.
-        modulation frequency: The "carrier" frequency for the waveform
-        phases: DEPRECATED
-        filename: The path to the CSV file containing the waveform data. The CSV should
-            contain a single row of voltage values, one per column.
-
-    """
-
-    def __init__(
-        self,
-        waveform_sequence: tuple[tuple[int, ...], ...],
-        waveforms: tuple[Waveform, ...],
-        sample_rate: float,
-        burst_count: int,
-        waveform_output_channels: tuple[int, ...],
-        waveform_output_channel_lags: tuple[float, ...],
-        marker_width: float,
-        waveform_stitch_delays: Optional[tuple[tuple[Any, ...], ...]] = None,
-        interleave_waveforms: Optional[bool] = None,
-        marked_channels: Optional[tuple[int, ...]] = None,
-    ):
-
-        self._waveform_sequence = waveform_sequence
-        self.waveforms = waveforms
-
-        self._sample_rate = sample_rate
-        self._burst_count = burst_count
-        self._waveform_output_channels = waveform_output_channels
-
-        self.waveform_output_channel_lags = waveform_output_channel_lags
-        self.marker_width = marker_width
-
-        if waveform_stitch_delays is not None:
-            warnings.warn(
-                "waveform_stitch_delays is deprecated and will be ignored.",
-                category=DeprecationWarning,
-                stacklevel=1,
-            )
-        if interleave_waveforms is not None:
-            warnings.warn(
-                "interleave_waveforms is deprecated and will be ignored.",
-                category=DeprecationWarning,
-                stacklevel=1,
-            )
-        if marked_channels is not None:
-            warnings.warn(
-                "marked_channels is deprecated and will be ignored.",
-                category=DeprecationWarning,
-                stacklevel=1,
-            )
-
-    sample_rate: property = make_property("_sample_rate")
-    burst_count: property = make_property("_burst_count")
-    waveform_output_channels: property = make_property("_waveform_output_channels")
-
-    def set_burst_count(self, value: int):
-        self._burst_count = value
-
-    def set_sample_rate(self, value: float):
-        self._sample_rate = value
-
-    @property
-    def waveform_sequence(self):
-        return self._waveform_sequence
-
-    @waveform_sequence.setter
-    def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
-        self._waveform_sequence = value
-
-    @waveform_sequence.deleter
-    def waveform_sequence(self):
-        del self._waveform_sequence
 
 
 class TdcConfiguration:

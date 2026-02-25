@@ -763,7 +763,7 @@ class AWGManager:
         burst_count = awg_cfg.burst_count
         outp_channels = awg_cfg.waveform_output_channels
         channel_lags = awg_cfg.waveform_output_channel_lags
-        marker_width_us = awg_cfg.marker_width
+        marker_width_samps = awg_cfg.marker_width_samps
         ch_amplitudes = [1.0 for _ in outp_channels]  # TODO: get from config
         ch_offsets = [0.0 for _ in outp_channels]  # TODO: get from config
 
@@ -808,16 +808,16 @@ class AWGManager:
         self._log.info(f"self.check_errors(): {self.check_errors()}")
 
         # --- Configure markers ---
-        self._log.info(
-            "Marker width is %g us → %d samples",
-            marker_width_us,
-            self.force_even_round(marker_width_us * sample_rate * 1e-6),
-        )
-        self.configure_marker(
-            channel=1, width=self.force_even_round(marker_width_us * sample_rate * 1e-6)
-        )
+        if marker_width_samps is not None:
+            self._log.info(
+                "Marker width is %g samples",
+                marker_width_samps,
+            )
+            self.configure_marker(channel=1, width=marker_width_samps)
 
-        self._log.info(f"self.check_errors(): {self.check_errors()}")
+            self._log.info(f"self.check_errors(): {self.check_errors()}")
+        else:
+            self._log.info("No marker configuration provided, skipping marker setup.")
 
         # --- Enable outputs and arm ---
         for ch in outp_channels:
