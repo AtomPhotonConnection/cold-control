@@ -637,10 +637,10 @@ class Experimental_UI(tk.LabelFrame):
                 self.sequence_labels = sequence_labels
                 self.results_ready = True
 
-            def getResults(self):
+            def get_results(self):
                 return self.img_arrs, self.bkg_arrs, self.sequence_labels
 
-            def saveProcessedImages(self, notes=None):
+            def save_processed_images(self, notes=None):
                 if notes:
                     print("Save notes:", notes)
                 print("Saved processed images.")
@@ -2495,7 +2495,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         # Changes the close button to call my close function.
         self.protocol("WM_DELETE_WINDOW", self.closeWindow)
 
-        img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.getResults()
+        img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.get_results()
 
         if img_arrs == None and bkg_arrs == None:
             raise Exception("There are no images to review")
@@ -2671,7 +2671,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         """
         Save the images and close the UI.
         """
-        self.absorbtion_imaging_experiment.saveProcessedImages(
+        self.absorbtion_imaging_experiment.save_processed_images(
             notes=self.save_notes_wid.get(1.0, tk.END)
         )
         self.closeWindow(ask_to_save_images=False)

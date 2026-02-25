@@ -4,7 +4,12 @@
     "python-envs.pythonProjects": [],
     "editor.formatOnSave": true,
     "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff"
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "editor.source.FixAll": "explicit",
+            "editor.source.organizeImports": "explicit"
+        }
     },
     "ruff.lint.enable": true,
     "ruff.format.enable": true,

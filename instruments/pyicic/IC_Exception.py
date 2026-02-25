@@ -1,4 +1,5 @@
 # import exceptions
+from typing import ClassVar
 
 
 class IC_Exception(Exception):
@@ -19,7 +20,7 @@ class IC_Exception(Exception):
     def warning_code(self):
         return self._error_code
 
-    _error_codes = {  # IC errors
+    _error_codes: ClassVar[dict[int, str]] = {  # IC errors
         1: "IC SUCCESS",
         0: "IC ERROR",
         -1: "IC NO HANDLE",
