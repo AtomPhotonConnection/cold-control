@@ -18,7 +18,7 @@ import numpy as np
 import pyvisa as visa
 import serial
 
-from classes.config import ConfigReader, DaqReader
+from classes.config_generators import ConfigReader, DaqReader
 from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
 

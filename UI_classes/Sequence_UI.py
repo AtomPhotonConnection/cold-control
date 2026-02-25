@@ -23,7 +23,7 @@ from PIL import Image, ImageTk
 import UI_classes.ToolTip_UI as tooltip
 
 # import wx
-from classes.config import SequenceReader, SequenceWriter
+from classes.config_generators import SequenceReader, SequenceWriter
 from classes.Sequence import (
     IntervalStyle,
     InvalidSequenceChannelException,

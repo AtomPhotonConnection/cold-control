@@ -1,7 +1,7 @@
 # import pyvisa as visa
 import os
 
-from classes.config import ConfigReader, DaqReader
+from classes.config_generators import ConfigReader, DaqReader
 from classes.DAQ import DAQ_channel
 
 config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")

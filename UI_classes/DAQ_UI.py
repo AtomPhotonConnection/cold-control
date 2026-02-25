@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
-from classes.config import DaqReader
+from classes.config_generators import DaqReader
 from classes.DAQ import DAQ_channel, DAQ_controller
 from UI_classes.UI_helpers import ImageButton
 
