@@ -25,7 +25,7 @@ The primary function to configure and control the AWG.
 
 ```python
 from classes.ExperimentalConfigs import AwgConfiguration
-from classes.Config import ExperimentConfigReader
+from classes.config import ExperimentConfigReader
 from lab_control_functions.awg_control_functions_psh_v2 import run_awg
 
 # Load configuration from file

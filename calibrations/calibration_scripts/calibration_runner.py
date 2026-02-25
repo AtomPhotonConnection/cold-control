@@ -11,7 +11,7 @@ import os
 from instruments.WX218x.WX218x_awg import Channel
 
 import lab_control_functions.calibration_functions as calibrate
-from classes.Config import ConfigReader, DaqReader
+from classes.config import ConfigReader, DaqReader
 
 # Select the type of calibration script to run.
 CALIB_TYPE = (

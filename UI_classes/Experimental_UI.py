@@ -24,7 +24,7 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 
-from classes.Config import ExperimentalAutomationReader, ExperimentConfigReader, get_config_root
+from classes.config import ExperimentalAutomationReader, ExperimentConfigReader, get_config_root
 from classes.DAQ import DAQ_dio
 from classes.experimental_configs import (
     GenericConfiguration,

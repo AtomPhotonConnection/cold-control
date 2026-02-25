@@ -25,7 +25,7 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 
-from classes.Config import ConfigReader, DaqReader
+from classes.config import ConfigReader, DaqReader
 from classes.DAQ import DAQ_controller
 from instruments.ThorlabsPM100 import ThorlabsPM100
 from lab_control_functions.calibration_helper_functions import *
