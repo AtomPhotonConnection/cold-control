@@ -777,13 +777,6 @@ class AWGManager:
 
         waveforms_list = awg_cfg.waveforms  # TODO: make a dict rather than list
 
-        if awg_cfg.waveform_stitch_delays is not None:
-            raise DeprecationWarning("Stitch delays are deprecated")
-        if awg_cfg.interleave_waveforms is not None:
-            raise DeprecationWarning("Interleaving waveforms is deprecated")
-        if awg_cfg.marked_channels is not None:
-            raise DeprecationWarning("Marked channels are deprecated")
-
         no_err = self.check_errors()
         print(
             f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}"

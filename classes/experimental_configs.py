@@ -19,7 +19,9 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import Any, Optional
+import warnings
 
+from matplotlib import category
 import numpy as np
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
@@ -420,52 +422,6 @@ class MotFluoresceConfigurationSweep:
     # for config in sweep:
 
 
-class AWGSequenceConfiguration:
-    """
-    AWGSequenceConfiguration stores all configuration parameters
-    required for a photon production experiment.
-
-    This includes:
-    - Save location and MOT reload time
-    - Number of iterations
-    - A waveform sequence and its associated waveforms
-    - Interleaving and stitching behavior for waveforms
-    - Configuration objects for the AWG and TDC systems
-    """
-
-    def __init__(
-        self,
-        waveform_sequence,
-        waveforms,
-        interleave_waveforms,
-        waveform_stitch_delays,
-        awg_configuration,
-    ):
-
-        self._waveform_sequence = waveform_sequence
-        self.waveforms: list[Waveform] = waveforms
-        self.interleave_waveforms: bool = interleave_waveforms
-        self.waveform_stitch_delays = waveform_stitch_delays
-
-        self._awg_configuration: AwgConfiguration = awg_configuration
-
-    # --- waveform_sequence ---
-    @property
-    def waveform_sequence(self):
-        return self._waveform_sequence
-
-    @waveform_sequence.setter
-    def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
-        self._waveform_sequence = value
-
-    @waveform_sequence.deleter
-    def waveform_sequence(self):
-        del self._waveform_sequence
-
-    awg_configuration = make_property("_awg_configuration")
-
-
 class PhotonProductionConfiguration(GenericConfiguration):
     """
     PhotonProductionConfiguration stores all configuration parameters
@@ -495,7 +451,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
         super().__init__(save_location, mot_reload, iterations)
 
         self._waveform_sequence = waveform_sequence
-        self.waveforms: list[Waveform] = waveforms
+        self.waveforms: tuple[Waveform, ...] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
@@ -793,30 +749,46 @@ class AwgConfiguration:
 
     def __init__(
         self,
-        waveform_sequence: list[list[int]],
-        waveforms: list[Waveform],
+        waveform_sequence: tuple[tuple[int, ...], ...],
+        waveforms: tuple[Waveform, ...],
         sample_rate: float,
         burst_count: int,
-        waveform_output_channels: list[int],
-        waveform_output_channel_lags: list[float],
+        waveform_output_channels: tuple[int, ...],
+        waveform_output_channel_lags: tuple[float, ...],
         marker_width: float,
-        waveform_stitch_delays: Optional[list[list[Any]]] = None,
+        waveform_stitch_delays: Optional[tuple[tuple[Any, ...], ...]] = None,
         interleave_waveforms: Optional[bool] = None,
-        marked_channels: Optional[list[int]] = None,
+        marked_channels: Optional[tuple[int, ...]] = None,
     ):
 
         self._waveform_sequence = waveform_sequence
         self.waveforms = waveforms
-        self.interleave_waveforms = interleave_waveforms
-        self.waveform_stitch_delays = waveform_stitch_delays
 
         self._sample_rate = sample_rate
         self._burst_count = burst_count
         self._waveform_output_channels = waveform_output_channels
 
         self.waveform_output_channel_lags = waveform_output_channel_lags
-        self.marked_channels = marked_channels
         self.marker_width = marker_width
+
+        if waveform_stitch_delays is not None:
+            warnings.warn(
+                "waveform_stitch_delays is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
+        if interleave_waveforms is not None:
+            warnings.warn(
+                "interleave_waveforms is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
+        if marked_channels is not None:
+            warnings.warn(
+                "marked_channels is deprecated and will be ignored.",
+                category=DeprecationWarning,
+                stacklevel=1,
+            )
 
     sample_rate: property = make_property("_sample_rate")
     burst_count: property = make_property("_burst_count")

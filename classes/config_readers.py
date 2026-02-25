@@ -452,6 +452,153 @@ class SequenceWriter:
         self.config.write()
 
 
+class AwgConfigReader:
+    """Reads a standalone AWG configuration file and produces an AwgConfiguration object.
+
+    The config file is expected to have top-level keys for the AWG parameters and a
+    ``[waveforms]`` section containing numbered sub-sections, each specifying a waveform's
+    modulation frequency, phases and CSV filename.  See
+    ``configs/pulse_shaping_expt/awg_configs/feb26_awg_updated.ini`` for an example.
+    """
+
+    def __init__(self, fname: str):
+        self.fname = fname
+        self.config = MyConfig(fname)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def load_awg_configuration(self) -> AwgConfiguration:
+        """Parse the config file and return a fully-populated ``AwgConfiguration``."""
+        waveforms = self._parse_waveforms()
+        output_channels = self._parse_output_channels(
+            raw_channels=self.config["waveform output channels"]
+        )
+
+        raw_seq = eval(self.config["waveform sequence"])
+        waveform_sequence = tuple(tuple(ch) for ch in raw_seq)
+
+        awg_config = AwgConfiguration(
+            waveform_sequence=waveform_sequence,
+            waveforms=tuple(waveforms),
+            sample_rate=float(self.config["sample rate"]),
+            burst_count=int(self.config["burst count"]),
+            waveform_output_channels=tuple(output_channels),
+            waveform_output_channel_lags=tuple(
+                map(float, self.config["waveform output channel lags"])
+            ),
+            marker_width=eval(self.config["marker width"]),
+            waveform_stitch_delays=tuple(
+                tuple(x) if isinstance(x, list) else (x,)
+                for x in eval(self.config["waveform stitch delays"])
+            )
+            if "waveform stitch delays" in self.config
+            else None,
+            interleave_waveforms=to_bool(self.config["interleave waveforms"])
+            if "interleave waveforms" in self.config
+            else None,
+            marked_channels=tuple(self.config["marked channels"])
+            if "marked channels" in self.config
+            else None,
+        )
+        return awg_config
+
+    # Convenience alias matching the SequenceReader.load_sequence() pattern
+    get_awg_config = load_awg_configuration
+
+    def get_date(self) -> str:
+        return self.config["date"]
+
+    def get_time(self) -> str:
+        return self.config["time"]
+
+    def get_notes(self) -> str:
+        return self.config.get("notes", "")
+
+    def get_sample_rate(self) -> float:
+        return float(self.config["sample rate"])
+
+    def get_burst_count(self) -> int:
+        return int(self.config["burst count"])
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _parse_waveforms(self) -> tuple[Waveform, ...]:
+        """Read the ``[waveforms]`` section and return a tuple of ``Waveform`` objects."""
+        waveforms: list[Waveform] = []
+        for _key, v in self.config["waveforms"].items():
+            phases = self._parse_phases(v.get("phases"))
+            fname = resolve_config_path(v["filename"])
+            waveforms.append(
+                Waveform(
+                    fname=fname,
+                    mod_frequency=float(v["modulation frequency"]),
+                    phases=phases,
+                )
+            )
+        return tuple(waveforms)
+
+    @staticmethod
+    def _parse_phases(raw_phases) -> list[tuple[float, int]]:
+        """Convert the raw phases value from the config into a list of (phase, index) tuples.
+
+        Handles:
+        - ``None`` / empty string / list of empty strings  -> ``[]`` with warning
+        - A list of numeric strings -> ``[(float, index), ...]``
+        - A string like ``"(0.0, 0) (1.57, 100)"`` -> parsed accordingly
+        """
+        if raw_phases is None:
+            warnings.warn(
+                "Phases field is missing in waveform config; defaulting to empty list.",
+                stacklevel=2,
+            )
+            return []
+
+        # ConfigObj may return a list of strings (e.g. ['', ''] for "phases = ,")
+        if isinstance(raw_phases, list):
+            stripped = [s.strip() for s in raw_phases if s.strip()]
+            if not stripped:
+                return []
+            # Check if this looks like tuple strings "(phase, index)"
+            joined = " ".join(stripped)
+            if "(" in joined:
+                joined = re.sub(r"\(([^)]+) ([^)]+)\)", r"(\1, \2)", joined)
+                joined = joined.replace(") (", "), (")
+                return list(ast.literal_eval(joined))
+            # Otherwise treat as simple float list -> (float, index)
+            return [(float(p), i) for i, p in enumerate(stripped)]
+
+        # Single string value
+        raw = str(raw_phases).strip()
+        if not raw:
+            return []
+        if "(" in raw:
+            raw = re.sub(r"\(([^)]+) ([^)]+)\)", r"(\1, \2)", raw)
+            raw = raw.replace(") (", "), (")
+            return list(ast.literal_eval(raw))
+        return [(float(raw), 0)]
+
+    @staticmethod
+    def _parse_output_channels(config=None, raw_channels=None) -> tuple[int, ...]:
+        """Convert channel names like ``'channel1'`` to integer channel numbers.
+
+        Can be called with *raw_channels* (a list of strings) or will read from
+        *config* ``['waveform output channels']``.
+        """
+        if raw_channels is None:
+            if config is None:
+                raise ValueError("Either config or raw_channels must be provided.")
+            raw_channels = config["waveform output channels"]
+        output_channels: list[int] = []
+        for channel in raw_channels:
+            ch: str = str(channel).replace(" ", "")
+            output_channels.append(int(ch.lower().replace("channel", "")))
+        return tuple(output_channels)
+
+
 class ExperimentConfigReader:
     """
     A class to read experimental config files. First the get_expt_type() method should be
@@ -529,18 +676,9 @@ class ExperimentConfigReader:
 
     def get_photon_production_configuration(self):
 
-        awg_config = AwgConfiguration(
-            sample_rate=float(self.config["AWG"]["sample rate"]),
-            burst_count=int(self.config["AWG"]["burst count"]),
-            waveform_output_channels=list(self.config["AWG"]["waveform output channels"]),
-            waveform_output_channel_lags=list(
-                map(float, self.config["AWG"]["waveform output channel lags"])
-            ),
-            marked_channels=list(self.config["AWG"]["marked channels"])
-            if "marked channels" in self.config["AWG"]
-            else None,
-            marker_width=eval(self.config["AWG"]["marker width"]),
-        )  # type: ignore
+        # Delegate AWG config parsing to AwgConfigReader
+        awg_reader = AwgConfigReader(self.fname)
+        awg_config = awg_reader.load_awg_configuration()
 
         tdc_config = TdcConfiguration(
             counter_channels=list(map(eval, self.config["TDC"]["counter channels"])),
@@ -548,30 +686,14 @@ class ExperimentConfigReader:
             timestamp_buffer_size=int(self.config["TDC"]["timestamp buffer size"]),
         )
 
-        waveforms = []
-        for _x, v in self.config["waveforms"].items():
-            _phases = [(float(p), i) for i, p in enumerate(v["phases"])]
-            waveforms.append(
-                Waveform(
-                    fname=v["filename"],
-                    mod_frequency=float(v["modulation frequency"]),
-                    phases=_phases,
-                )
-            )
-
-        print(self.config["waveform sequence"])
         photon_production_config = PhotonProductionConfiguration(
             save_location=self.config["save location"],
             mot_reload=eval(self.config["mot reload"]),
             iterations=int(self.config["iterations"]),
-            waveform_sequence=list(eval(self.config["waveform sequence"])),
-            waveforms=waveforms,
-            waveform_stitch_delays=list(eval(self.config["waveform stitch delays"]))
-            if "waveform stitch delays" in self.config
-            else None,
-            interleave_waveforms=to_bool(self.config["interleave waveforms"])
-            if "interleave waveforms" in self.config
-            else None,
+            waveform_sequence=awg_config.waveform_sequence,
+            waveforms=awg_config.waveforms,
+            waveform_stitch_delays=awg_config.waveform_stitch_delays,
+            interleave_waveforms=awg_config.interleave_waveforms,
             awg_configuration=awg_config,
             tdc_configuration=tdc_config,
         )
@@ -639,54 +761,9 @@ class ExperimentConfigReader:
             awg = self.config["awg_settings"]
             config_path = awg["config_path"]
 
-            config = MyConfig(config_path)
-
-            # Reads the waveforms from the config object, and creates a list of Waveforms
-            # with those properties
-            waveforms = []
-            for _x, v in config["waveforms"].items():
-                if v["phases"]:
-                    phases_str = " ".join(v["phases"])
-                    phases_str = re.sub(r"\(([^)]+) ([^)]+)\)", r"(\1, \2)", phases_str)
-                    phases_str = phases_str.replace(") (", "), (")
-                    phases = ast.literal_eval(phases_str)
-                else:
-                    phases = []
-                waveforms.append(
-                    Waveform(
-                        fname=v["filename"],
-                        mod_frequency=float(v["modulation frequency"]),
-                        phases=phases,
-                    )
-                )
-
-            # convert the output channels from str to int
-            output_channels = []
-            for channel in config["waveform output channels"]:
-                ch: str = channel.replace(" ", "")
-                output_channels.append(int(ch.lower().replace("channel", "")))
-
-            # Reads the awg properties from the config object, and creates a new awg configuration with those settings
-            awg_config = AwgConfiguration(
-                waveform_sequence=list(eval(config["waveform sequence"])),
-                waveforms=waveforms,
-                interleave_waveforms=to_bool(config["interleave waveforms"])
-                if "interleave waveforms" in config
-                else None,
-                waveform_stitch_delays=list(eval(config["waveform stitch delays"]))
-                if "waveform stitch delays" in config
-                else None,
-                sample_rate=float(config["sample rate"]),
-                burst_count=int(config["burst count"]),
-                waveform_output_channels=output_channels,
-                waveform_output_channel_lags=list(
-                    map(float, config["waveform output channel lags"])
-                ),
-                marked_channels=list(config["marked channels"])
-                if "marked channels" in config
-                else None,
-                marker_width=eval(config["marker width"]),
-            )
+            # Delegate AWG config parsing to AwgConfigReader
+            awg_reader = AwgConfigReader(config_path)
+            awg_config = awg_reader.load_awg_configuration()
 
             awg_settings_dict = {
                 "config_path_full": config_path,
@@ -695,33 +772,6 @@ class ExperimentConfigReader:
                 "awg_config_single": None,  # Default to None if not provided
                 "sequence_config_single": None,  # Default to None if not provided
             }
-
-            # # Only add single configuration if config_path_single is not an empty string
-            # if config_single is not None and config_path_single != "":
-            #     waveforms_single = []
-            #     for x, v in config_single['waveforms'].items():
-            #         _phases = [(float(p), i) for i, p in enumerate(v['phases'])]
-            #         waveforms_single.append(Waveform(fname=v['filename'],
-            #                                         mod_frequency=float(v['modulation frequency']),
-            #                                         phases=_phases))
-
-            #     awg_config_single = AwgConfiguration(\
-            #         waveform_sequence=list(eval(config_single['waveform sequence'])),
-            #         waveforms=waveforms_single,
-            #         interleave_waveforms=to_bool(config_single['interleave waveforms']),
-            #         waveform_stitch_delays=list(eval(config_single['waveform stitch delays'])),
-            #         sample_rate=float(config_single['sample rate']),
-            #         burst_count=int(config_single['burst count']),
-            #         waveform_output_channels=list(config_single['waveform output channels']),
-            #         waveform_output_channel_lags=list(map(float, config_single['waveform output channel lags'])),
-            #         marked_channels=list(config_single['marked channels']),
-            #         marker_width=eval(config_single['marker width']))
-
-            #     awg_settings_dict["config_path_single"] = config_path_single
-            #     awg_settings_dict["awg_config_single"] = awg_config_single
-
-            # else:
-            #     awg_settings_dict["config_path_single"] = None
 
             metadata = self.config.get("metadata") or {}
             ct = metadata.get("config_type", "").strip().lower()

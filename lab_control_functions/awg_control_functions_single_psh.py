@@ -147,9 +147,9 @@ def stitch_waveforms(channel_list, waveform_stitch_delays, waveforms, sample_rat
     stitched_waveforms = []
     for i, waveform in enumerate(waveforms):
         # Verificar que waveform_stitch_delays es una lista y tiene elementos
-        if isinstance(waveform_stitch_delays, list) and i < len(waveform_stitch_delays):
+        if isinstance(waveform_stitch_delays, (list, tuple)) and i < len(waveform_stitch_delays):
             delay = waveform_stitch_delays[i]
-            if isinstance(delay, list) and len(delay) > 0:
+            if isinstance(delay, (list, tuple)) and len(delay) > 0:
                 delay = delay[0]
             delay = int(delay)
         else:
