@@ -11,6 +11,7 @@ import os
 import re
 import time
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Optional
 
@@ -507,21 +508,6 @@ class AwgConfigReader:
     # Convenience alias matching the SequenceReader.load_sequence() pattern
     get_awg_config = load_awg_configuration
 
-    def get_date(self) -> str:
-        return self.config["date"]
-
-    def get_time(self) -> str:
-        return self.config["time"]
-
-    def get_notes(self) -> str:
-        return self.config.get("notes", "")
-
-    def get_sample_rate(self) -> float:
-        return float(self.config["sample rate"])
-
-    def get_burst_count(self) -> int:
-        return int(self.config["burst count"])
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -582,21 +568,13 @@ class AwgConfigReader:
         return [(float(raw), 0)]
 
     @staticmethod
-    def _parse_output_channels(config=None, raw_channels=None) -> tuple[int, ...]:
-        """Convert channel names like ``'channel1'`` to integer channel numbers.
-
-        Can be called with *raw_channels* (a list of strings) or will read from
-        *config* ``['waveform output channels']``.
+    def _parse_output_channels(raw_channels: Iterable[Any]) -> tuple[int, ...]:
         """
-        if raw_channels is None:
-            if config is None:
-                raise ValueError("Either config or raw_channels must be provided.")
-            raw_channels = config["waveform output channels"]
-        output_channels: list[int] = []
-        for channel in raw_channels:
-            ch: str = str(channel).replace(" ", "")
-            output_channels.append(int(ch.lower().replace("channel", "")))
-        return tuple(output_channels)
+        Pure function to map a sequence of channel strings to integer IDs.
+        """
+        return tuple(
+            int(str(ch).replace(" ", "").lower().replace("channel", "")) for ch in raw_channels
+        )
 
 
 class ExperimentConfigReader:
@@ -692,8 +670,8 @@ class ExperimentConfigReader:
             iterations=int(self.config["iterations"]),
             waveform_sequence=awg_config.waveform_sequence,
             waveforms=awg_config.waveforms,
-            waveform_stitch_delays=awg_config.waveform_stitch_delays,
-            interleave_waveforms=awg_config.interleave_waveforms,
+            waveform_stitch_delays=None,  # deprecated, should be set to None and ignored by AWG control code
+            interleave_waveforms=None,  # deprecated
             awg_configuration=awg_config,
             tdc_configuration=tdc_config,
         )

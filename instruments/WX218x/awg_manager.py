@@ -5,38 +5,27 @@ Replaces the old DLL-based WX218x_awg wrapper with direct SCPI commands
 sent over PyVISA (USB/LAN/GPIB). The SCPI command set is documented in
 the WX2184C Programming Reference (Chapter 4).
 
-Typical usage::
-
-    from instruments.WX218x.awg_manager import AWGManager
-
-    awg = AWGManager()  # auto-detects by manufacturer ID
-    awg.abort()
-    awg.disable_all_channels()
-    awg.configure_sample_rate(1e9)
-    awg.set_output_mode("USER")  # arbitrary waveform mode
-    awg.enable_coupling()
-
-    awg.select_channel(1)
-    awg.define_segment(1, len(data))
-    awg.upload_waveform(data)  # numpy int16 array, 0–16383
-
-    awg.configure_trigger(channel=1, mode="EXT", level=1.6, slope="POS")
-    awg.set_burst_count(1, count=1)
-    awg.set_trace_mode("SING")
-
-    awg.configure_marker(marker=1, position=100, width=64, high_level=1.2, low_level=0.0)
-
-    awg.enable_channel(1)
-    awg.initiate()
-    # ... triggered output happens here ...
+Typical usage:
+    awg = awg_manager.AWGManager()
+    awg.reset()
+    awg.upload_and_arm(awg_config: AwgConfiguration)
     awg.close()
 
+This allows an AwgConfiguration object to be uploaded so that the AWG will play the desired
+waveforms when triggered with the DAQ cards.
+
+Important commands:
+ - To change ouptut modes, use self._write(f":FUNC:MODE {output_mode}")
+   this command must be applied to every channel before uploading waveforms.
+
+
 Created: 2026-02-11
-Authors: Marina Llanero Pinero, Matt King (refactored from DLL-based driver)
+Authors: Matt King (refactored from DLL-based driver)
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from typing import Optional, cast
@@ -58,145 +47,12 @@ RETRY_DELAY_SEC = 0.15
 COMMAND_DELAY_SEC = 0.02  # small gap between commands
 
 # WX2184C waveform data is 14-bit: values 0 … 16 383.
-# 0 → −full-scale, 8192 → 0 V, 16383 → +full-scale.
+# 0 → -full-scale, 8192 → 0 V, 16383 → +full-scale.
 DAC_BITS = 14
 DAC_MAX = (1 << DAC_BITS) - 1  # 16 383
 DAC_MID = 1 << (DAC_BITS - 1)  # 8 192
 
 logger = logging.getLogger(__name__)
-
-
-# ========================================================================
-# MARK:Helper functions
-# ========================================================================
-def process_waveforms(
-    _outp_channels, _channel_lags, _waveform_sequence, _waveforms_list, _sample_rate
-) -> dict[int, np.ndarray]:
-    """
-    Helper function to process waveforms from the AwgConfiguration object and prepare them for upload.
-    """
-
-    print("Processing waveforms...")
-    all_ch_data = {}
-
-    for i, ch in enumerate(_outp_channels):
-        # calculate timing offset
-        lag_us = _channel_lags[i]
-        lag_samples = int(round(lag_us * _sample_rate * 1e-6))
-        print(f"Channel {ch}: lag {lag_us} us → {lag_samples} samples")
-
-        # build full waveform from sequence
-        ch_wf_ids = _waveform_sequence[i]
-        ch_waveforms: list[Waveform] = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
-        raw_chunks = [np.array(w.get(sample_rate=_sample_rate)) for w in ch_waveforms]
-        full_wf = np.concatenate(raw_chunks)
-
-        # apply lag by padding with zeros at the start
-        if lag_samples > 0:
-            full_wf = np.pad(full_wf, (lag_samples, 0), mode="constant", constant_values=0)
-            print(f"Channel {ch}: applied lag by padding with {lag_samples} zeros")
-
-        all_ch_data[ch] = full_wf
-
-    # Align channels to the same length and to a multiple of 16 samples
-    max_len = max(len(d) for d in all_ch_data.values())
-    if max_len % 16 != 0:
-        max_len += 16 - (max_len % 16)
-    aligned: dict[int, np.ndarray] = {
-        ch: np.pad(d, (0, max_len - len(d)), "constant") for ch, d in all_ch_data.items()
-    }
-    print(f"Aligned all channels to {max_len} samples (multiple of 16)")
-
-    return aligned
-
-
-def validate_waveform_size(num_points):
-    """
-    Validate that waveform size meets requirements
-
-    Requirements from manual:
-    - Minimum: 192 points
-    - Must be multiple of 16 points
-
-    Args:
-        num_points: Number of waveform points
-
-    Returns:
-        Validated number of points
-    """
-    if num_points < 192:
-        raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
-
-    if num_points % 16 != 0:
-        # Round up to nearest multiple of 16
-        adjusted = ((num_points + 15) // 16) * 16
-        print(
-            f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)"
-        )
-        return adjusted
-
-    return num_points
-
-
-def normalize_waveform(waveform_data):
-    """
-    Normalize waveform data to 14-bit DAC values (0-16383)
-
-    The WX2184C uses 14-bit DAC values:
-    - 0x0000 (0) corresponds to -2V
-    - 0x2000 (8192) corresponds to 0V
-    - 0x3FFF (16383) corresponds to +2V
-
-    Args:
-        waveform_data: NumPy array of float values (typically -1.0 to +1.0)
-
-    Returns:
-        NumPy array of uint16 values (0-16383)
-    """
-    # Normalize to -1.0 to +1.0 range
-    waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
-
-    # Scale to 0-16383 (14-bit range)
-    # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
-    dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
-
-    # Ensure we don't exceed 14-bit range
-    dac_values = np.clip(dac_values, 0, 16383)
-
-    return dac_values
-
-
-def create_binary_block_header(num_bytes):
-    """
-    Create IEEE 488.2 binary block header
-
-    Format: #<num_digits><byte_count><data>
-    Example: #42048 means 4 digits follow, then 2048 bytes of data
-
-    Args:
-        num_bytes: Number of bytes in the data block
-
-    Returns:
-        Header string (e.g., '#42048')
-    """
-    byte_count_str = str(num_bytes)
-    num_digits = len(byte_count_str)
-    header = f"#{num_digits}{byte_count_str}"
-    return header
-
-
-def force_even_round(value: float) -> int:
-    """
-    Round a value to the nearest non-zero even integer.
-    Used to ensure that marker width in samples is even, as required by the AWG.
-    """
-    res = int(round(value / 2.0) * 2)
-    if res == 0 and value > 0:
-        res = 2
-    elif res == 0 and value < 0:
-        raise ValueError(f"Marker width in samples must be positive (got {value})")
-
-    return res
 
 
 # =========================================================================
@@ -243,6 +99,142 @@ class AWGManager:
         idn = self._query("*IDN?")
         print(f"Connected to AWG: {idn}")
 
+    # ========================================================================
+    # MARK:Helper functions
+    # ========================================================================
+    @staticmethod
+    def process_waveforms(
+        _outp_channels, _channel_lags, _waveform_sequence, _waveforms_list, _sample_rate
+    ) -> dict[int, np.ndarray]:
+        """
+        Helper function to process waveforms from the AwgConfiguration object and prepare them for upload.
+        """
+
+        print("Processing waveforms...")
+        all_ch_data = {}
+
+        for i, ch in enumerate(_outp_channels):
+            # calculate timing offset
+            lag_us = _channel_lags[i]
+            lag_samples = round(lag_us * _sample_rate * 1e-6)
+            print(f"Channel {ch}: lag {lag_us} us → {lag_samples} samples")
+
+            # build full waveform from sequence
+            ch_wf_ids = _waveform_sequence[i]
+            ch_waveforms: list[Waveform] = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
+            raw_chunks = [np.array(w.get(sample_rate=_sample_rate)) for w in ch_waveforms]
+            full_wf = np.concatenate(raw_chunks)
+
+            # apply lag by padding with zeros at the start
+            if lag_samples > 0:
+                full_wf = np.pad(full_wf, (lag_samples, 0), mode="constant", constant_values=0)
+                print(f"Channel {ch}: applied lag by padding with {lag_samples} zeros")
+
+            all_ch_data[ch] = full_wf
+
+        # Align channels to the same length and to a multiple of 16 samples
+        max_len = max(len(d) for d in all_ch_data.values())
+        if max_len % 16 != 0:
+            max_len += 16 - (max_len % 16)
+        aligned: dict[int, np.ndarray] = {
+            ch: np.pad(d, (0, max_len - len(d)), "constant") for ch, d in all_ch_data.items()
+        }
+        print(f"Aligned all channels to {max_len} samples (multiple of 16)")
+
+        return aligned
+
+    @staticmethod
+    def validate_waveform_size(num_points):
+        """
+        Validate that waveform size meets requirements
+
+        Requirements from manual:
+        - Minimum: 192 points
+        - Must be multiple of 16 points
+
+        Args:
+            num_points: Number of waveform points
+
+        Returns:
+            Validated number of points
+        """
+        if num_points < 192:
+            raise ValueError(f"Waveform must be at least 192 points (got {num_points})")
+
+        if num_points % 16 != 0:
+            # Round up to nearest multiple of 16
+            adjusted = ((num_points + 15) // 16) * 16
+            print(
+                f"Warning: Waveform size adjusted from {num_points} to {adjusted} (must be multiple of 16)"
+            )
+            return adjusted
+
+        return num_points
+
+    @staticmethod
+    def normalize_waveform(waveform_data):
+        """
+        Normalize waveform data to 14-bit DAC values (0-16383)
+
+        The WX2184C uses 14-bit DAC values:
+        - 0x0000 (0) corresponds to -2V
+        - 0x2000 (8192) corresponds to 0V
+        - 0x3FFF (16383) corresponds to +2V
+
+        Args:
+            waveform_data: NumPy array of float values (typically -1.0 to +1.0)
+
+        Returns:
+            NumPy array of uint16 values (0-16383)
+        """
+        # Normalize to -1.0 to +1.0 range
+        waveform_normalized = np.clip(waveform_data, -1.0, 1.0)
+
+        # Scale to 0-16383 (14-bit range)
+        # -1.0 -> 0, 0.0 -> 8192, +1.0 -> 16383
+        dac_values = ((waveform_normalized + 1.0) * 8191.5).astype(np.uint16)
+
+        # Ensure we don't exceed 14-bit range
+        dac_values = np.clip(dac_values, 0, 16383)
+
+        return dac_values
+
+    @staticmethod
+    def create_binary_block_header(num_bytes):
+        """
+        Create IEEE 488.2 binary block header
+
+        Format: #<num_digits><byte_count><data>
+        Example: #42048 means 4 digits follow, then 2048 bytes of data
+
+        Args:
+            num_bytes: Number of bytes in the data block
+
+        Returns:
+            Header string (e.g., '#42048')
+        """
+        byte_count_str = str(num_bytes)
+        num_digits = len(byte_count_str)
+        header = f"#{num_digits}{byte_count_str}"
+        return header
+
+    @staticmethod
+    def force_even_round(value: float) -> int:
+        """
+        Round a value to the nearest non-zero even integer.
+        Used to ensure that marker width in samples is even, as required by the AWG.
+        """
+        res = int(round(value / 2.0) * 2)
+        if res == 0 and value > 0:
+            res = 2
+        elif res == 0 and value < 0:
+            raise ValueError(f"Marker width in samples must be positive (got {value})")
+
+        return res
+
+    # =====================================================================
+    # MARK: Basic commands
+    # =====================================================================
     # ----- low-level I/O (with retries, mirroring OscilloscopeManager) ------
 
     def _delay(self) -> None:
@@ -390,7 +382,7 @@ class AWGManager:
             1, 2, 3 or 4.
         """
         if channel not in (1, 2, 3, 4):
-            raise ValueError(f"Invalid channel {channel}. Must be 1–4.")
+            raise ValueError(f"Invalid channel {channel}. Must be 1-4.")
         self._write(f":INST:SEL {channel}")
 
     def enable_channel(self, channel: int) -> None:
@@ -444,7 +436,7 @@ class AWGManager:
         self._write(f":TRIG:SOUR:ADV {source}")
 
     def set_trigger_level(self, level: float = 1.6) -> None:
-        """Set trigger threshold in volts (−5 V to +5 V)."""
+        """Set trigger threshold in volts (-5 V to +5 V)."""
         # :TRIGger:LEVel <level>
         self._write(f":TRIG:LEV {level}")
 
@@ -477,7 +469,7 @@ class AWGManager:
     def play_sine_wave(self, channel: int, frequency: float, amplitude: float = 1.0) -> None:
         """Configure a standard sine wave on *channel* with given frequency and amplitude."""
         self.select_channel(channel)
-        self.set_output_mode("FIX")
+        self._write(":FUNC:MODE FIX")
         self._write(":FUNC:SHAP SIN")
         self._write(f":FREQ {frequency}")
         self._write(f":VOLT {amplitude}")
@@ -528,7 +520,7 @@ class AWGManager:
         """Delete all segments and all sequences."""
         self.delete_all_segments()
 
-    # ----- waveform upload ---------------------------------------------------
+    # MARK: Waveform upload
     def upload_waveform(
         self,
         waveform_data: np.ndarray,
@@ -541,7 +533,7 @@ class AWGManager:
         Parameters
         ----------
         data : np.ndarray
-            Waveform as **float (−1 … +1)** or **uint16 DAC codes (0 … 16 383)**.
+            Waveform as **float (-1 … +1)** or **uint16 DAC codes (0 … 16 383)**.
             If float, it is converted automatically via :meth:`float_to_dac`.
             Length must be a multiple of 16.
         segment : int
@@ -572,7 +564,7 @@ class AWGManager:
         try:
             # Step 1: Validate and adjust waveform size
             num_points = len(waveform_data)
-            validated_points = validate_waveform_size(num_points)
+            validated_points = self.validate_waveform_size(num_points)
 
             # Pad with zeros if size was adjusted
             if validated_points > num_points:
@@ -581,7 +573,7 @@ class AWGManager:
                 )
 
             # Step 2: Convert to 14-bit DAC values
-            dac_values = normalize_waveform(waveform_data)
+            dac_values = self.normalize_waveform(waveform_data)
 
             # Step 3: Define segment in memory
             # CRITICAL: Must define segment BEFORE uploading data
@@ -608,7 +600,7 @@ class AWGManager:
             num_bytes = len(binary_data)
 
             # Step 6: Create IEEE 488.2 binary block header
-            header = create_binary_block_header(num_bytes)
+            header = self.create_binary_block_header(num_bytes)
             command = f":TRAC:DATA {header}"
 
             # Step 7: Upload data using binary write
@@ -680,7 +672,7 @@ class AWGManager:
         if width < 0:
             width = 0
 
-        high_level = 1.2
+        high_level = 1.2  # noqa: F841, not currently used because default value is fine
         mark_source = "WAVE"
 
         self._write(f":MARK:SEL {marker}")
@@ -789,7 +781,7 @@ class AWGManager:
         self._log.info("AWG reset complete.")
 
         # --- Process waveforms ---
-        all_ch_data = process_waveforms(
+        all_ch_data = self.process_waveforms(
             outp_channels, channel_lags, waveform_sequence, waveforms_list, sample_rate
         )
         self._log.info(f"self.check_errors(): {self.check_errors()}")
@@ -819,10 +811,10 @@ class AWGManager:
         self._log.info(
             "Marker width is %g us → %d samples",
             marker_width_us,
-            force_even_round(marker_width_us * sample_rate * 1e-6),
+            self.force_even_round(marker_width_us * sample_rate * 1e-6),
         )
         self.configure_marker(
-            channel=1, width=force_even_round(marker_width_us * sample_rate * 1e-6)
+            channel=1, width=self.force_even_round(marker_width_us * sample_rate * 1e-6)
         )
 
         self._log.info(f"self.check_errors(): {self.check_errors()}")
@@ -843,10 +835,8 @@ class AWGManager:
         return self
 
     def __exit__(self, *exc) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.abort()
-        except Exception:
-            pass
         self.close()
 
     def __repr__(self) -> str:

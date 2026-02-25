@@ -1265,16 +1265,16 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.development_mode:
             from instruments.dummy import DummyAWGManager
 
-            awg = DummyAWGManager()
+            self.awg = DummyAWGManager()
         else:
             assert awg_manager is not None, (
                 "awg_manager module is not available. Cannot configure AWG."
             )
-            awg = awg_manager.AWGManager()
+            self.awg = awg_manager.AWGManager()
         # awg.reboot()
         # awg.close()
 
-        awg.upload_and_arm(self.awg_config)
+        self.awg.upload_and_arm(self.awg_config)
 
         print(f"AWG configured in {time.time() - start_time}s")
 
@@ -1458,6 +1458,10 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_scope:
             print("closing scope...")
             self.scope.quit()
+
+        if self.with_awg:
+            print("closing AWG...")
+            self.awg.close()
         super().daq_cards_off()
 
 

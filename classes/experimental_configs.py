@@ -14,14 +14,13 @@ from __future__ import annotations
 import csv
 import re
 import shutil
+import warnings
 from copy import deepcopy
 from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import Any, Optional
-import warnings
 
-from matplotlib import category
 import numpy as np
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
