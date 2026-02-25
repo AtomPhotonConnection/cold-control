@@ -1,13 +1,6 @@
 import logging
-from math import log
-import time
-import pyvisa as visa
-import numpy as np
-import matplotlib.pyplot as plt
 
-from classes.Config import ConfigReader
-from classes.ExperimentalConfigs import Waveform, AwgConfiguration
-from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
+from classes.ExperimentalConfigs import AwgConfiguration, Waveform
 from instruments.WX218x.awg_manager import AWGManager
 
 # ensure logging goes to the right place
@@ -64,7 +57,7 @@ if __name__ == "__main__":
 
         awg = AWGManager()
         awg.upload_and_arm(awg_config)
-    
+
     finally:
         awg.close()
 

@@ -195,7 +195,7 @@ def force_even_round(value: float) -> int:
         res = 2
     elif res == 0 and value < 0:
         raise ValueError(f"Marker width in samples must be positive (got {value})")
-    
+
     return res
 
 # =========================================================================
@@ -672,7 +672,7 @@ class AWGManager:
             Delay from SYNC in seconds (0 … 3 ns).
 
         """
-        
+
         self.select_channel(channel)
 
         if marker not in (1, 2):
@@ -742,7 +742,7 @@ class AWGManager:
         self.delete_all_segments()
 
         self.enable_coupling()
-        #self.disable_coupling() 
+        #self.disable_coupling()
 
         self.set_continuous(False)  # triggered mode
         self.set_trigger_level(trigger_level)

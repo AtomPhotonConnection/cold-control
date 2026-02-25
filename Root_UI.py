@@ -3,7 +3,6 @@
 import logging
 import os
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox as tkMessageBox
 
 import classes.Styles as Styles
