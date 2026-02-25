@@ -1,28 +1,31 @@
 """Tests for the AwgConfigReader class and the reworked Waveform class."""
 
 import csv
+import math
 import os
 import sys
 import tempfile
 from pathlib import Path
 
 # Ensure the project root is on sys.path
-PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Set the config root so resolve_config_path can resolve relative waveform paths
-os.environ["COLD_CONTROL_CONFIG_ROOT"] = PROJECT_ROOT
+os.environ["COLD_CONTROL_CONFIG_ROOT"] = str(PROJECT_ROOT)
 
 from classes.config_readers import AwgConfigReader  # noqa: E402
 from classes.experimental_configs import AwgConfiguration, Waveform  # noqa: E402
 
+config_path = str(
+    PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "awg_configs" / "feb26_awg_updated.ini"
+)
+
 
 def test_load_awg_configuration():
     """Test that AwgConfigReader correctly parses feb26_awg_updated.ini."""
-    config_path = os.path.join(
-        PROJECT_ROOT, "configs", "pulse_shaping_expt", "awg_configs", "feb26_awg_updated.ini"
-    )
+
     reader = AwgConfigReader(config_path)
     awg_config = reader.load_awg_configuration()
 
@@ -82,10 +85,8 @@ def test_load_awg_configuration():
 
 def test_convenience_methods():
     """Test convenience accessors on AwgConfigReader."""
-    config_path = os.path.join(
-        PROJECT_ROOT, "configs", "pulse_shaping_expt", "awg_configs", "feb26_awg_updated.ini"
-    )
-    reader = AwgConfigReader(config_path)
+
+    reader = AwgConfigReader(str(config_path))
 
     # AwgConfigReader exposes its config via reader.config
     assert reader.config["date"] == "26/01/2026"
@@ -99,9 +100,7 @@ def test_convenience_methods():
 
 def test_get_awg_config_alias():
     """Test that get_awg_config is an alias for load_awg_configuration."""
-    config_path = os.path.join(
-        PROJECT_ROOT, "configs", "pulse_shaping_expt", "awg_configs", "feb26_awg_updated.ini"
-    )
+
     reader = AwgConfigReader(config_path)
     config1 = reader.load_awg_configuration()
     config2 = reader.get_awg_config()
@@ -140,20 +139,22 @@ def test_parse_phases_edge_cases():
 # ---------------------------------------------------------------------------
 
 
-def _make_temp_csv(content: str) -> str:
+def _make_temp_csv(content: str) -> Path:
     """Write content to a temporary CSV file and return its path (caller must delete)."""
-    fd, path = tempfile.mkstemp(suffix=".csv")
+    fd, path_name = tempfile.mkstemp(suffix=".csv")
     os.close(fd)
-    with open(path, "w", newline="") as f:
+    path = Path(path_name)
+    with path.open("w", newline="") as f:
         f.write(content)
     return path
 
 
-def _write_csv_rows(rows) -> str:
+def _write_csv_rows(rows) -> Path:
     """Write rows (list of lists) to a temporary CSV file and return its path."""
-    fd, path = tempfile.mkstemp(suffix=".csv")
+    fd, path_name = tempfile.mkstemp(suffix=".csv")
     os.close(fd)
-    with open(path, "w", newline="") as f:
+    path = Path(path_name)
+    with path.open("w", newline="") as f:
         writer = csv.writer(f)
         for row in rows:
             writer.writerow(row)
@@ -164,7 +165,7 @@ def test_waveform_defaults():
     """Waveform constructor defaults: modulated inferred as False when mod_frequency=0."""
     path = _make_temp_csv("0.1,0.5,1.0,0.5,0.1\n")
     try:
-        wf = Waveform(fname=path)
+        wf = Waveform(fname=str(path))
         assert wf.modulated is False
         assert wf.mod_frequency == 0.0
         assert wf.phases == []
@@ -176,7 +177,7 @@ def test_waveform_defaults():
         result2 = wf.get(sample_rate=1e9)
         assert result2 == [0.1, 0.5, 1.0, 0.5, 0.1]
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Waveform defaults test passed!")
 
 
@@ -184,13 +185,13 @@ def test_waveform_inferred_modulated():
     """Waveform with mod_frequency != 0 and no explicit modulated flag infers modulated=True."""
     path = _make_temp_csv(",".join(["1.0"] * 100) + "\n")
     try:
-        wf = Waveform(fname=path, mod_frequency=1e6)
+        wf = Waveform(fname=str(path), mod_frequency=1e6)
         assert wf.modulated is True
         result = wf.get(sample_rate=1e9)
         # With modulation, values should vary (not all 1.0)
         assert not all(abs(v - 1.0) < 1e-10 for v in result), "Modulation should change values"
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Waveform inferred modulated test passed!")
 
 
@@ -198,12 +199,12 @@ def test_waveform_modulated_without_frequency_raises():
     """Waveform(modulated=True, mod_frequency=0) should raise ValueError."""
     path = _make_temp_csv("0.5,0.5\n")
     try:
-        Waveform(fname=path, modulated=True, mod_frequency=0.0)
-        assert False, "Should have raised ValueError"
+        Waveform(fname=str(path), modulated=True, mod_frequency=0.0)
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "modulated" in str(e).lower()
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Modulated without frequency validation test passed!")
 
 
@@ -211,15 +212,15 @@ def test_modulated_get_requires_sample_rate():
     """Calling get() on a modulated waveform without sample_rate should raise ValueError."""
     path = _make_temp_csv(",".join(["1.0"] * 10) + "\n")
     try:
-        wf = Waveform(fname=path, mod_frequency=1e6)
+        wf = Waveform(fname=str(path), mod_frequency=1e6)
         assert wf.modulated is True
         try:
             wf.get()
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "sample_rate" in str(e).lower()
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Modulated get() requires sample_rate test passed!")
 
 
@@ -227,11 +228,11 @@ def test_csv_single_row_format():
     """A CSV with one row of many comma-separated values loads correctly."""
     path = _write_csv_rows([[0.1, 0.2, 0.3, 0.4, 0.5]])
     try:
-        wf = Waveform(fname=path)
+        wf = Waveform(fname=str(path))
         assert wf.data == [0.1, 0.2, 0.3, 0.4, 0.5]
         assert wf.get_n_samples() == 5
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Single-row CSV test passed!")
 
 
@@ -239,11 +240,11 @@ def test_csv_single_column_format():
     """A CSV with one column and many rows loads correctly."""
     path = _write_csv_rows([[0.1], [0.2], [0.3], [0.4], [0.5]])
     try:
-        wf = Waveform(fname=path)
+        wf = Waveform(fname=str(path))
         assert wf.data == [0.1, 0.2, 0.3, 0.4, 0.5]
         assert wf.get_n_samples() == 5
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Single-column CSV test passed!")
 
 
@@ -251,12 +252,12 @@ def test_csv_ambiguous_format_raises():
     """A CSV with multiple rows AND multiple columns should raise ValueError."""
     path = _write_csv_rows([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
     try:
-        Waveform(fname=path)
-        assert False, "Should have raised ValueError for ambiguous CSV"
+        Waveform(fname=str(path))
+        raise AssertionError("Should have raised ValueError for ambiguous CSV")
     except ValueError as e:
         assert "ambiguous" in str(e).lower()
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Ambiguous CSV rejection test passed!")
 
 
@@ -264,13 +265,178 @@ def test_csv_empty_raises():
     """An empty CSV should raise ValueError."""
     path = _make_temp_csv("")
     try:
-        Waveform(fname=path)
-        assert False, "Should have raised ValueError for empty CSV"
+        Waveform(fname=str(path))
+        raise AssertionError("Should have raised ValueError for empty CSV")
     except ValueError as e:
         assert "empty" in str(e).lower()
     finally:
-        os.unlink(path)
+        path.unlink()
     print("Empty CSV rejection test passed!")
+
+
+def test_get_profile_and_helpers():
+    """get_profile(), get_n_samples(), get_t_length() return expected values."""
+    path = _make_temp_csv("0.1,0.2,0.3,0.4\n")
+    try:
+        wf = Waveform(fname=str(path))
+        assert wf.get_profile() == [0.1, 0.2, 0.3, 0.4]
+        assert wf.get_n_samples() == 4
+        assert wf.get_t_length(1e9) == 4 / 1e9
+    finally:
+        path.unlink()
+    print("get_profile / helpers test passed!")
+
+
+def test_get_returns_copy():
+    """get() should return a copy, not a reference to internal data."""
+    path = _make_temp_csv("0.5,0.5,0.5\n")
+    try:
+        wf = Waveform(fname=str(path))
+        result = wf.get()
+        result[0] = 999.0
+        assert wf.data[0] == 0.5, "Internal data should not be mutated"
+    finally:
+        path.unlink()
+    print("get() returns copy test passed!")
+
+
+def test_explicit_modulated_flag():
+    """Passing modulated explicitly should skip inference."""
+    path = _make_temp_csv(",".join(["1.0"] * 10) + "\n")
+    try:
+        # Explicitly unmodulated despite having a mod_frequency
+        wf = Waveform(fname=str(path), modulated=False, mod_frequency=0.0)
+        assert wf.modulated is False
+
+        # Explicitly modulated with a frequency
+        wf2 = Waveform(fname=str(path), modulated=True, mod_frequency=1e6)
+        assert wf2.modulated is True
+    finally:
+        path.unlink()
+    print("Explicit modulated flag test passed!")
+
+
+def test_property_setters():
+    """fname setter reloads data; modulated/mod_frequency setters update state."""
+    path1 = _make_temp_csv("0.1,0.2,0.3\n")
+    path2 = _make_temp_csv("0.9,0.8\n")
+    try:
+        wf = Waveform(fname=str(path1))
+        assert wf.data == [0.1, 0.2, 0.3]
+
+        # Reassigning fname should reload data from the new file
+        wf.fname = str(path2)
+        assert wf.fname == path2
+        assert wf.data == [0.9, 0.8]
+
+        # modulated setter
+        wf.modulated = True
+        assert wf.modulated is True
+        wf.modulated = False
+        assert wf.modulated is False
+
+        # mod_frequency setter
+        wf.mod_frequency = 5e6
+        assert wf.mod_frequency == 5e6
+
+        # set_mod_frequency method
+        wf.set_mod_frequency(7e6)
+        assert wf.mod_frequency == 7e6
+    finally:
+        path1.unlink()
+        path2.unlink()
+    print("Property setters test passed!")
+
+
+def test_get_marker_data_basic():
+    """get_marker_data() returns a marker waveform with correct padding and positions."""
+    path = _make_temp_csv("0.1,0.2,0.3,0.4,0.5\n")
+    try:
+        wf = Waveform(fname=str(path))
+        n_samples = wf.get_n_samples()  # 5
+
+        # Default: no markers, no padding -> all zeros
+        markers = wf.get_marker_data()
+        assert len(markers) == n_samples
+        assert all(m == 0 for m in markers)
+
+        # With padding
+        markers = wf.get_marker_data(n_pad_left=3, n_pad_right=2)
+        assert len(markers) == 3 + n_samples + 2  # 10
+
+        # With a marker position and width
+        markers = wf.get_marker_data(
+            marker_positions=[2],
+            marker_width=2,
+            n_pad_left=0,
+            n_pad_right=0,
+        )
+        assert len(markers) == n_samples
+        assert markers[0] == 0
+        assert markers[1] == 0
+        assert markers[2] == 1
+        assert markers[3] == 1
+        assert markers[4] == 0
+    finally:
+        path.unlink()
+    print("get_marker_data test passed!")
+
+
+def test_get_marker_data_high_start_fix():
+    """get_marker_data forces the first sample low even if a marker starts at index 0."""
+    path = _make_temp_csv("0.1,0.2,0.3,0.4,0.5\n")
+    try:
+        wf = Waveform(fname=str(path))
+        markers = wf.get_marker_data(marker_positions=[0], marker_width=3)
+        # First sample forced to 0; samples 1-2 should still be 1
+        assert markers[0] == 0
+        assert markers[1] == 1
+        assert markers[2] == 1
+    finally:
+        path.unlink()
+    print("get_marker_data high-start fix test passed!")
+
+
+def test_modulated_get_with_phases():
+    """Phase jumps during modulation produce a different result than no phases."""
+    n = 200
+    path = _make_temp_csv(",".join(["1.0"] * n) + "\n")
+    try:
+        freq = 1e6
+        sr = 1e9
+
+        wf_no_phase = Waveform(fname=str(path), mod_frequency=freq)
+        wf_with_phase = Waveform(fname=str(path), mod_frequency=freq, phases=[(math.pi, 100)])
+
+        result_no = wf_no_phase.get(sample_rate=sr)
+        result_with = wf_with_phase.get(sample_rate=sr)
+
+        # Before the phase flip (sample 0-99), results should be identical
+        for i in range(100):
+            assert abs(result_no[i] - result_with[i]) < 1e-12, f"Sample {i} differs before phase"
+
+        # After the phase flip (sample 100+), results should differ
+        diffs = [abs(result_no[i] - result_with[i]) for i in range(100, n)]
+        assert max(diffs) > 0.01, "Phase flip should change modulated output"
+    finally:
+        path.unlink()
+    print("Modulated get with phases test passed!")
+
+
+def test_phases_property():
+    """phases property returns the stored phase list."""
+    path = _make_temp_csv("0.5,0.5,0.5\n")
+    try:
+        wf = Waveform(fname=str(path))
+        assert wf.phases == []
+
+        wf2 = Waveform(fname=str(path), mod_frequency=1e6, phases=[(3.14, 1), (1.57, 0)])
+        # phases should be sorted by sample index
+        assert wf2.phases[0] == (1.57, 0)
+        assert wf2.phases[1] == (3.14, 1)
+    finally:
+        path.unlink()
+    print("Phases property test passed!")
 
 
 if __name__ == "__main__":
@@ -286,4 +452,12 @@ if __name__ == "__main__":
     test_csv_single_column_format()
     test_csv_ambiguous_format_raises()
     test_csv_empty_raises()
+    test_get_profile_and_helpers()
+    test_get_returns_copy()
+    test_explicit_modulated_flag()
+    test_property_setters()
+    test_get_marker_data_basic()
+    test_get_marker_data_high_start_fix()
+    test_modulated_get_with_phases()
+    test_phases_property()
     print("\n=== All tests passed! ===")
