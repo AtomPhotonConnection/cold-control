@@ -1,6 +1,6 @@
 import logging
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 from instruments.WX218x.awg_manager import AWGManager
 
 # ensure logging goes to the right place
@@ -26,7 +26,7 @@ awg_config = AwgConfiguration(
     burst_count=1,
     waveform_output_channels=[1, 2, 3],
     waveform_output_channel_lags=[0.0, 0.0, 0.0],
-    marker_width=1e-9
+    marker_width=1e-9,
 )
 
 awg_config_simple = AwgConfiguration(
@@ -36,7 +36,7 @@ awg_config_simple = AwgConfiguration(
     burst_count=1,
     waveform_output_channels=[1],
     waveform_output_channel_lags=[0.0],
-    marker_width=1e-9
+    marker_width=1e-9,
 )
 
 awg_config_justch3 = AwgConfiguration(
@@ -46,7 +46,7 @@ awg_config_justch3 = AwgConfiguration(
     burst_count=1,
     waveform_output_channels=[3],
     waveform_output_channel_lags=[0.0],
-    marker_width=1e-9
+    marker_width=1e-9,
 )
 
 
@@ -60,4 +60,3 @@ if __name__ == "__main__":
 
     finally:
         awg.close()
-

@@ -45,7 +45,7 @@ import numpy as np
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -187,16 +187,17 @@ def create_binary_block_header(num_bytes):
 
 def force_even_round(value: float) -> int:
     """
-    Round a value to the nearest non-zero even integer. 
+    Round a value to the nearest non-zero even integer.
     Used to ensure that marker width in samples is even, as required by the AWG.
     """
-    res = int(round(value/2.0)*2)
+    res = int(round(value / 2.0) * 2)
     if res == 0 and value > 0:
         res = 2
     elif res == 0 and value < 0:
         raise ValueError(f"Marker width in samples must be positive (got {value})")
 
     return res
+
 
 # =========================================================================
 # MARK:AWGManager
@@ -414,14 +415,10 @@ class AWGManager:
 
     # ----- clock / sample rate -----------------------------------------------
 
-
-
     def get_sample_rate(self) -> float:
         return float(self._query(":FREQ:RAST?"))
 
     # ----- output mode -------------------------------------------------------
-
-
 
     # ----- run mode (continuous / triggered) ----------------------------------
 
@@ -646,7 +643,7 @@ class AWGManager:
 
     def configure_marker(
         self,
-        channel:int = 1,
+        channel: int = 1,
         marker: int = 2,
         position: int = 0,
         width: int = 4,
@@ -708,8 +705,6 @@ class AWGManager:
         self._write(f":MARK:SEL {marker}")
         self._write(":MARK:STAT OFF")
 
-
-
     # ----- MARK:compound methods
 
     def configure_for_triggered_output(
@@ -742,7 +737,7 @@ class AWGManager:
         self.delete_all_segments()
 
         self.enable_coupling()
-        #self.disable_coupling()
+        # self.disable_coupling()
 
         self.set_continuous(False)  # triggered mode
         self.set_trigger_level(trigger_level)
@@ -756,7 +751,6 @@ class AWGManager:
             self._write(f":FUNC:MODE {output_mode}")
             self._write(f":VOLT {_amplitudes[i]}")
             self._write(f":VOLT:OFFS {_offsets[i]}")
-
 
     def upload_and_arm(self, awg_cfg: AwgConfiguration) -> None:
         """
@@ -791,7 +785,9 @@ class AWGManager:
             raise DeprecationWarning("Marked channels are deprecated")
 
         no_err = self.check_errors()
-        print(f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}")
+        print(
+            f"AWG error check before configuration: {'no errors' if no_err else 'errors present'}"
+        )
         if not no_err:
             self.clear_error_queue()
 
@@ -827,11 +823,16 @@ class AWGManager:
         self._log.info(f"self.check_errors(): {self.check_errors()}")
 
         # --- Configure markers ---
-        self._log.info("Marker width is %g us → %d samples", marker_width_us, force_even_round(marker_width_us * sample_rate * 1e-6))
-        self.configure_marker(channel= 1, width=force_even_round(marker_width_us * sample_rate * 1e-6))
+        self._log.info(
+            "Marker width is %g us → %d samples",
+            marker_width_us,
+            force_even_round(marker_width_us * sample_rate * 1e-6),
+        )
+        self.configure_marker(
+            channel=1, width=force_even_round(marker_width_us * sample_rate * 1e-6)
+        )
 
         self._log.info(f"self.check_errors(): {self.check_errors()}")
-
 
         # --- Enable outputs and arm ---
         for ch in outp_channels:

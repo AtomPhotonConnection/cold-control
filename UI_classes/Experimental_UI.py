@@ -26,7 +26,7 @@ from PIL import Image, ImageTk
 
 from classes.Config import ExperimentalAutomationReader, ExperimentConfigReader, get_config_root
 from classes.DAQ import DAQ_dio
-from classes.ExperimentalConfigs import (
+from classes.experimental_configs import (
     GenericConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,

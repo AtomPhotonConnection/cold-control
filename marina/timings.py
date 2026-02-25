@@ -17,7 +17,7 @@ import scipy.integrate as spi
 from cold_control_files.awg_control_functions import run_awg
 from configobj import ConfigObj
 
-from classes.ExperimentalConfigs import (
+from classes.experimental_configs import (
     AwgConfiguration,
     PhotonProductionConfiguration,
     TdcConfiguration,

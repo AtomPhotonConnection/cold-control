@@ -12,23 +12,18 @@ created: 2025-05-30
 from __future__ import annotations
 
 import csv
-import os
 import re
 import shutil
 from copy import deepcopy
 from datetime import datetime
 from itertools import product
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 from classes.Sequence import Sequence
-
-
-def toBool(string):
-    GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
-    return string.lower() in GLOB_TRUE_BOOL_STRINGS
 
 
 def make_property(attr_name):
@@ -41,7 +36,7 @@ def make_property(attr_name):
 
 def sanitize_filename(name: str) -> str:
     # Remove extension
-    name = os.path.splitext(name)[0]
+    name = Path(name).stem
     # Remove all non-alphanumeric or underscore characters
     return re.sub(r"[^A-Za-z0-9_]+", "_", name)
 
@@ -146,7 +141,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_cam = use_cam
         self.use_awg = use_awg
 
-        if use_cam == True:
+        if use_cam:
             if cam_dict is None:
                 raise ValueError("cam_dict must be provided if use_cam is True")
             self.cam_exposure = cam_dict["cam_exposure"]
@@ -254,10 +249,10 @@ class MotFluoresceConfigurationSweep:
         """
 
         # Delete the temp folder and its contents if it exists, then recreate it
-        temp_root = "temp"
-        if os.path.exists(temp_root):
+        temp_root = Path("temp")
+        if temp_root.exists():
             shutil.rmtree(temp_root)
-        os.makedirs(temp_root, exist_ok=True)
+        temp_root.mkdir(exist_ok=True)
 
         for shot in range(self.num_shots):
             for sweep_dict in all_sweeps:
@@ -275,10 +270,10 @@ class MotFluoresceConfigurationSweep:
                     else:
                         pulse_path = f"temp/{sweep_title}/{idx}.csv"
 
-                        if not os.path.exists(pulse_path):
-                            os.makedirs(os.path.dirname(pulse_path), exist_ok=True)
-                            calib_path = os.path.join(
-                                calibs[j], f"{freqs[j] / 1e6:.0f}MHz\\rabi_data.csv"
+                        if not Path(pulse_path).exists():
+                            Path(pulse_path).parent.mkdir(parents=True, exist_ok=True)
+                            calib_path = (
+                                Path(calibs[j]) / f"{freqs[j] / 1e6:.0f}MHz" / "rabi_data.csv"
                             )
                             rabi_converter = RabiFreqVoltageConverter(calib_path)
 
@@ -302,21 +297,21 @@ class MotFluoresceConfigurationSweep:
                 # Update the new config with modified sequence
                 new_config.awg_config = modified_sequence_config
 
-                new_config.save_location = os.path.join(
-                    self.base_config.save_location,
-                    self.current_date,
-                    self.current_time,
-                    sweep_title,
-                    f"shot{shot:03d}",
+                new_config.save_location = str(
+                    Path(self.base_config.save_location)
+                    / self.current_date
+                    / self.current_time
+                    / sweep_title
+                    / f"shot{shot:03d}"
                 )
 
-                if not os.path.exists(self.base_config.save_location):
+                if not Path(self.base_config.save_location).exists():
                     raise FileNotFoundError(
                         f"Base save location does not exist: {self.base_config.save_location}"
                     )
                 # Ensure the directory exists
-                save_dir = os.path.dirname(new_config.save_location)
-                os.makedirs(save_dir, exist_ok=True)
+                save_dir = Path(new_config.save_location).parent
+                save_dir.mkdir(parents=True, exist_ok=True)
 
                 self.configs.append(new_config)
                 self.sequences.append(new_sequence)
@@ -354,12 +349,12 @@ class MotFluoresceConfigurationSweep:
                         file_text += f"time{time}us_"
 
                 # Modify save location to easily manage data
-                new_config.save_location = os.path.join(
-                    self.base_config.save_location,
-                    self.current_date,
-                    self.current_time,
-                    file_text.rstrip("_"),
-                    f"shot{i}",
+                new_config.save_location = str(
+                    Path(self.base_config.save_location)
+                    / self.current_date
+                    / self.current_time
+                    / file_text.rstrip("_")
+                    / f"shot{i}"
                 )
 
                 # Modifies the sequence
@@ -377,7 +372,7 @@ class MotFluoresceConfigurationSweep:
                 tv_pairs = list(new_sequence.get_tV_pairs(power_ch))
                 print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
                 # HACK to change the correct power value and pulse length
-                img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
+                # img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
                 img_end_tv = tv_pairs[3]
                 new_start_tv = (time, power)
                 new_end_tv = (time + length, img_end_tv[1])
@@ -388,12 +383,12 @@ class MotFluoresceConfigurationSweep:
                 new_sequence.updateChannel(power_ch, tv_pairs, new_vint_styles)
 
                 # Ensure directory exists
-                if not os.path.exists(self.base_config.save_location):
+                if not Path(self.base_config.save_location).exists():
                     raise FileNotFoundError(
                         f"Base save location does not exist: {self.base_config.save_location}"
                     )
-                save_dir = os.path.dirname(new_config.save_location)
-                os.makedirs(save_dir, exist_ok=True)
+                save_dir = Path(new_config.save_location).parent
+                save_dir.mkdir(parents=True, exist_ok=True)
 
                 # Append sequence and config files to the list
                 self.configs.append(new_config)
@@ -650,7 +645,7 @@ class Waveform:
 
     def __load_data(self) -> list[float]:
         """Loads waveform data from a CSV file."""
-        with open(self.__fname) as csvfile:
+        with Path(self.__fname).open() as csvfile:
             print("Loading waveform:", self.__fname)
             reader = csv.reader(csvfile, delimiter=",")
             data = []
@@ -700,7 +695,7 @@ class Waveform:
 
     def get_marker_data(
         self,
-        marker_positions=[],
+        marker_positions=None,
         marker_levels=(0, 1),
         marker_width=50,
         n_pad_right=0,
@@ -711,6 +706,8 @@ class Waveform:
 
         Pads with zeros on both sides, and marks selected positions with high levels.
         """
+        if marker_positions is None:
+            marker_positions = []
         data = np.array([marker_levels[0]] * (n_pad_left + len(self.data) + n_pad_right))
         for pos in marker_positions:
             pos = int(pos)

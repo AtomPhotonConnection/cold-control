@@ -7,7 +7,7 @@ import pyvisa
 from configobj import ConfigObj
 
 from classes.Config import ConfigReader, DaqReader
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 from lab_control_functions.awg_control_functions_psh import run_awg
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 

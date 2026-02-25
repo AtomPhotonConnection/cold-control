@@ -12,7 +12,7 @@ from instruments.WX218x.WX218x_DLL import (
     WX218x_TriggerSlope,
 )
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 
 MARKER_LOW = 0.0
 MARKER_HIGH = 1.2

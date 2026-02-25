@@ -27,7 +27,7 @@ from classes.DAQ import (
     DAQ_controller,
     DAQ_dio,
 )
-from classes.ExperimentalConfigs import (
+from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     AwgConfiguration,
     ExperimentSessionConfig,

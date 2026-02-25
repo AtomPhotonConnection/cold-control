@@ -38,7 +38,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     awg_manager = None  # type: ignore[assignment]
 from classes.DAQ import DAQ_channel, DAQ_controller
-from classes.ExperimentalConfigs import (
+from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     ExperimentSessionConfig,
     GenericConfiguration,
@@ -1830,7 +1830,8 @@ class ExperimentalAutomationRunner:
             start_val, new_val, self.experimental_automation_configuration.daq_channel_update_steps
         ):
             self.daq_controller.updateChannelValue(
-                channel.chNum, val if not channel.isCalibrated else channel.calibrationToVFunc(val) # type: ignore
+                channel.chNum,
+                val if not channel.isCalibrated else channel.calibrationToVFunc(val),  # type: ignore
             )
             time.sleep(self.experimental_automation_configuration.daq_channel_update_delay)
             print(".")
@@ -1862,7 +1863,7 @@ class ExperimentalAutomationRunner:
                             chNum,
                             orig_val
                             if not channel.isCalibrated
-                            else channel.calibrationFromVFunc(orig_val),# type: ignore
+                            else channel.calibrationFromVFunc(orig_val),  # type: ignore
                         )
                     )
 

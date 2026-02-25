@@ -16,7 +16,7 @@ from instruments.ThorlabsPM100 import ThorlabsPM100
 """
 Load required classes for awg driven AOM calibration
 """
-from classes.ExperimentalConfigs import Waveform
+from classes.experimental_configs import Waveform
 
 
 class CalibrationException(Exception):

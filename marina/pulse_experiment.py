@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 from configobj import ConfigObj
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 from instruments.WX218x.awg_manager import AWGManager
 
