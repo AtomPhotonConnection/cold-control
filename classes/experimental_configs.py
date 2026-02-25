@@ -385,6 +385,50 @@ class AwgConfiguration:
         return marker_width_samps > 0 and marker_width_samps % 2 == 0
 
 
+class ScopeConfiguration:
+    """
+    Configuration for an oscilloscope used in data acquisition.
+
+    Can be read from a standalone ``.ini`` file using ``ScopeConfigReader`` in
+    ``config_readers.py``.
+
+    Attributes
+    ----------
+    trigger_channel : int
+        The oscilloscope channel used as the trigger source.
+    trigger_level : float
+        The trigger level in volts.
+    sample_rate : float
+        The sample rate in samples per second.
+    time_range : tuple[float, float]
+        The time range for data capture as ``(start, end)`` in seconds.
+    data_channels : dict[int, dict]
+        A mapping from channel number to a dict with keys ``"range"``
+        (tuple of floats), ``"impedance"`` (str), and ``"coupling"`` (str).
+    """
+
+    def __init__(
+        self,
+        trigger_channel: int,
+        trigger_level: float,
+        sample_rate: float,
+        time_range: tuple[float, float],
+        data_channels: dict[int, dict],
+    ):
+        self.trigger_channel = trigger_channel
+        self.trigger_level = trigger_level
+        self.sample_rate = sample_rate
+        self.time_range = time_range
+        self.data_channels = data_channels
+
+    def __repr__(self) -> str:
+        return (
+            f"ScopeConfiguration(trigger_channel={self.trigger_channel}, "
+            f"trigger_level={self.trigger_level}, sample_rate={self.sample_rate}, "
+            f"time_range={self.time_range}, data_channels={self.data_channels})"
+        )
+
+
 class ExperimentSessionConfig:
     """
     ExperimentSessionConfig manages high-level configuration for an automated experimental session.
@@ -461,10 +505,11 @@ class MotFluoresceConfiguration(GenericConfiguration):
      - save_location: The location to save the data collected in the experiment
      - mot_reload: The time in milliseconds to wait for the MOT to reload
      - iterations: The number of times to repeat the experiment
-     - use_cam: Boolean to determine whether to use the camera for imaging
-     - use_scope: Boolean to determine whether to use the scope for data acquisition
-     - cam_dict: Dictionary containing camera configuration parameters (if use_cam is True)
-     - scope_dict: Dictionary containing scope configuration parameters (if use_scope is True)
+     - scope_config: ScopeConfiguration object (or None if scope is not used)
+     - awg_config: AwgConfiguration object (or None if AWG is not used)
+     - awg_config_path: Path to the AWG config file (for reference)
+     - cam_dict: Dictionary containing camera configuration parameters (if camera is used)
+     - sequence_config_path: Path to the sequence config file (if applicable)
     """
 
     def __init__(
@@ -472,22 +517,24 @@ class MotFluoresceConfiguration(GenericConfiguration):
         save_location,
         mot_reload,
         iterations,
-        use_cam,
-        use_scope,
-        use_awg,
-        awg_dict: dict | None = None,
+        scope_config: ScopeConfiguration | None = None,
+        awg_config: AwgConfiguration | None = None,
+        awg_config_path: str | None = None,
         cam_dict: dict | None = None,
-        scope_dict: dict | None = None,
+        sequence_config_path: str | None = None,
     ):
         super().__init__(save_location, mot_reload, iterations)
 
-        self.use_scope = use_scope
-        self.use_cam = use_cam
-        self.use_awg = use_awg
+        self.scope_config = scope_config
+        self.awg_config = awg_config
+        self.awg_config_path = awg_config_path
+        self.sequence_config_path = sequence_config_path
 
-        if use_cam:
-            if cam_dict is None:
-                raise ValueError("cam_dict must be provided if use_cam is True")
+        self.use_scope = scope_config is not None
+        self.use_awg = awg_config is not None
+        self.use_cam = cam_dict is not None
+
+        if self.use_cam:
             self.cam_exposure = cam_dict["cam_exposure"]
             self.cam_gain = cam_dict["cam_gain"]
             self.camera_trigger_channel = cam_dict["camera_trig_ch"]
@@ -497,24 +544,37 @@ class MotFluoresceConfiguration(GenericConfiguration):
         else:
             print("No camera will be used.")
 
-        if self.use_scope:
-            if scope_dict is None:
-                raise ValueError("scope_dict must be provided if use_scope is True")
-            self.scope_trigger_channel = scope_dict["trigger_channel"]
-            self.scope_trigger_level = scope_dict["trigger_level"]
-            self.scope_sample_rate = scope_dict["sample_rate"]
-            self.scope_time_range = scope_dict["time_range"]
-            self.scope_data_channels = scope_dict["data_channels"]
+        if not self.use_scope:
+            print("No scope will be used.")
 
-        if self.use_awg:
-            if awg_dict is None:
-                raise ValueError("awg_dict must be provided if use_awg is True")
-            self.awg_config_path = awg_dict["config_path_full"]
-            self.awg_config = awg_dict["awg_config"]
-            self.awg_config_path_single = awg_dict["config_path_single"]
-            self.awg_config_single = awg_dict["awg_config_single"]
-        else:
+        if not self.use_awg:
             print("No AWG will be used.")
+
+    # ------------------------------------------------------------------
+    # Backward-compatible property aliases for scope settings.
+    # Consumers (e.g. MotFluoresceExperiment) that read
+    # ``config.scope_trigger_channel`` etc. continue to work.
+    # ------------------------------------------------------------------
+
+    @property
+    def scope_trigger_channel(self) -> int:
+        return self.scope_config.trigger_channel
+
+    @property
+    def scope_trigger_level(self) -> float:
+        return self.scope_config.trigger_level
+
+    @property
+    def scope_sample_rate(self) -> float:
+        return self.scope_config.sample_rate
+
+    @property
+    def scope_time_range(self) -> tuple[float, float]:
+        return self.scope_config.time_range
+
+    @property
+    def scope_data_channels(self) -> dict[int, dict]:
+        return self.scope_config.data_channels
 
 
 class MotFluoresceConfigurationSweep:
@@ -533,6 +593,7 @@ class MotFluoresceConfigurationSweep:
         self.sweep_params = sweep_params
         # print(self.sweep_params)
         self.num_shots = num_shots
+
         now = datetime.now()
         self.current_date = now.strftime("%Y-%m-%d")
         self.current_time = now.strftime("%H-%M-%S")
@@ -569,6 +630,29 @@ class MotFluoresceConfigurationSweep:
 
         assert len(self.configs) == len(self.sequences), (
             "configs and sequences must have the same length"
+        )
+
+    @classmethod
+    def from_config_reader(
+        cls,
+        experiment_config: MotFluoresceConfiguration,
+        sequence: Sequence,
+        sweep_type: str,
+        num_shots: int,
+        sweep_params: dict[Any, Any],
+    ) -> "MotFluoresceConfigurationSweep":
+        """Alternative constructor that accepts pre-built typed config objects.
+
+        This is the preferred way to create a sweep config when using the new
+        self-contained sweep config file format.  The ``ExperimentConfigReader``
+        builds all objects and passes them here.
+        """
+        return cls(
+            base_config=experiment_config,
+            base_sequence=sequence,
+            sweep_type=sweep_type,
+            num_shots=num_shots,
+            sweep_params=sweep_params,
         )
 
     def __iter__(self):

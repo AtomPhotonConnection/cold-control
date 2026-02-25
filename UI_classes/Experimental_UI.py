@@ -219,20 +219,7 @@ class Experimental_UI(tk.LabelFrame):
             "repeats": 10,
         }
 
-        # Run sweep button and settings
-        with Image.open("icons/play_icon.png") as img:
-            icon = ImageTk.PhotoImage(img.resize((30, 30)))
-            self.fluoresce_sweep_btn = ImageButton(
-                self,
-                image=icon,
-                text="Run MOT Fluoresce Sweep",
-                command=self.fluoresce_sweep,
-                background="green2",
-                **butt_opts,
-            )
-            self.fluoresce_sweep_btn.image_ref = (
-                icon  # store the image as a variable in the widget to prevent garbage collection.
-            )
+        # (Sweep button removed — runSeq now handles sweep configs directly)
         # with Image.open("icons/config_icon.png") as img:
         #     icon = ImageTk.PhotoImage(img.resize((30,30)))
         #     self.config_fluoresce_sweep_btn = tk.Button(self, image=icon, width=25, height=25, command=self.configure_fluoresce_sweep, background='green4')
@@ -252,7 +239,6 @@ class Experimental_UI(tk.LabelFrame):
         self.flash_channel_button.grid(row=2, column=2, **grid_opts)
         self.configure_flash_channel_button.grid(row=2, column=3, **grid_opts)
 
-        self.fluoresce_sweep_btn.grid(row=3, column=2, **grid_opts)
         # self.config_fluoresce_sweep_btn.grid(row=3,column=3, **grid_opts)
 
         self.grid_columnconfigure(0, weight=1, uniform="button_col")
@@ -453,50 +439,22 @@ class Experimental_UI(tk.LabelFrame):
             # The mot fluoresce experiment is a special case where the Live UI is not set up.
             liveUI = False
             autoCloseLiveUI = False
+
+        elif isinstance(self.photon_production_config, MotFluoresceConfigurationSweep):
+            # Sweep config loaded — run the full sweep experiment
+            sweep_experiment = MotFluoresceSweepExperiment(
+                self.photon_production_config,
+                self.daq_ui.daq_controller,
+                development_mode=self.development_mode,
+            )
+            print("Running MOT Fluoresce Sweep experiment")
+            sweep_experiment.run()
+            return
         else:
             raise Exception(
                 "Invalid experiment type specified.  Must be either PhotonProductionExperiment or MotFluoresceExperiment."
             )
         self.runExperiment(experiment, liveUI, autoCloseLiveUI)
-
-    def fluoresce_sweep(self):
-        # If run tone is on, turn it off!
-        for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
-            if state:
-                button.invoke()
-
-        # if the flip mirror is up, warn the user
-        dios: list[DAQ_dio] = list(self.daq_ui.daq_controller.getDIOs())
-        # if dios[0].get_state() == 1:
-        #     tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
-        #     return
-
-        initialdir = os.path.join(get_config_root(), "configs", "pulse_shaping_expt", "sweeps")
-
-        fname = tkFileDialog.askopenfilename(
-            parent=self, title="Choose an MOT Fluoresce Sweep Configuration", initialdir=initialdir
-        )
-        if fname != "":
-            parameter_list = ExperimentConfigReader(
-                fname
-            ).get_mot_flourescence_configuration_sweep()
-
-            # print(parameter_list[2])
-            # Number of iterations needs to be pased from config
-
-            sweep_config = MotFluoresceConfigurationSweep(
-                cast(MotFluoresceConfiguration, self.photon_production_config),
-                self.sequence_ui.sequence,
-                parameter_list[0],
-                parameter_list[1],
-                parameter_list[2],
-            )
-            sweep_experiment = MotFluoresceSweepExperiment(
-                sweep_config, self.daq_ui.daq_controller, development_mode=self.development_mode
-            )
-
-            print("Running MOT Fluoresce Sweep experiment")
-            sweep_experiment.run()
 
     def runAutomatedExp(self, liveUI=True):
         fname = tkFileDialog.askopenfilename(
@@ -771,10 +729,14 @@ class Experimental_UI(tk.LabelFrame):
             if config_reader is not None:
                 self.expt_config_reader = config_reader
 
+        # Update UI fields – sweep configs store experiment params on base_config
+        cfg = self.photon_production_config
+        if isinstance(cfg, MotFluoresceConfigurationSweep):
+            cfg = cfg.base_config
         self.total_iterations_frame.entryWid.delete(0, tk.END)
-        self.total_iterations_frame.entryWid.insert(0, self.photon_production_config.iterations)
+        self.total_iterations_frame.entryWid.insert(0, cfg.iterations)
         self.reload_time_frame.entryWid.delete(0, tk.END)
-        self.reload_time_frame.entryWid.insert(0, self.photon_production_config.mot_reload)
+        self.reload_time_frame.entryWid.insert(0, cfg.mot_reload)
 
     def absorbtionImagingConfigButton(self):
         config_UI = Absorbtion_imaging_configuration_UI(

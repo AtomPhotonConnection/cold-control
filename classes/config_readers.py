@@ -36,7 +36,9 @@ from classes.experimental_configs import (
     AwgConfiguration,
     ExperimentSessionConfig,
     MotFluoresceConfiguration,
+    MotFluoresceConfigurationSweep,
     PhotonProductionConfiguration,
+    ScopeConfiguration,
     SingleExperimentConfig,
     TdcConfiguration,
     Waveform,
@@ -121,6 +123,19 @@ class ConfigReader:
         return resolve_config_path(path.strip(), get_config_root())
 
     def get_sequence_fname(self):
+        """Return the sequence filename from rootConfig.
+
+        .. deprecated::
+            The sequence path should now be specified in the experiment config
+            file via the ``sequence_config`` key.  This method will be removed
+            in a future release.
+        """
+        warnings.warn(
+            "ConfigReader.get_sequence_fname() is deprecated; the sequence path "
+            "should now come from the experiment config file via 'sequence_config'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._resolve(self.config["sequence_filename"])
 
     def get_daq_config_fname(self):
@@ -626,6 +641,59 @@ class AwgConfigReader:
             return None
 
 
+class ScopeConfigReader:
+    """Reads a standalone oscilloscope configuration file and produces a ``ScopeConfiguration``.
+
+    The config file should have top-level keys for trigger settings and sub-sections
+    ``[data_channels]``, ``[data_channel_impedance]`` and ``[data_channel_coupling]``.
+    """
+
+    def __init__(self, fname: str):
+        self.fname = fname
+        self.config = MyConfig(fname)
+
+    def load_scope_configuration(self) -> ScopeConfiguration:
+        """Parse the config file and return a ``ScopeConfiguration`` object."""
+        return self._parse_scope_config(self.config)
+
+    @staticmethod
+    def _parse_scope_config(cfg) -> ScopeConfiguration:
+        """Build a ``ScopeConfiguration`` from a config section or standalone config.
+
+        This static method is also used internally by ``ExperimentConfigReader`` to
+        parse inline ``[scope_settings]`` sections for backward compatibility.
+        """
+        data_chs: dict[int, dict] = {}
+        impedance_section = cfg.get("data_channel_impedance", {})
+        coupling_section = cfg.get("data_channel_coupling", {})
+        for ch_idx, limits in cfg["data_channels"].items():
+            if isinstance(limits, (list, tuple)):
+                low, high = float(limits[0]), float(limits[1])
+            else:
+                parts = [x.strip() for x in str(limits).split(",")]
+                low, high = float(parts[0]), float(parts[1])
+            impedance = impedance_section.get(ch_idx, "high")
+            if isinstance(impedance, list):
+                impedance = impedance[0] if impedance else "high"
+            impedance = str(impedance).strip().lower()
+            coupling = coupling_section.get(ch_idx, "DC")
+            if isinstance(coupling, list):
+                coupling = coupling[0] if coupling else "DC"
+            coupling = str(coupling).strip().upper()
+            data_chs[int(ch_idx)] = {
+                "range": (low, high),
+                "impedance": impedance,
+                "coupling": coupling,
+            }
+        return ScopeConfiguration(
+            trigger_channel=int(cfg["trigger_channel"]),
+            trigger_level=float(cfg["trigger_level"]),
+            sample_rate=float(cfg["sample_rate"]),
+            time_range=to_float_tuple(cfg["time_range"]),
+            data_channels=data_chs,
+        )
+
+
 class ExperimentConfigReader:
     """
     A class to read experimental config files. First the get_expt_type() method should be
@@ -658,9 +726,6 @@ class ExperimentConfigReader:
             "save location",
             "mot reload",
             "iterations",
-            "use_cam",
-            "use_scope",
-            "use_awg",
             "metadata",
         ]
         missing = [k for k in required_top if k not in self.config]
@@ -668,23 +733,34 @@ class ExperimentConfigReader:
             raise ValueError(f"Experiment config missing required keys: {missing}")
         if "metadata" not in self.config or "experiment_type" not in self.config["metadata"]:
             raise ValueError("Experiment config [metadata] must contain experiment_type")
-        if self.config.get("use_scope"):
-            scope = self.config.get("scope_settings")
-            if not scope:
-                raise ValueError("use_scope is True but [scope_settings] is missing")
-            for k in [
-                "trigger_channel",
-                "trigger_level",
-                "sample_rate",
-                "time_range",
-                "data_channels",
-            ]:
-                if k not in scope:
-                    raise ValueError(f"[scope_settings] missing required key: {k}")
-        if self.config.get("use_awg"):
-            awg = self.config.get("awg_settings")
-            if not awg or "config_path" not in awg:
-                raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
+
+        # New format: top-level scope_config / awg_config keys
+        has_new_scope = "scope_config" in self.config
+        has_new_awg = "awg_config" in self.config
+
+        # Old format: use_scope/use_awg booleans with inline sections
+        has_old_scope = "use_scope" in self.config
+        has_old_awg = "use_awg" in self.config
+
+        if has_old_scope and not has_new_scope:
+            if to_bool(self.config["use_scope"]):
+                scope = self.config.get("scope_settings")
+                if not scope:
+                    raise ValueError("use_scope is True but [scope_settings] is missing")
+                for k in [
+                    "trigger_channel",
+                    "trigger_level",
+                    "sample_rate",
+                    "time_range",
+                    "data_channels",
+                ]:
+                    if k not in scope:
+                        raise ValueError(f"[scope_settings] missing required key: {k}")
+        if has_old_awg and not has_new_awg:
+            if to_bool(self.config["use_awg"]):
+                awg = self.config.get("awg_settings")
+                if not awg or "config_path" not in awg:
+                    raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
 
     def get_expt_type(self):
         """
@@ -730,12 +806,61 @@ class ExperimentConfigReader:
     def get_mot_flourescence_configuration(self):
         """
         Method to extract the mot fluorescence configuration from the config file.
+
+        Supports two formats:
+        - **New format**: top-level ``scope_config``, ``awg_config``, ``sequence_config``
+          keys pointing to standalone instrument config files.
+        - **Old format**: ``use_scope``/``use_awg``/``use_cam`` booleans with inline
+          ``[scope_settings]`` and ``[awg_settings]`` sections.  Emits
+          ``DeprecationWarning`` when the old format is detected.
         """
 
-        use_camera = to_bool(self.config["use_cam"])
-        use_scope = to_bool(self.config["use_scope"])
-        use_awg = to_bool(self.config["use_awg"])
+        # --- Determine which instruments are used (new vs old format) ---
+        has_new_scope = "scope_config" in self.config
+        has_new_awg = "awg_config" in self.config
 
+        # Camera detection: camera_settings section or use_cam boolean
+        if "use_cam" in self.config:
+            use_camera = to_bool(self.config["use_cam"])
+        else:
+            use_camera = "camera_settings" in self.config
+
+        # --- Scope ---
+        scope_config: ScopeConfiguration | None = None
+        if has_new_scope:
+            scope_path = resolve_config_path(self.config["scope_config"], get_config_root())
+            scope_config = ScopeConfigReader(scope_path).load_scope_configuration()
+        elif "use_scope" in self.config and to_bool(self.config["use_scope"]):
+            warnings.warn(
+                "Inline [scope_settings] is deprecated; use a standalone scope config file "
+                "referenced by a top-level 'scope_config' key.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            scope_section = self.config["scope_settings"]
+            scope_config = ScopeConfigReader._parse_scope_config(scope_section)
+
+        # --- AWG ---
+        awg_config: AwgConfiguration | None = None
+        awg_config_path: str | None = None
+        if has_new_awg:
+            awg_config_path = resolve_config_path(self.config["awg_config"], get_config_root())
+            awg_reader = AwgConfigReader(awg_config_path)
+            awg_config = awg_reader.load_awg_configuration()
+        elif "use_awg" in self.config and to_bool(self.config["use_awg"]):
+            warnings.warn(
+                "Inline [awg_settings] with config_path is deprecated; use a top-level "
+                "'awg_config' key pointing to the AWG config file.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            awg_section = self.config["awg_settings"]
+            awg_config_path = resolve_config_path(awg_section["config_path"], get_config_root())
+            awg_reader = AwgConfigReader(awg_config_path)
+            awg_config = awg_reader.load_awg_configuration()
+
+        # --- Camera (unchanged — kept as dict for now) ---
+        camera_settings_dict: dict | None = None
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
@@ -747,83 +872,16 @@ class ExperimentConfigReader:
                 "save_images": to_bool(camera["save_images"]),
             }
 
-        else:
-            camera_settings_dict = None
-
-        if use_scope:
-            scope = self.config["scope_settings"]
-            data_chs = {}
-            impedance_section = scope.get("data_channel_impedance", {})
-            coupling_section = scope.get("data_channel_coupling", {})
-            for ch_idx, limits in scope["data_channels"].items():
-                if isinstance(limits, (list, tuple)):
-                    low, high = float(limits[0]), float(limits[1])
-                else:
-                    parts = [x.strip() for x in str(limits).split(",")]
-                    low, high = float(parts[0]), float(parts[1])
-                impedance = impedance_section.get(ch_idx, "high")
-                if isinstance(impedance, list):
-                    impedance = impedance[0] if impedance else "high"
-                impedance = str(impedance).strip().lower()
-                coupling = coupling_section.get(ch_idx, "DC")
-                if isinstance(coupling, list):
-                    coupling = coupling[0] if coupling else "DC"
-                coupling = str(coupling).strip().upper()
-                data_chs[int(ch_idx)] = {
-                    "range": (low, high),
-                    "impedance": impedance,
-                    "coupling": coupling,
-                }
-            scope_settings_dict = {
-                "trigger_channel": int(scope["trigger_channel"]),
-                "trigger_level": float(scope["trigger_level"]),
-                "sample_rate": float(scope["sample_rate"]),
-                "time_range": to_float_tuple(scope["time_range"]),
-                "data_channels": data_chs,
-            }
-        else:
-            scope_settings_dict = None
-
-        if use_awg:
-            awg = self.config["awg_settings"]
-            config_path = awg["config_path"]
-
-            # Delegate AWG config parsing to AwgConfigReader
-            awg_reader = AwgConfigReader(config_path)
-            awg_config = awg_reader.load_awg_configuration()
-
-            awg_settings_dict = {
-                "config_path_full": config_path,
-                "awg_config": awg_config,
-                "config_path_single": None,  # Default to None if not provided
-                "awg_config_single": None,  # Default to None if not provided
-                "sequence_config_single": None,  # Default to None if not provided
-            }
-
-            metadata = self.config.get("metadata") or {}
-            ct = metadata.get("config_type", "").strip().lower()
-            if ct == "experiment":
-                self._validate_experiment_config_structure()
-
-            mot_fluoresce_config = MotFluoresceConfiguration(
-                save_location=self.config["save location"],
-                mot_reload=eval(self.config["mot reload"]),
-                iterations=int(self.config["iterations"]),
-                use_cam=use_camera,
-                use_scope=use_scope,
-                use_awg=use_awg,
-                cam_dict=camera_settings_dict,
-                scope_dict=scope_settings_dict,
-                awg_dict=awg_settings_dict,
+        # --- Sequence (new format only) ---
+        sequence_config_path: str | None = None
+        if "sequence_config" in self.config:
+            sequence_config_path = resolve_config_path(
+                self.config["sequence_config"], get_config_root()
             )
 
-            return mot_fluoresce_config
-
-        else:
-            awg_settings_dict = None
-
+        # --- Validate if metadata says this is an experiment config ---
         metadata = self.config.get("metadata") or {}
-        ct = getattr(metadata, "get", lambda k, d="": d)("config_type", "").strip().lower()
+        ct = metadata.get("config_type", "").strip().lower() if isinstance(metadata, dict) else ""
         if ct == "experiment":
             self._validate_experiment_config_structure()
 
@@ -831,12 +889,11 @@ class ExperimentConfigReader:
             save_location=self.config["save location"],
             mot_reload=eval(self.config["mot reload"]),
             iterations=int(self.config["iterations"]),
-            use_cam=use_camera,
-            use_scope=use_scope,
-            use_awg=use_awg,
+            scope_config=scope_config,
+            awg_config=awg_config,
+            awg_config_path=awg_config_path,
             cam_dict=camera_settings_dict,
-            scope_dict=scope_settings_dict,
-            awg_dict=awg_settings_dict,
+            sequence_config_path=sequence_config_path,
         )
 
         return mot_fluoresce_config
@@ -966,6 +1023,12 @@ class ExperimentConfigReader:
         """
         Method to extract the correct configuration object based on the experiment type
         specified in the config file.
+
+        Returns the appropriate configuration object:
+        - ``"mot fluorescence"`` → ``MotFluoresceConfiguration``
+        - ``"mot fluorescence sweep"`` → ``MotFluoresceConfigurationSweep``
+        - ``"photon production"`` → ``PhotonProductionConfiguration``
+        - ``"absorbtion imaging"`` → ``AbsorbtionImagingConfiguration``
         """
 
         expt_type = self.get_expt_type()
@@ -974,14 +1037,58 @@ class ExperimentConfigReader:
             return self.get_photon_production_configuration()
         elif expt_type == "mot fluorescence":
             return self.get_mot_flourescence_configuration()
+        elif expt_type == "mot fluorescence sweep":
+            return self.get_full_sweep_configuration()
         elif expt_type == "absorbtion imaging":
             return self.get_absorbtion_imaging_configuration()
         else:
             raise ValueError(f"Unknown experiment type: {expt_type}")
 
+    def get_sequence(self) -> Sequence:
+        """Load the sequence from the ``sequence_config`` path in this experiment config.
+
+        Raises ``KeyError`` if the config file does not contain a ``sequence_config`` key.
+        """
+        if "sequence_config" not in self.config:
+            raise KeyError(
+                "Experiment config does not contain a 'sequence_config' key. "
+                "The sequence must be specified in the experiment config file."
+            )
+        seq_path = resolve_config_path(self.config["sequence_config"], get_config_root())
+        return SequenceReader(seq_path).load_sequence()
+
+    def get_full_sweep_configuration(self) -> MotFluoresceConfigurationSweep:
+        """Build a complete ``MotFluoresceConfigurationSweep`` from a self-contained sweep config.
+
+        The config file must contain all experiment parameters (same as MOT fluorescence)
+        plus a ``[sweep]`` section with ``[[defaults]]`` and ``[[sweeps]]`` sub-sections,
+        and ``sweep_type`` / ``num_shots`` at the top-level or inside ``[sweep]``.
+        """
+        # Build the base experiment config (reuses get_mot_flourescence_configuration)
+        base_config = self.get_mot_flourescence_configuration()
+
+        # Load the sequence from the experiment config
+        sequence = self.get_sequence()
+
+        # Parse sweep params (reuses existing logic from get_mot_flourescence_configuration_sweep)
+        sweep_type, num_shots, sweep_params = self.get_mot_flourescence_configuration_sweep()
+
+        return MotFluoresceConfigurationSweep.from_config_reader(
+            experiment_config=base_config,
+            sequence=sequence,
+            sweep_type=sweep_type,
+            num_shots=num_shots,
+            sweep_params=sweep_params,
+        )
+
 
 class PhotonProductionWriter:
     def __init__(self, fname):
+        warnings.warn(
+            "PhotonProductionWriter is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.fname = fname
         self.config = MyConfig(fname)
 

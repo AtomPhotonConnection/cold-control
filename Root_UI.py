@@ -7,7 +7,7 @@ from tkinter import messagebox as tk_message_box
 from typing import Any
 
 import classes.Styles as Styles
-from classes.config_readers import ConfigReader
+from classes.config_readers import ConfigReader, ExperimentConfigReader
 from UI_classes.Camera_UI import Camera_UI
 from UI_classes.DAQ_UI import DAQ_UI
 from UI_classes.Experimental_UI import Experimental_UI
@@ -59,8 +59,17 @@ class ColdControlUI(tk.Frame):
         self.daq_config_fname = self.config_reader.get_daq_config_fname()
         self.daq_UI = DAQ_UI(self, self.daq_config_fname, development_mode=self.development_mode)
 
-        """Load a sequence and start the sequence UI (though it is hidden by default)"""
-        self.sequence_fname = self.config_reader.get_sequence_fname()
+        """Load a sequence — prefer from experiment config, fall back to rootConfig."""
+        self.experiment_config_fname = self.config_reader.get_experiment_config_fname()
+        self.expt_config_reader = ExperimentConfigReader(self.experiment_config_fname)
+        try:
+            sequence = self.expt_config_reader.get_sequence()
+            self.sequence_fname = self.expt_config_reader.config["sequence_config"]
+        except KeyError:
+            # Fallback: old-style rootConfig with sequence_filename (emits DeprecationWarning)
+            self.sequence_fname = self.config_reader.get_sequence_fname()
+            sequence = None  # Sequence_UI will load from fname
+
         self.sequence_ui = Sequence_UI(
             self,
             self.sequence_fname,
@@ -79,14 +88,11 @@ class ColdControlUI(tk.Frame):
         self.absorbtion_imaging_config_fname = (
             self.config_reader.get_absorbtion_imaging_config_fname()
         )
-        self.photon_production_config_fname = (
-            self.config_reader.get_photon_production_config_fname()
-        )
         self.experimental_UI = Experimental_UI(
             self,
             self.daq_UI,
             self.sequence_ui,
-            self.photon_production_config_fname,
+            self.experiment_config_fname,
             self.absorbtion_imaging_config_fname,
             ic_imaging_control=self.camera_UI.ic_ic,
             development_mode=self.development_mode,

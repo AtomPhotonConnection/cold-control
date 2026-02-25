@@ -20,6 +20,7 @@ import collections.abc
 import copy
 import threading
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
@@ -610,6 +611,11 @@ class PhotonProductionExperiment(GenericExperiment):
     def __init__(
         self, daq_controller, sequence, photon_production_configuration, development_mode=False
     ):
+        warnings.warn(
+            "PhotonProductionExperiment is deprecated; use MotFluoresceExperiment instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.forced_stop = False
         self.data_saver: PhotonProductionDataSaver
         self.iterations = 0
@@ -1150,7 +1156,6 @@ class MotFluoresceExperiment(GenericExperiment):
 
         if self.with_awg:
             self.awg_config = self.mot_fluoresce_config.awg_config
-            self.awg_config_single = self.mot_fluoresce_config.awg_config_single
 
         if self.with_cam:
             if ic_imaging_control is None:
@@ -1714,6 +1719,11 @@ class ExperimentalAutomationRunner:
         experimental_automation_configuration: ExperimentSessionConfig,
         photon_production_configuration: PhotonProductionConfiguration,
     ):
+        warnings.warn(
+            "ExperimentalAutomationRunner is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         self.daq_controller = daq_controller
         self.experimental_automation_configuration = c = experimental_automation_configuration
