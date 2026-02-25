@@ -388,7 +388,7 @@ class SequenceReader:
 
         for _, v in sequence_channels.items():
             ch = int(v["chNum"])
-            tv_pairs = [tuple(ast.literal_eval(x)) for x in v["tv_pairs"]]
+            tv_pairs = [tuple(ast.literal_eval(x)) for x in v["tV_pairs"]]
             v_interval_styles = [int(x) for x in v["V_interval_styles"]]
 
             seq.addChannelSeq(ch, tv_pairs, v_interval_styles)
