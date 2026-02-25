@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
 import logging
-import os
 import tkinter as tk
-from tkinter import messagebox as tkMessageBox
+from pathlib import Path
+from tkinter import messagebox as tk_message_box
+from typing import Any
 
 import classes.Styles as Styles
 from classes.config_generators import ConfigReader
@@ -21,9 +22,9 @@ logging.basicConfig(
 )
 
 
-class ColdControl_UI(tk.Frame):
+class ColdControlUI(tk.Frame):
     """
-    The ColdControl_UI is the main tkinter frame into which assorted UI's are inset.
+    The ColdControlUI is the main tkinter frame into which assorted UI's are inset.
     Each if these UI's is responsible for creating, running and closing their own
     element of experimental control.  Namely:
 
@@ -43,11 +44,11 @@ class ColdControl_UI(tk.Frame):
 
         self.master: tk.Misc = parent
 
-        self.config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
+        self.config_reader = ConfigReader(Path.cwd() / "configs" / "rootConfig.ini")
         self.development_mode = self.config_reader.is_development_mode()
 
         self.master.wm_title("Cold Control Heavy")
-        self.addMenu()
+        self.add_menu()
         self.title = tk.Label(self, text="Cold Control Heavy", font=("Helvetica", 24))
 
         """Load DAQ channels and cards from the config file.  Set up the DAQ_controller with these."""
@@ -96,18 +97,18 @@ class ColdControl_UI(tk.Frame):
         self.grid_columnconfigure(2, weight=1, pad=3, uniform="cols")
         self.grid_columnconfigure(3, weight=1, pad=3, uniform="cols")
 
-        gridOpts = {"padx": 10, "pady": 10}
+        grid_opts: dict[str, Any] = {"padx": 10, "pady": 10}
 
-        self.title.grid(row=0, column=0, columnspan=3, **gridOpts)  # type: ignore
-        self.daq_UI.grid(row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **gridOpts)  # type: ignore
+        self.title.grid(row=0, column=0, columnspan=3, **grid_opts)
+        self.daq_UI.grid(row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **grid_opts)
         self.experimental_UI.grid(row=2, column=1, columnspan=2, sticky=tk.N)
         self.camera_UI.grid(row=1, column=0, sticky=tk.N + tk.E + tk.W)
         self.labbook_UI.grid(row=1, column=3, sticky=tk.N + tk.E + tk.W)
 
         """Bind closing the app to a clean up method."""
-        root.protocol("WM_DELETE_WINDOW", self.onExit)
+        root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
-    def addMenu(self):
+    def add_menu(self):
         """Create a pulldown menu, and add it to the menu bar"""
         menubar = tk.Menu(self.master)
 
@@ -115,22 +116,22 @@ class ColdControl_UI(tk.Frame):
         filemenu.add_command(label="Open", command=lambda: None)
         filemenu.add_command(label="Save", command=lambda: None)
         filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=self.onExit)
+        filemenu.add_command(label="Exit", command=self.on_exit)
         menubar.add_cascade(label="File", menu=filemenu)
 
         self.master.config(menu=menubar)  # type: ignore
 
-    def onExit(self):
+    def on_exit(self):
         """
         Called on closing ColdControl.  Confirms the exit and safely closes the various UI's.
         """
 
-        exitConfirmation = tkMessageBox.askquestion(
+        exit_confirmation = tk_message_box.askquestion(
             "Please confirm exit",
             "Are you sure you want to close Cold Control?\nThis will release all DAQ cards and exit the program - unsaved information will be lost?",
             icon="warning",
         )
-        if exitConfirmation == "yes":
+        if exit_confirmation == "yes":
             print("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
             print("Closing camera connections...")
@@ -151,5 +152,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1600x800")
     Styles.configureStyles()
-    ColdControl_UI(root).pack(fill="both", expand=True)
+    ColdControlUI(root).pack(fill="both", expand=True)
     root.mainloop()
