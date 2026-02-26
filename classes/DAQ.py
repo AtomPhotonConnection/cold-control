@@ -1164,7 +1164,7 @@ class DAQController:
             operator.iadd, [card.channels for card in [self.master, *self.slaves]], []
         )
         if only_visible:
-            channels = [ch for ch in channels if ch.isUIVisable]
+            channels = [ch for ch in channels if ch.isUIVisible]
         return channels
 
     def get_dios(self) -> list[DAQDio]:

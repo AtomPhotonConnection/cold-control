@@ -1265,6 +1265,7 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         Configures the AWG for the experiment, loads data for all channels
         """
+        self.awg = None
         assert self.awg_config is not None, "AWG config is not set. Cannot configure AWG."
         start_time = time.time()
         print("Connecting to AWG...")
@@ -1465,7 +1466,8 @@ class MotFluoresceExperiment(GenericExperiment):
 
         if self.with_awg:
             print("closing AWG...")
-            self.awg.close()
+            if self.awg is not None:
+                self.awg.close()
         super().daq_cards_off()
 
 
