@@ -73,8 +73,8 @@ class ColdControlUI(tk.Frame):
         self.sequence_ui = Sequence_UI(
             self,
             self.sequence_fname,
-            self.daq_UI.daq_controller.getChannelNumberNameDict(onlyVisable=False),
-            self.daq_UI.daq_controller.getChannelCalibrationDict(),
+            self.daq_UI.daq_controller.get_channel_number_name_dict(only_visible=False),
+            self.daq_UI.daq_controller.get_channel_calibration_dict(),
             hidden=True,
         )
 
@@ -149,7 +149,7 @@ class ColdControlUI(tk.Frame):
             print("...all camera connections closed.")
             print("Releasing DAQ cards...")
             if not self.development_mode:
-                self.daq_UI.daq_controller.releaseAll()
+                self.daq_UI.daq_controller.release_all()
             print("...all cards released.")
             print("Saving labbook...")
             self.labbook_UI.write()

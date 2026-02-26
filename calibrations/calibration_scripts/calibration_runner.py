@@ -115,7 +115,7 @@ elif __name__ == "__main__" and CALIB_TYPE == "another one":
 
         create_calibration_file(os.getcwd() + '/calibrations/jan/{0}'.format(calibName), vData, calData, units)
         save_calibration_plot(os.getcwd() + '/calibrations/jan/{0}_plot.png'.format(calibName), vData, calData, units, '{0}_plot'.format(calibName))
-        daq_controller.releaseAll()
+        daq_controller.release_all()
     """
 
 else:

@@ -28,7 +28,7 @@ from classes.config_readers import (
     ExperimentConfigReader,
     get_config_root,
 )
-from classes.DAQ import DAQ_dio
+from classes.DAQ import DAQDio
 from classes.experimental_configs import (
     GenericConfiguration,
     MotFluoresceConfiguration,
@@ -323,17 +323,17 @@ class Experimental_UI(tk.LabelFrame):
     def openSeqWindow(self):
         if (
             self.sequence_ui.configured_channel_labels
-            != self.daq_ui.daq_controller.getChannelNumberNameDict(onlyVisable=False)
+            != self.daq_ui.daq_controller.get_channel_number_name_dict(only_visible=False)
         ):
             self.sequence_ui.configureForNewChannelLabels(
-                self.daq_ui.daq_controller.getChannelNumberNameDict(onlyVisable=False)
+                self.daq_ui.daq_controller.get_channel_number_name_dict(only_visible=False)
             )
         if (
             self.sequence_ui.configured_channel_calibrations
-            != self.daq_ui.daq_controller.getChannelCalibrationDict()
+            != self.daq_ui.daq_controller.get_channel_calibration_dict()
         ):
             self.sequence_ui.configureForNewChannelCalibrations(
-                self.daq_ui.daq_controller.getChannelCalibrationDict()
+                self.daq_ui.daq_controller.get_channel_calibration_dict()
             )
         self.sequence_ui.openWindow()
 
@@ -526,14 +526,14 @@ class Experimental_UI(tk.LabelFrame):
     def toggleRunTone(self, button: tk.Button, i_ch):
         if i_ch == 4:
             daq_controller = self.daq_ui.daq_controller
-            daq_controller.updateChannelValue(14, 2.485)
-            daq_controller.updateChannelValue(8, 0.0048)
+            daq_controller.update_channel_value(14, 2.485)
+            daq_controller.update_channel_value(8, 0.0048)
             for i in range(100):
                 daq_controller.continuousOutput = True
-                daq_controller.updateChannelValue(
+                daq_controller.update_channel_value(
                     22, 2.6
                 )  # for manual control of amplitude input (in V)
-                daq_controller.updateChannelValue(22, 0)
+                daq_controller.update_channel_value(22, 0)
                 time.sleep(1)
             return
         else:
@@ -652,7 +652,7 @@ class Experimental_UI(tk.LabelFrame):
             self,
             absorbtion_imaging_configuration=self.absorbtion_imaging_config,
             daq_controller=self.daq_ui.daq_controller,
-            sequence_length=self.sequence_ui.sequence.getLength(),
+            sequence_length=self.sequence_ui.sequence.get_length(),
             sequence_t_step=self.sequence_ui.sequence.t_step,
         )
         self.winfo_toplevel().wait_window(config_UI.top)
@@ -676,7 +676,7 @@ class Experimental_UI(tk.LabelFrame):
         repeats = self.flash_channel_config["repeats"]
 
         if channel == "dio":
-            dio: DAQ_dio = self.daq_ui.daq_controller.getDIOs()[
+            dio: DAQDio = self.daq_ui.daq_controller.get_dios()[
                 0
             ]  # Assuming we flash the first DIO
             for i in range(repeats):
@@ -685,7 +685,7 @@ class Experimental_UI(tk.LabelFrame):
                 print(f"Flash number {i + 1} complete for DIO channel {dio.dio_name}")
             return
 
-        num_name_dict = self.daq_ui.daq_controller.getChannelNumberNameDict()
+        num_name_dict = self.daq_ui.daq_controller.get_channel_number_name_dict()
 
         print(f"Flashing channel {channel}, {num_name_dict[channel]}")
 
@@ -693,9 +693,9 @@ class Experimental_UI(tk.LabelFrame):
         high_val = self.flash_channel_config["high_val"]
 
         for i in range(repeats):
-            self.daq_ui.daq_controller.updateChannelValue(channel, low_val)
+            self.daq_ui.daq_controller.update_channel_value(channel, low_val)
             time.sleep(duration)
-            self.daq_ui.daq_controller.updateChannelValue(channel, high_val)
+            self.daq_ui.daq_controller.update_channel_value(channel, high_val)
             time.sleep(duration)
             print(f"Flash number {i + 1} complete")
 
@@ -1130,7 +1130,7 @@ class Absorbtion_imaging_configuration_UI:
 
         labels, widgets, fns_to_bind = [], [], []
 
-        controller_channels = self.daq_controller.getChannels()
+        controller_channels = self.daq_controller.get_channels()
         channel_opts_dict: dict[Any, Any] = dict(
             zip(
                 [
@@ -1389,7 +1389,7 @@ class Absorbtion_imaging_configuration_UI:
         widgets.append(abs_img_freq_ch_dropdown)
 
         try:
-            calib_units, _, fromVFunc = self.daq_controller.getChannelCalibrationDict()[
+            calib_units, _, fromVFunc = self.daq_controller.get_channel_calibration_dict()[
                 self.c.abs_img_freq_ch
             ]
         except KeyError:
@@ -1696,7 +1696,7 @@ class Absorbtion_imaging_configuration_UI:
             new_bkg_off_channels = [
                 x
                 for x in entered_bkg_off_channels
-                if x in [ch.chNum for ch in self.daq_controller.getChannels()]
+                if x in [ch.chNum for ch in self.daq_controller.get_channels()]
             ]
             if new_bkg_off_channels != entered_bkg_off_channels:
                 flash_col = "yellow"

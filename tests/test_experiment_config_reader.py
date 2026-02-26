@@ -22,9 +22,7 @@ from classes.experimental_configs import (  # noqa: E402
     ScopeConfiguration,
 )
 
-NEW_FORMAT_CONFIG = str(
-    PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "expt_config_feb26.ini"
-)
+NEW_FORMAT_CONFIG = str(PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "expt_config_feb26.ini")
 NEW_FORMAT_SWEEP = str(
     PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "sweeps" / "feb26_sweep_level.ini"
 )
@@ -97,6 +95,7 @@ def test_new_format_backward_compat_properties():
     config = reader.get_correct_config()
 
     assert isinstance(config, MotFluoresceConfiguration)
+    assert config.scope_config is not None
     # These properties delegate to scope_config.*
     assert config.scope_trigger_channel == config.scope_config.trigger_channel
     assert config.scope_trigger_level == config.scope_config.trigger_level
@@ -223,7 +222,7 @@ experiment_type = "MOT Fluorescence"
         assert isinstance(config.scope_config, ScopeConfiguration)
         assert config.scope_config.trigger_channel == 1
     finally:
-        os.unlink(tmp_path)
+        Path(tmp_path).unlink()
 
 
 if __name__ == "__main__":

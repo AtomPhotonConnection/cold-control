@@ -26,7 +26,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 
 from classes.config_readers import ConfigReader, DaqReader
-from classes.DAQ import DAQ_controller
+from classes.DAQ import DAQController
 from instruments.ThorlabsPM100 import ThorlabsPM100
 from lab_control_functions.calibration_helper_functions import *
 
@@ -173,11 +173,11 @@ if __name__ == "__main__":
     config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_reader = DaqReader(daq_config_fname)
-    daq: DAQ_controller = daq_reader.load_daq_controller()
+    daq: DAQController = daq_reader.load_daq_controller()
     daq.continuousOutput = True
 
     freq_channel = 3
-    daq.updateChannelValue(int(freq_channel), 3.7409093554844883)  # need to set correct freq
+    daq.update_channel_value(int(freq_channel), 3.7409093554844883)  # need to set correct freq
     amp_channel = 7
     flip_channel = 4  # note this is a DIO channel, not analog
     voltages_list = np.linspace(0, 4, 30)  # [1.0, 1.6, 1.9, 2.1, 2.3] # Voltages to step through
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     configure_power_meter(pm_target, nMeasurmentCounts=3)
 
     # Create hardware callables (replace daq, amp_channel, flip_channel with your objects/IDs)
-    set_v = lambda v: daq.updateChannelValue(int(amp_channel), float(v))
+    set_v = lambda v: daq.update_channel_value(int(amp_channel), float(v))
 
     def flip_fn(pos: str):
         if pos == "up":
@@ -258,4 +258,4 @@ if __name__ == "__main__":
         except Exception:
             pass
 
-    daq.releaseAll()
+    daq.release_all()

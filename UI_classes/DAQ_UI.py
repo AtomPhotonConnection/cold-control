@@ -16,7 +16,7 @@ from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
 from classes.config_readers import DaqReader
-from classes.DAQ import DAQ_channel, DAQ_controller
+from classes.DAQ import DAQChannel, DAQController
 from UI_classes.UI_helpers import ImageButton
 
 
@@ -29,7 +29,7 @@ class DAQ_UI(tk.Frame):
         self.parent = parent
         self.reader = DaqReader(config_fname)
         if not development_mode:
-            self.daq_controller: DAQ_controller = self.reader.load_daq_controller()
+            self.daq_controller: DAQController = self.reader.load_daq_controller()
         else:
             print("Running in development mode...\nLoading Dummy DAQ cards")
             self.daq_controller = self.reader.load_dummy_daq_controller()
@@ -39,7 +39,7 @@ class DAQ_UI(tk.Frame):
 
         self.channelFrames = []
 
-        for channel in self.daq_controller.getChannels(onlyVisable=True):
+        for channel in self.daq_controller.get_channels(only_visible=True):
             self.channelFrames.append(
                 Frame_DAQchannel(self.Frame_Channels, channel, self.daq_controller)
             )
@@ -99,7 +99,7 @@ class DAQ_UI(tk.Frame):
 
         #         self.dioFrames = []
         #         r = 0
-        #         for dio in sorted(self.daq_controller.getDIOs(), key=lambda dio: dio.dio_num):
+        #         for dio in sorted(self.daq_controller.get_dios(), key=lambda dio: dio.dio_num):
         #             frame = Frame_DIOline(self.Frame_DIOs, dio)
         #             self.dioFrames.append(frame)
         #             frame.grid(row=r, column=0, **gridConfig)
@@ -109,7 +109,7 @@ class DAQ_UI(tk.Frame):
         r = 0
         self.dioFrames = [
             Frame_DIOline(self.Frame_DIOs, dio)
-            for dio in sorted(self.daq_controller.getDIOs(), key=lambda dio: dio.dio_num)
+            for dio in sorted(self.daq_controller.get_dios(), key=lambda dio: dio.dio_num)
         ]
 
         for row in [self.dioFrames[i : i + c + 1] for i in range(0, len(self.dioFrames), c + 1)]:
@@ -131,7 +131,7 @@ class DAQ_UI(tk.Frame):
             chFrame.reload()
 
     def toggleDAQbutton(self):
-        self.daq_controller.toggleContinuousOutput()
+        self.daq_controller.toggle_continuous_ouput()
         if self.daq_controller.continuousOutput:
             self.daqOutputButton.configure(bg="green")
         else:
@@ -145,7 +145,7 @@ class DAQ_UI(tk.Frame):
             self.updateForNewDaqConfig()
             """TODO : NOT WORKING"""
             if self.daq_controller.continuousOutput:
-                self.daq_controller.writeChannelValues()
+                self.daq_controller.write_channel_values()
 
 
 class Frame_DAQchannel(tk.Frame):
@@ -153,13 +153,13 @@ class Frame_DAQchannel(tk.Frame):
     A sub-class of a Tkinter.Frame to create entry widgets and decorations for setting DAQ channels.
     """
 
-    def __init__(self, parent, DAQ_channel, DAQ_controller):
+    def __init__(self, parent, DAQChannel, DAQ_controller):
         """
         Constructor
         """
         tk.Frame.__init__(self, parent)
 
-        self.DAQchannel = DAQ_channel
+        self.DAQchannel = DAQChannel
         self.DAQcontroller = DAQ_controller
         self.frame = tk.Frame(self)
 
@@ -187,13 +187,13 @@ class Frame_DIOline(tk.Frame):
     A sub-class of a Tkinter.Frame to create entry widgets and decorations for setting Digital IO lines.
     """
 
-    def __init__(self, parent, DAQ_dio):
+    def __init__(self, parent, DAQDio):
         """
         Constructor
         """
         tk.Frame.__init__(self, parent)
 
-        self.daq_dio = DAQ_dio
+        self.daq_dio = DAQDio
 
         self.lab = tk.Label(self, width=22, text=self.daq_dio.dio_name, anchor="w")
 
@@ -332,7 +332,7 @@ class Entry_DAQchannel(tk.Entry):
 
 
 class DAQ_configuration_UI:
-    def __init__(self, parent, daq_control: DAQ_controller):
+    def __init__(self, parent, daq_control: DAQController):
         """This object creates a copy of the DAQ controller as backup and then a top level window to edit the origional.
         On exit from the top level window the changes are either kept or we revert to the original controller.  The
         edited controller must then be fetched from this object by code that wishes to use it."""
@@ -411,7 +411,7 @@ class DAQ_configuration_UI:
     def getChannelsFrame(self, frameConfig={}, labelConfig={}):
         channelsFrame = tk.LabelFrame(self.top, text="Channels", **frameConfig)
 
-        controllerChannels: list[DAQ_channel] = self.controller.getChannels()
+        controllerChannels: list[DAQChannel] = self.controller.get_channels()
 
         channelOptions = [
             self.getChannelDropdownLabel(ch.chNum, ch.chName)
@@ -490,7 +490,7 @@ class DAQ_configuration_UI:
             c = tk.Checkbutton(
                 frame, variable=cbVar, command=lambda ch=ch, var=cbVar: self.chUIVisUpdated(ch, var)
             )
-            if ch.isUIVisable:
+            if ch.isUIVisible:
                 c.select()
             c.grid(row=r, column=1, **chWidGridOpts)
 
@@ -654,14 +654,14 @@ class DAQ_configuration_UI:
         self._updateChannelDropdown(
             [
                 self.getChannelDropdownLabel(ch.chNum, ch.chName)
-                for ch in sorted(self.controller.getChannels(), key=lambda x: x.chNum)
+                for ch in sorted(self.controller.get_channels(), key=lambda x: x.chNum)
             ],
             newChLabel,
         )
         self.channelSelected(newChLabel)
         self._flash(wid, "green")
 
-    def chLimitsUpdated(self, event, ch: DAQ_channel, limWids: list[Any], dVwid):
+    def chLimitsUpdated(self, event, ch: DAQChannel, limWids: list[Any], dVwid):
         oldLimits = ch.chLimits
         flash_col = "green"
 
@@ -690,7 +690,7 @@ class DAQ_configuration_UI:
         for wid in limWids:
             self._flash(wid, flash_col)
 
-    def chDefValUpdated(self, event, ch: DAQ_channel, wid):
+    def chDefValUpdated(self, event, ch: DAQChannel, wid):
         oldDefVal = ch.defaultValue
         flash_col = "green"
 
@@ -728,10 +728,10 @@ class DAQ_configuration_UI:
 
         self._flash(wid, flash_col)
 
-    def chUIVisUpdated(self, ch: DAQ_channel, var):
-        ch.isUIVisable = var.get()
+    def chUIVisUpdated(self, ch: DAQChannel, var):
+        ch.isUIVisible = var.get()
 
-    def chCalibFileUpdated(self, event, ch: DAQ_channel, wid, defValLab, defValWid):
+    def chCalibFileUpdated(self, event, ch: DAQChannel, wid, defValLab, defValWid):
         # Get the old value of the widget to restore it if the calibration fails.
         oldWidValue = ch.calibrationFname if ch.isCalibrated else "None"
         try:
@@ -770,7 +770,7 @@ class DAQ_configuration_UI:
 
     def removeCalibFileButton(self, ch, wid, defValLab, defValWid):
         """Remove the calibration from the channel and re-set the relevant UI labels and entries"""
-        ch.removeCalibration()
+        ch.remove_calibration()
         wid.delete(0, tk.END)
         wid.insert(0, "None")
         defValLab.configure(text="Default value (V):")
@@ -801,7 +801,7 @@ class DAQ_configuration_UI:
     #
     #         # Check for empty filenames (i.e. when the user cancelled the action)
     #         if fname!= '':
-    #             self.controller.releaseAll()
+    #             self.controller.release_all()
     #             self.controller = DaqReader(fname).load_daq_controller()
     #
     #             self.configureForCurrentController()

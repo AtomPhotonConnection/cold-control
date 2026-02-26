@@ -79,10 +79,10 @@ if __name__ == "__main__":
 
         # The below lines all control the DAQ cards manually aside from the config file
         daq_controller.continuousOutput = True
-        daq_controller.updateChannelValue(22, 2.6)  # for manual control of amplitude input (in V)
-        daq_controller.updateChannelValue(14, 2.485)
-        daq_controller.updateChannelValue(8, 0.0048)
-        daq_controller.releaseAll()
+        daq_controller.update_channel_value(22, 2.6)  # for manual control of amplitude input (in V)
+        daq_controller.update_channel_value(14, 2.485)
+        daq_controller.update_channel_value(8, 0.0048)
+        daq_controller.release_all()
         time.sleep(1)
 
 """waveform sequence = '[0,1,0,1],[2,5,2], [3], [4]'

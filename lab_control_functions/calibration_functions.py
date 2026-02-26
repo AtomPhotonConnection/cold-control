@@ -20,7 +20,7 @@ from instruments.ThorlabsPM100 import ThorlabsPM100
 """
 Load required classes for awg driven AOM calibration
 """
-from classes.DAQ import DAQ_controller
+from classes.DAQ import DAQController
 from instruments.WX218x import awg_manager
 
 # helper functions in a separate file
@@ -30,7 +30,7 @@ CALIB_CSV = r"calibrations\miscellaneous\flip_mirror_calib.csv"
 
 
 def daq_driven_aom_response(
-    daq_controller: DAQ_controller,
+    daq_controller: DAQController,
     frequency_channel: int,
     amp_channel: int,
     frequency_voltage_pairs: dict,
@@ -67,7 +67,7 @@ def daq_driven_aom_response(
     # loop through the different frequencies (and their associated voltages)
     for freq, v in frequency_voltage_pairs.items():
         calib_name = f"amp_at_{freq}MHz"
-        daq_controller.updateChannelValue(frequency_channel, v)
+        daq_controller.update_channel_value(frequency_channel, v)
         time.sleep(3)
 
         # apply a range of voltages to the daq card and measure the output amplitudes
@@ -76,7 +76,7 @@ def daq_driven_aom_response(
         print("Running through voltages...might take a while...")
         for i in range(len(voltage_data)):
             print(voltage_data[i])
-            daq_controller.updateChannelValue(amp_channel, voltage_data[i])
+            daq_controller.update_channel_value(amp_channel, voltage_data[i])
             time.sleep(delay)
             amp_data[i] = float(power_meter.read)
         print("...finished!")
@@ -135,7 +135,7 @@ def awg_driven_aom_response(
     awg = awg_manager.AWGManager()
     print("Connecting...")
 
-    for ch in [1,2,3,4]:
+    for ch in [1, 2, 3, 4]:
         awg.disable_channel(ch)
 
     awg.configure_sample_rate(sample_rate)
@@ -560,7 +560,7 @@ def finding_amplitude_from_power(
     print("Creating AWG instance")
     awg = awg_manager.AWGManager()
     print("Connecting...")
-    for i in [1,2,3,4]:
+    for i in [1, 2, 3, 4]:
         awg.disable_channel(i)
 
     awg.configure_sample_rate(sample_rate)
@@ -611,8 +611,6 @@ def finding_amplitude_from_power(
                 results_dict["level"].append(level)
                 results_dict["read_value"].append(value)
 
-
-
         print("...finished taking data")
 
     print("Resetting awg...")
@@ -625,5 +623,5 @@ def finding_amplitude_from_power(
     return (
         closest_level,
         closest_diff,
-        results_dict
+        results_dict,
     )  # Return the closest level found if the target power is not achieved

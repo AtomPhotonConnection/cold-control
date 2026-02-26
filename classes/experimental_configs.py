@@ -20,7 +20,7 @@ from copy import deepcopy
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 
@@ -535,6 +535,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_cam = cam_dict is not None
 
         if self.use_cam:
+            cam_dict = cast(dict, cam_dict)
             self.cam_exposure = cam_dict["cam_exposure"]
             self.cam_gain = cam_dict["cam_gain"]
             self.camera_trigger_channel = cam_dict["camera_trig_ch"]
@@ -558,23 +559,23 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
     @property
     def scope_trigger_channel(self) -> int:
-        return self.scope_config.trigger_channel
+        return cast(ScopeConfiguration, self.scope_config).trigger_channel
 
     @property
     def scope_trigger_level(self) -> float:
-        return self.scope_config.trigger_level
+        return cast(ScopeConfiguration, self.scope_config).trigger_level
 
     @property
     def scope_sample_rate(self) -> float:
-        return self.scope_config.sample_rate
+        return cast(ScopeConfiguration, self.scope_config).sample_rate
 
     @property
     def scope_time_range(self) -> tuple[float, float]:
-        return self.scope_config.time_range
+        return cast(ScopeConfiguration, self.scope_config).time_range
 
     @property
     def scope_data_channels(self) -> dict[int, dict]:
-        return self.scope_config.data_channels
+        return cast(ScopeConfiguration, self.scope_config).data_channels
 
 
 class MotFluoresceConfigurationSweep:
@@ -640,7 +641,7 @@ class MotFluoresceConfigurationSweep:
         sweep_type: str,
         num_shots: int,
         sweep_params: dict[Any, Any],
-    ) -> "MotFluoresceConfigurationSweep":
+    ) -> MotFluoresceConfigurationSweep:
         """Alternative constructor that accepts pre-built typed config objects.
 
         This is the preferred way to create a sweep config when using the new
@@ -717,7 +718,7 @@ class MotFluoresceConfigurationSweep:
 
                 # Modify waveform and frequency settings
                 modified_sequence_config = self.modify_awg_sequence_config(
-                    base_config=new_config.awg_config,
+                    base_config=cast(AwgConfiguration, new_config.awg_config),
                     waveform_csvs={idx: new_paths[idx] for idx in wave_idxs},
                     mod_freqs={idx: freqs[j] for j, idx in enumerate(wave_idxs)},
                 )
@@ -788,7 +789,7 @@ class MotFluoresceConfigurationSweep:
                 # Modifies the sequence
                 freq_ch = 2  # These values shouldn't be hardcoded
                 power_ch = 6
-                new_sequence.updateChannel(
+                new_sequence.update_channel(
                     freq_ch,
                     [
                         (0, freq),
@@ -797,7 +798,7 @@ class MotFluoresceConfigurationSweep:
                         0,
                     ],
                 )
-                tv_pairs = list(new_sequence.get_tV_pairs(power_ch))
+                tv_pairs = list(new_sequence.get_tv_pairs(power_ch))
                 print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
                 # HACK to change the correct power value and pulse length
                 # img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
@@ -807,8 +808,8 @@ class MotFluoresceConfigurationSweep:
                 tv_pairs[2] = new_start_tv
                 tv_pairs[3] = new_end_tv
                 print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
-                new_vint_styles = new_sequence.get_V_intervalStyles(power_ch)
-                new_sequence.updateChannel(power_ch, tv_pairs, new_vint_styles)
+                new_vint_styles = new_sequence.get_v_interval_styles(power_ch)
+                new_sequence.update_channel(power_ch, tv_pairs, new_vint_styles)
 
                 # Ensure directory exists
                 if not Path(self.base_config.save_location).exists():

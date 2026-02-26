@@ -13,7 +13,7 @@ import time
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 from configobj import ConfigObj
@@ -26,10 +26,10 @@ from classes.DAQ import (
     Channel_P1C,
     Channel_P1CH,
     Channel_P1CL,
-    DAQ_card,
-    DAQ_channel,
-    DAQ_controller,
-    DAQ_dio,
+    DAQCard,
+    DAQChannel,
+    DAQController,
+    DAQDio,
 )
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
@@ -245,7 +245,7 @@ class DaqReader:
                 bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
                 str(v["calibrationFname"]),  # calibrationFname (str)
             )
-            channels.append(DAQ_channel(*channel_args))
+            channels.append(DAQChannel(*channel_args))
         return channels
 
     def _load_dios(self) -> list:
@@ -284,16 +284,16 @@ class DaqReader:
             else:
                 enabled_state = int(v["enabled state"])
 
-            dios.append(DAQ_dio(dio_name, dio_num, port, line, direction, enabled_state))
+            dios.append(DAQDio(dio_name, dio_num, port, line, direction, enabled_state))
         return dios
 
-    def load_daq_controller(self) -> DAQ_controller:
+    def load_daq_controller(self) -> DAQController:
         """Returns a DAQ controller object as configured in the config file."""
 
         channels = self._load_channels()
         dios = self._load_dios()
 
-        daq_master = DAQ_card(
+        daq_master = DAQCard(
             card_number=int(self.config["DAQ cards"]["master"]["card number"]),
             channels=[
                 next(ch for ch in channels if ch.chNum == int(x))
@@ -308,12 +308,12 @@ class DaqReader:
                 if x is not None
             ],
         )
-        daq_slaves = []
+        daq_slaves: list[DAQCard] = []
 
         for _, v in self.config["DAQ cards"]["slaves"].items():
             try:
                 daq_slaves.append(
-                    DAQ_card(
+                    DAQCard(
                         card_number=int(v["card number"]),
                         channels=[
                             next(ch for ch in channels if ch.chNum == int(x)) for x in v["channels"]
@@ -335,7 +335,7 @@ class DaqReader:
                 print([ch.chNum for ch in channels])
                 raise err
 
-        return DAQ_controller(daq_master, daq_slaves)
+        return DAQController(daq_master, daq_slaves)
 
     def load_dummy_daq_controller(self):
         """Create a DummyDAQController with channels and DIOs parsed from the config file.
@@ -407,7 +407,7 @@ class SequenceReader:
             tv_pairs = [tuple(ast.literal_eval(x)) for x in v["tV_pairs"]]
             v_interval_styles = [int(x) for x in v["V_interval_styles"]]
 
-            seq.addChannelSeq(ch, tv_pairs, v_interval_styles)
+            seq.add_channel_seq(ch, tv_pairs, v_interval_styles)
 
         return seq
 
@@ -689,7 +689,7 @@ class ScopeConfigReader:
             trigger_channel=int(cfg["trigger_channel"]),
             trigger_level=float(cfg["trigger_level"]),
             sample_rate=float(cfg["sample_rate"]),
-            time_range=to_float_tuple(cfg["time_range"]),
+            time_range=cast(tuple[float, float], to_float_tuple(cfg["time_range"])),
             data_channels=data_chs,
         )
 
@@ -742,25 +742,23 @@ class ExperimentConfigReader:
         has_old_scope = "use_scope" in self.config
         has_old_awg = "use_awg" in self.config
 
-        if has_old_scope and not has_new_scope:
-            if to_bool(self.config["use_scope"]):
-                scope = self.config.get("scope_settings")
-                if not scope:
-                    raise ValueError("use_scope is True but [scope_settings] is missing")
-                for k in [
-                    "trigger_channel",
-                    "trigger_level",
-                    "sample_rate",
-                    "time_range",
-                    "data_channels",
-                ]:
-                    if k not in scope:
-                        raise ValueError(f"[scope_settings] missing required key: {k}")
-        if has_old_awg and not has_new_awg:
-            if to_bool(self.config["use_awg"]):
-                awg = self.config.get("awg_settings")
-                if not awg or "config_path" not in awg:
-                    raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
+        if has_old_scope and not has_new_scope and to_bool(self.config["use_scope"]):
+            scope = self.config.get("scope_settings")
+            if not scope:
+                raise ValueError("use_scope is True but [scope_settings] is missing")
+            for k in [
+                "trigger_channel",
+                "trigger_level",
+                "sample_rate",
+                "time_range",
+                "data_channels",
+            ]:
+                if k not in scope:
+                    raise ValueError(f"[scope_settings] missing required key: {k}")
+        if has_old_awg and not has_new_awg and to_bool(self.config["use_awg"]):
+            awg = self.config.get("awg_settings")
+            if not awg or "config_path" not in awg:
+                raise ValueError("use_awg is True but [awg_settings] or config_path is missing")
 
     def get_expt_type(self):
         """
@@ -826,7 +824,7 @@ class ExperimentConfigReader:
             use_camera = "camera_settings" in self.config
 
         # --- Scope ---
-        scope_config: ScopeConfiguration | None = None
+        scope_config: Optional[ScopeConfiguration] = None
         if has_new_scope:
             scope_path = resolve_config_path(self.config["scope_config"], get_config_root())
             scope_config = ScopeConfigReader(scope_path).load_scope_configuration()
@@ -841,8 +839,8 @@ class ExperimentConfigReader:
             scope_config = ScopeConfigReader._parse_scope_config(scope_section)
 
         # --- AWG ---
-        awg_config: AwgConfiguration | None = None
-        awg_config_path: str | None = None
+        awg_config: Optional[AwgConfiguration] = None
+        awg_config_path: Optional[str] = None
         if has_new_awg:
             awg_config_path = resolve_config_path(self.config["awg_config"], get_config_root())
             awg_reader = AwgConfigReader(awg_config_path)
@@ -860,7 +858,7 @@ class ExperimentConfigReader:
             awg_config = awg_reader.load_awg_configuration()
 
         # --- Camera (unchanged — kept as dict for now) ---
-        camera_settings_dict: dict | None = None
+        camera_settings_dict: Optional[dict] = None
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
@@ -873,7 +871,7 @@ class ExperimentConfigReader:
             }
 
         # --- Sequence (new format only) ---
-        sequence_config_path: str | None = None
+        sequence_config_path: Optional[str] = None
         if "sequence_config" in self.config:
             sequence_config_path = resolve_config_path(
                 self.config["sequence_config"], get_config_root()
