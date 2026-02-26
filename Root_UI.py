@@ -15,15 +15,15 @@ from UI_classes.Labbook_UI import Labbook_UI
 from UI_classes.Sequence_UI import Sequence_UI
 
 # For logging on ALWE61 lab PC
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     filename=r"C:\pulse_shaping_data\logging\cold_control.log",
-#     filemode="a",
-#     format="%(asctime)s - %(levelname)s - %(message)s",
-# )
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename=r"C:\pulse_shaping_data\logging\cold_control.log",
+    filemode="a",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 # For logging on development machines
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+# logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class ColdControlUI(tk.Frame):
