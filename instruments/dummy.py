@@ -363,17 +363,23 @@ class DummyAWGManager:
 
     # -- clock / sample rate --
 
-    def configure_sample_rate(self, sample_rate: float) -> None:
+    def set_sample_rate(
+        self, sample_rate: float, channels: Optional[tuple[int, ...]] = None
+    ) -> None:
         self._sample_rate = sample_rate
-        self._log.info("[DummyAWG] configure_sample_rate %.2e", sample_rate)
+        self._log.info(
+            f"[DummyAWG] set_sample_rate {sample_rate:.2e} on channels {channels or 'all'}"
+        )
 
     def get_sample_rate(self) -> float:
         return self._sample_rate
 
     # -- output mode --
 
-    def set_output_mode(self, mode: str = "USER") -> None:
-        self._log.info("[DummyAWG] set_output_mode %s", mode)
+    def set_output_mode(
+        self, mode: str = "USER", channels: Optional[tuple[int, ...]] = None
+    ) -> None:
+        self._log.info("[DummyAWG] set_output_mode %s on channels %s", mode, channels or "all")
 
     # -- run mode --
 

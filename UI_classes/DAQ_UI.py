@@ -32,7 +32,7 @@ class DAQ_UI(tk.Frame):
             self.daq_controller: DAQController = self.reader.load_daq_controller()
         else:
             print("Running in development mode...\nLoading Dummy DAQ cards")
-            self.daq_controller = self.reader.load_dummy_daq_controller()
+            self.daq_controller = self.reader.load_dummy_daq_controller()  # type: ignore
 
         self.Frame_Channels = tk.LabelFrame(self, text="DAQ channels", font=font)
         self.Frame_DIOs = tk.LabelFrame(self, text="Digital outputs", font=font)

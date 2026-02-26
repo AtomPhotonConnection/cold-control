@@ -47,6 +47,10 @@ class Camera_UI(tk.LabelFrame):
         else:
             self.ic_ic = None
 
+        assert self.ic_ic is not None, (
+            "IC Imaging Control library failed to load.  Camera UI will not work."
+        )
+
         # Calculate the aspect ratio of the requested video dimensions so we keep this when re-sizing the picture.
         self.video_dims = video_dims
         self.video_aspect_ratio = float(self.video_dims[0]) / float(self.video_dims[1])

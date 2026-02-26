@@ -410,7 +410,21 @@ class AWGManager:
     def get_sample_rate(self) -> float:
         return float(self._query(":FREQ:RAST?"))
 
+    def set_sample_rate(
+        self, sample_rate: float, channels: Optional[tuple[int, ...]] = None
+    ) -> None:
+        for ch in (1, 2, 3, 4):
+            if channels is None or ch in channels:
+                self.select_channel(ch)
+                self._write(f":FREQ:RAST {sample_rate}")
+
     # ----- output mode -------------------------------------------------------
+    def set_output_mode(self, mode: str, channels: Optional[tuple[int, ...]] = None) -> None:
+        """Typical modes include ``"FIX"`` (standard waveform), ``"USER"`` (arbitrary waveform from memory)"""
+        for ch in (1, 2, 3, 4):
+            if channels is None or ch in channels:
+                self.select_channel(ch)
+                self._write(f":FUNC:MODE {mode}")
 
     # ----- run mode (continuous / triggered) ----------------------------------
 
