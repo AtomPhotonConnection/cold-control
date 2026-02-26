@@ -6,7 +6,7 @@ Authors: Jan Ole Ernst, Matt King
 Date: 23 June 2025
 """
 
-import os
+from pathlib import Path
 from typing import Any, cast
 
 import matplotlib.pylab as plt
@@ -19,11 +19,11 @@ class RabiFreqVoltageConverter:
     def __init__(self, csv_path):
         # Load data
         self.df = pd.read_csv(csv_path)
-        self.data_dir = os.path.dirname(os.path.abspath(csv_path))
-        path = os.path.normpath(csv_path)
+        self.data_dir = Path(csv_path).resolve().parent
+        path = Path(csv_path).resolve()
 
         # Split into components
-        parts = path.split(os.sep)
+        parts = path.parts
 
         # Get the two parent folders before the file name
         #   parts[-1] = filename
@@ -80,7 +80,7 @@ class RabiFreqVoltageConverter:
         plt.legend()
         plt.tight_layout()
 
-        plot_path = os.path.join(self.data_dir, f"voltage_vs_rabi_{self.waist_size}mu_waist.pdf")
+        plot_path = self.data_dir / f"voltage_vs_rabi_{self.waist_size}mu_waist.pdf"
         plt.savefig(plot_path)
         plt.close()
 
@@ -121,10 +121,7 @@ class RabiFreqVoltageConverter:
          - csv_out (str): The path to save the csv to
          - normalised (bool): Whether the input waveform is normalised or not. Assumed to be true
         """
-        if rabi == 0:
-            rescale_factor = 0
-        else:
-            rescale_factor = self.rabi_to_voltage(rabi)
+        rescale_factor = 0 if rabi == 0 else self.rabi_to_voltage(rabi)
 
         # Step 1: Read CSV with a single row
         df = pd.read_csv(csv_in, header=None)

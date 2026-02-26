@@ -25,7 +25,7 @@ from typing import Any, Optional, cast
 import numpy as np
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
-from classes.Sequence import Sequence
+from classes.sequence import Sequence
 
 logger = logging.getLogger(__name__)
 

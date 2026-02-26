@@ -21,6 +21,7 @@ import warnings
 from pathlib import Path
 from typing import Optional
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -107,7 +108,7 @@ class UnifiedFluorescenceProcessor:
                     df = self._apply_rolling_average(df, self.rolling_window)
                 dataframes.append(df)
             except Exception as e:
-                warnings.warn(f"Could not load {csv_file}: {e}")
+                warnings.warn(f"Could not load {csv_file}: {e}", stacklevel=2)
 
         return dataframes
 
@@ -154,8 +155,8 @@ class UnifiedFluorescenceProcessor:
 
         # Find drop times for each trace
         for df in dataframes:
-            fluor_data = df[self.fluorescence_col].values
-            time_data = df[self.time_col].values
+            fluor_data = df[self.fluorescence_col].to_numpy()
+            time_data = df[self.time_col].to_numpy()
 
             # Find first crossing below threshold
             drop_indices = fluor_data < fluor_drop_voltage
@@ -224,7 +225,10 @@ class UnifiedFluorescenceProcessor:
                 channel_stack = np.array(interpolated_data[col_name])
                 # Check if there is any non-NaN data before averaging
                 if np.all(np.isnan(channel_stack)):
-                    warnings.warn(f"Channel {col_name} is all NaN after interpolation, skipping.")
+                    warnings.warn(
+                        f"Channel {col_name} is all NaN after interpolation, skipping.",
+                        stacklevel=2,
+                    )
                 else:
                     averaged_data[col_name] = np.nanmean(channel_stack, axis=0)
 
@@ -262,26 +266,26 @@ class UnifiedFluorescenceProcessor:
         mot_off_window = mot_off_window or MOT_OFF_WINDOW
         img_window = img_window or IMAGING_WINDOW
 
-        time_data = averaged_df[self.time_col].values
-        fluor_data = averaged_df[self.fluorescence_col].values
+        time_data = averaged_df[self.time_col].to_numpy()
+        fluor_data = averaged_df[self.fluorescence_col].to_numpy()
 
         # Extract high fluorescence (MOT on)
         on_mask = (time_data >= mot_on_window[0]) & (time_data <= mot_on_window[1])
         on_values = fluor_data[on_mask]
-        F_high = np.mean(on_values)
-        F_high_std = np.std(on_values)
+        f_high = np.mean(on_values)
+        f_high_std = np.std(on_values)
 
         print(
-            f"F_high (MOT on) = {F_high:.4f} V (std: {F_high_std:.4f} V) from {len(on_values)} points"
+            f"F_high (MOT on) = {f_high:.4f} V (std: {f_high_std:.4f} V) from {len(on_values)} points"
         )
 
         # Extract low fluorescence (MOT off)
         off_mask = (time_data >= mot_off_window[0]) & (time_data <= mot_off_window[1])
         off_values = fluor_data[off_mask]
-        F_low = np.mean(off_values)
-        F_low_std = np.std(off_values)
+        f_low = np.mean(off_values)
+        f_low_std = np.std(off_values)
         print(
-            f"F_low (MOT off) = {F_low:.4f} V (std: {F_low_std:.4f} V) from {len(off_values)} points"
+            f"F_low (MOT off) = {f_low:.4f} V (std: {f_low_std:.4f} V) from {len(off_values)} points"
         )
 
         # Extract imaging region
@@ -293,49 +297,51 @@ class UnifiedFluorescenceProcessor:
             raise ValueError(f"No data in imaging window {img_window}")
 
         # Calculate normalization scale
-        scale_factor = F_high - F_low
+        scale_factor = f_high - f_low
         if abs(scale_factor) < 1e-6:
-            warnings.warn("Scale factor is very small, normalization may be unreliable")
+            warnings.warn(
+                "Scale factor is very small, normalization may be unreliable", stacklevel=2
+            )
         if scale_factor <= 0:
             raise ValueError(
-                f"Invalid scale factor: F_high ({F_high}) must be greater than F_low ({F_low})"
+                f"Invalid scale factor: F_high ({f_high}) must be greater than F_low ({f_low})"
             )
 
         print(f"Scale factor (F_high - F_low) = {scale_factor:.4f} V")
         img_avg = np.mean(img_values)
         print(f"Average fluorescence in imaging window = {img_avg:.4f} V")
         # Normalize fluorescence: (F(t) - F_low) / (F_high - F_low)
-        normalized_values = (img_values - F_low) / scale_factor
+        normalized_values = (img_values - f_low) / scale_factor
 
         # Calculate metrics
-        F_normalized = np.mean(normalized_values)
-        F_normalized_std = np.std(normalized_values)
+        f_normalised = np.mean(normalized_values)
+        f_normalised_std = np.std(normalized_values)
         print(
-            f"F_normalized (imaging window) = {F_normalized:.4f} (std: {F_normalized_std:.4f}) from {len(normalized_values)} points"
+            f"F_normalized (imaging window) = {f_normalised:.4f} (std: {f_normalised_std:.4f}) from {len(normalized_values)} points"
         )
 
         # Propagate uncertainty
         # For F_norm = (F - F_low) / (F_high - F_low)
         # Uncertainty ≈ F_norm * sqrt((std_F/F)^2 + (std_high/F_high)^2 + (std_low/F_low)^2)
-        if abs(F_high) > 1e-6 and abs(F_low) > 1e-6:
-            rel_unc = np.sqrt((F_high_std / F_high) ** 2 + (F_low_std / F_low) ** 2)
-            F_normalized_unc = abs(F_normalized * rel_unc)
+        if abs(f_high) > 1e-6 and abs(f_low) > 1e-6:
+            rel_unc = np.sqrt((f_high_std / f_high) ** 2 + (f_low_std / f_low) ** 2)
+            f_normalised_unc = abs(f_normalised * rel_unc)
         else:
-            F_normalized_unc = F_normalized_std / np.sqrt(max(len(normalized_values), 1))
+            f_normalised_unc = f_normalised_std / np.sqrt(max(len(normalized_values), 1))
 
         # Also calculate raw integral for reference
         raw_integral = np.trapz(img_values, img_times)
         normalized_integral = np.trapz(normalized_values, img_times)
 
         return {
-            "F_high": F_high,
-            "F_high_std": F_high_std,
-            "F_low": F_low,
-            "F_low_std": F_low_std,
+            "F_high": f_high,
+            "F_high_std": f_high_std,
+            "F_low": f_low,
+            "F_low_std": f_low_std,
             "scale_factor": scale_factor,
-            "F_normalized": F_normalized,
-            "F_normalized_std": F_normalized_std,
-            "F_normalized_uncertainty": F_normalized_unc,
+            "F_normalized": f_normalised,
+            "F_normalized_std": f_normalised_std,
+            "F_normalized_uncertainty": f_normalised_unc,
             "raw_integral": raw_integral,
             "normalized_integral": normalized_integral,
             "num_imaging_points": len(img_values),
@@ -503,7 +509,7 @@ class UnifiedFluorescenceProcessor:
 
             # Also save a human-readable text version
             txt_path = self.root_folder / "fluorescence_analysis_summary.txt"
-            with open(txt_path, "w") as f:
+            with txt_path.open("w") as f:
                 f.write("=" * 100 + "\n")
                 f.write("FLUORESCENCE ANALYSIS SUMMARY\n")
                 f.write("=" * 100 + "\n\n")
@@ -542,7 +548,7 @@ class UnifiedFluorescenceProcessor:
 
         fig.savefig(png_path, dpi=200, bbox_inches="tight")
         fig.savefig(svg_path, bbox_inches="tight")
-        with open(pkl_path, "wb") as f:
+        with pkl_path.open("wb") as f:
             pickle.dump(fig, f)
 
         print(f"  Saved: {png_path.name}, {svg_path.name}, {pkl_path.name}")
@@ -580,10 +586,11 @@ class UnifiedFluorescenceProcessor:
         fig, axes = plt.subplots(2, 2, figsize=figsize)
 
         # Plot 1: Normalized fluorescence vs shot, one line per parameter folder
+        cmap = mpl.colormaps["tab10"]
         ax = axes[0, 0]
         if "parameter_folder" in summary_df.columns:
             groups = summary_df.groupby("parameter_folder")
-            colors = plt.cm.tab10(np.linspace(0, 1, max(len(groups), 1)))
+            colors = cmap(np.linspace(0, 1, max(len(groups), 1)))
             for (pf, group), color in zip(groups, colors):
                 x = group["shot_number"] if "shot_number" in group.columns else range(len(group))
                 ax.errorbar(
@@ -619,7 +626,7 @@ class UnifiedFluorescenceProcessor:
         ax = axes[0, 1]
         if "parameter_folder" in summary_df.columns:
             groups = summary_df.groupby("parameter_folder")
-            colors = plt.cm.tab10(np.linspace(0, 1, max(len(groups), 1)))
+            colors = cmap(np.linspace(0, 1, max(len(groups), 1)))
             for (pf, group), color in zip(groups, colors):
                 x = group["shot_number"] if "shot_number" in group.columns else range(len(group))
                 ax.plot(x, group["raw_integral"], "o-", color=color, label=pf)
@@ -636,7 +643,7 @@ class UnifiedFluorescenceProcessor:
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize="x-small")
 
-        # Plot 3: Normalization factors – all shots sequential with composite labels
+        # Plot 3: Normalization factors - all shots sequential with composite labels
         ax = axes[1, 0]
         x_all = np.arange(len(summary_df))
         ax.plot(x_all, summary_df["F_high"], "o-", label="F_high (MOT on)", alpha=0.7)
@@ -661,7 +668,7 @@ class UnifiedFluorescenceProcessor:
         ax.grid(True, alpha=0.3)
         ax.legend()
 
-        # Plot 4: Number of valid traces – all shots sequential with composite labels
+        # Plot 4: Number of valid traces - all shots sequential with composite labels
         ax = axes[1, 1]
         ax.bar(x_all, summary_df["num_valid_traces"], alpha=0.7, label="Valid Traces")
         ax.bar(
@@ -685,7 +692,7 @@ class UnifiedFluorescenceProcessor:
 
     def plot_averaged_traces(
         self,
-        shots: Optional[List[str]] = None,
+        shots: Optional[list[str]] = None,
         figsize: tuple[int, int] = (14, 6),
         save: bool = True,
     ):
@@ -707,7 +714,8 @@ class UnifiedFluorescenceProcessor:
 
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
-        colors = plt.cm.viridis(np.linspace(0, 1, max(len(shots), 1)))
+        virid_cmap = mpl.colormaps["viridis"]
+        colors = virid_cmap(np.linspace(0, 1, max(len(shots), 1)))
 
         # Plot fluorescence channel
         ax = axes[0]

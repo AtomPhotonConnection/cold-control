@@ -38,7 +38,7 @@ try:
     import instruments.WX218x.awg_manager as awg_manager
 except (ImportError, ModuleNotFoundError):
     awg_manager = None  # type: ignore[assignment]
-from classes.DAQ import DAQChannel, DAQController
+from classes.daq import DAQChannel, DAQController
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     ExperimentSessionConfig,
@@ -49,7 +49,7 @@ from classes.experimental_configs import (
     SingleExperimentConfig,
     Waveform,
 )
-from classes.Sequence import IntervalStyle, Sequence
+from classes.sequence import IntervalStyle, Sequence
 
 if TYPE_CHECKING:
     from instruments.pyicic.IC_Camera import IC_Camera

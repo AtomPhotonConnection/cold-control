@@ -24,7 +24,7 @@ import UI_classes.ToolTip_UI as tooltip
 
 # import wx
 from classes.config_readers import SequenceReader, SequenceWriter
-from classes.Sequence import (
+from classes.sequence import (
     IntervalStyle,
     InvalidSequenceChannelError,
     MultipleInvalidSequenceChannelError,
@@ -32,7 +32,7 @@ from classes.Sequence import (
 )
 
 """
-TODO - 
+TODO -
 1. Be able to add/remove sequence channels
 2. Provide 'sort' option for time channel - sort when re-loading channel to look at it / provide sort button to remove incomplete lines and reorder
 3. Implement channel wrapper (e.g. V <--> Hz for AOMs)
@@ -50,15 +50,15 @@ class ImageButton(tk.Button):
     image_ref: ImageTk.PhotoImage
 
 
-class Sequence_UI(tk.Toplevel):
+class DaqSequenceUI(tk.Toplevel):
     """Seqeuence UI to look after the sequence plotting/editing/loading/saving."""
 
     def __init__(
         self,
         parent,
         sequence_fname,
-        configured_channel_labels={},
-        configured_channel_calibrations={},
+        configured_channel_labels=None,
+        configured_channel_calibrations=None,
         hidden=True,
     ):
         """parent - parent widget
@@ -69,6 +69,10 @@ class Sequence_UI(tk.Toplevel):
         Note - the sequecnce_UI doen't validate that the configured sequence matches the configured DAQ channels
         (for channel limits etc.) as a) sequence validation is performed by the DAQ_controller before it is run
         and b) sequences could be run with different config files."""
+        if configured_channel_calibrations is None:
+            configured_channel_calibrations = {}
+        if configured_channel_labels is None:
+            configured_channel_labels = {}
         tk.Toplevel.__init__(self, parent)
 
         if hidden:
@@ -84,12 +88,12 @@ class Sequence_UI(tk.Toplevel):
 
         self.wm_title("Set sequence")
 
-        self.configureForCurrentSequence()
+        self.configure_for_current_sequence()
 
         # Changes the close button to call my close function.
-        self.protocol("WM_DELETE_WINDOW", self.closeWindow)
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
 
-    def configureForCurrentSequence(self):
+    def configure_for_current_sequence(self):
         """This method creates, configures and draws all the elements of the UI that are dependent on the currently loaded sequence (as
         defined by the class variables self.sequence, self.sequence_reader...  Primarily it is just an extension of the __init__ for the
         class however this section of code needs to be run to re-configure the UI for a new sequence if one is loaded."""
@@ -97,22 +101,22 @@ class Sequence_UI(tk.Toplevel):
         for wid in self.winfo_children():
             wid.destroy()
 
-        self.sequence_channel_labels = self.getChannelLabels(self.configured_channel_labels)
+        self.sequence_channel_labels = self.get_channel_labels(self.configured_channel_labels)
 
         self.tabs = ttk.Notebook(self)
         self.tabs.enable_traversal()
 
-        self.buttons = self.getActionButtons()
-        self.seqPlot = SequencePlot_UI(self, self.sequence, self.sequence_channel_labels)
-        self.seqEditor = SequenceEditor_UI(self, self.sequence_reader)
-        self.chEditor = ChannelEditor_UI(
+        self.buttons = self.get_action_buttons()
+        self.seqPlot = SequencePlotUI(self, self.sequence, self.sequence_channel_labels)
+        self.seqEditor = SequenceEditorUI(self, self.sequence_reader)
+        self.chEditor = ChannelEditorUI(
             self,
             self.sequence,
             self.sequence_reader,
             self.sequence_channel_labels,
             self.configured_channel_calibrations,
         )
-        self.notesFrame = Notes_UI(self, self.sequence_reader)
+        self.notesFrame = NotesUI(self, self.sequence_reader)
 
         self.tabs.add(self.seqEditor, text="Sequence")
         self.tabs.add(self.chEditor, text="Channels")
@@ -130,42 +134,42 @@ class Sequence_UI(tk.Toplevel):
         self.grid_rowconfigure(1, weight=1, pad=5)
         self.grid_rowconfigure(2, weight=1, pad=5)
 
-    def configureForNewChannelLabels(self, configured_channel_labels):
+    def configure_for_new_channel_labels(self, configured_channel_labels):
         """Redraws all the elements that use the names of the currently configured channel in the UI.  The intended
         use of this function is to update the UI visually if the use has changed the names of the configured channels."""
         self.configured_channel_labels = configured_channel_labels
-        self.sequence_channel_labels = self.getChannelLabels(self.configured_channel_labels)
+        self.sequence_channel_labels = self.get_channel_labels(self.configured_channel_labels)
 
-        self.seqPlot.updateChLabels(self.sequence_channel_labels)
-        self.chEditor.updateChannelLabels(self.sequence_channel_labels)
+        self.seqPlot.update_channel_labels(self.sequence_channel_labels)
+        self.chEditor.update_channel_labels(self.sequence_channel_labels)
 
-    def configureForNewChannelCalibrations(self, configured_channel_calibrations):
+    def configure_for_new_channel_calibrations(self, configured_channel_calibrations):
         """Redraws all the elements that use the calibrations of the currently configured channel in the UI.  The intended
         use of this function is to update the UI visually if the use has changed the calibrations of the configured channels."""
         self.configured_channel_calibrations = configured_channel_calibrations
 
-        self.chEditor.updateChannelCalibrations(self.configured_channel_calibrations)
+        self.chEditor.update_channel_calibrations(self.configured_channel_calibrations)
 
-    def getChannelLabels(self, configured_channel_labels):
+    def get_channel_labels(self, configured_channel_labels):
         """This method takes a dictionary of channel number:labels and matches them to the channel numbers
         expected on the current sequence.  If a channel number is expected but not found, a label is automatically
         created.  If a channel number is given but not expected it is removed from the list."""
         sequence_channel_labels = {}
 
-        for chNum in self.sequence.get_channel_nums():
+        for ch_num in self.sequence.get_channel_nums():
             try:
-                chLab = configured_channel_labels[chNum]
+                ch_label = configured_channel_labels[ch_num]
             except KeyError:
-                chLab = "Unconfigured channel"
+                ch_label = "Unconfigured channel"
 
-            sequence_channel_labels[chNum] = chLab
+            sequence_channel_labels[ch_num] = ch_label
 
         return sequence_channel_labels
 
-    def getActionButtons(self):
+    def get_action_buttons(self):
         buttons = tk.Frame(self)
 
-        self.CloseButton = tk.Button(buttons, text="Close", command=self.closeWindow)
+        self.CloseButton = tk.Button(buttons, text="Close", command=self.close_window)
         self.CloseButton.grid(row=1, column=0, padx=5, pady=5, sticky=tk.S + tk.E)
 
         # self.saveLoadButtons = tk.Frame(buttons)
@@ -181,7 +185,7 @@ class Sequence_UI(tk.Toplevel):
 
         return buttons
 
-    def loadSeq(self):
+    def load_sequence(self):
         fname = tk_file_dialog.askopenfilename(title="Load a sequence", initialdir="")
 
         # Check for empty filenames (i.e. when the user cancelled the action)
@@ -189,12 +193,12 @@ class Sequence_UI(tk.Toplevel):
             self.sequence_reader = SequenceReader(fname)
             self.sequence: Sequence = self.sequence_reader.load_sequence()
 
-            self.configureForCurrentSequence()
+            self.configure_for_current_sequence()
 
         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
         self.lift(self.parent)
 
-    def saveSeq(self):
+    def save_sequence(self):
         fname = tk_file_dialog.asksaveasfilename(title="Save a sequence")
         # Check for empyy filenames (i.e. when the user cancelled the acion)
         if fname != "":
@@ -203,244 +207,251 @@ class Sequence_UI(tk.Toplevel):
                 self.sequence,
                 self.sequence_channel_labels,
                 self.seqEditor.global_timings,
-                self.notesFrame.getUserNotes(),
+                self.notesFrame.get_user_notes(),
             )
 
         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
         self.lift(self.parent)
 
-    def openWindow(self):
+    def open_window(self):
         """Open the window."""
         self.deiconify()
         self.grab_set()
 
     #         self.wm_attributes("-topmost", True)
 
-    def closeWindow(self):
+    def close_window(self):
         """Close the window."""
         self.grab_release()
         self.parent.focus_set()
         self.withdraw()
 
-    def updateLiveSequenceChannel(self):
+    def update_live_sequence_channel(self):
         """The update method triggered by changes in the ChannelEditor_UI"""
-        liveChNum = self.chEditor.liveChNum
-        tV_pairs, interval_styles = self.chEditor.getChannelSequence(liveChNum)
+        live_ch_num = self.chEditor.livech_num
+        tv_pairs, interval_styles = self.chEditor.get_channel_sequence(live_ch_num)
         try:
-            self.sequence.update_channel(liveChNum, tV_pairs, interval_styles)
-            self.seqPlot.updateChPlot(liveChNum)
+            self.sequence.update_channel(live_ch_num, tv_pairs, interval_styles)
+            self.seqPlot.update_ch_plot(live_ch_num)
         except InvalidSequenceChannelError as err:
             # The new sequence was invalid and the update rejected - refresh the rows
             # for the live channel to reverse the changes made.
-            self.chEditor.refreshRows(liveChNum)
+            self.chEditor.refresh_rows(live_ch_num)
 
             # Create a warning label explaining why the change was rejected.
-            self.displayWarning(str(err), 3000)
+            self.display_warning(str(err), 3000)
 
-    def updateGlobalTimings(self):
+    def update_global_timings(self):
         self.chEditor.global_timings = self.seqEditor.global_timings
-        for chNum in self.sequence.get_channel_nums():
-            self.chEditor.refreshRows(chNum)
+        for ch_num in self.sequence.get_channel_nums():
+            self.chEditor.refresh_rows(ch_num)
 
-    def updateSequenceSamplingConfiguration(self):
+    def update_sequence_sampling_configuration(self):
 
-        def resetChanges():
+        def reset_changes():
             """local convenience function to simply reset the changes in the Sequence_Editor_UI"""
             n_samples, t_step = self.sequence_reader.get_sequence_init_args()
             self.seqEditor.set_n_samples(n_samples)
             self.seqEditor.set_t_step(t_step)
-            self.displayWarning(
+            self.display_warning(
                 "Changes not applied - reverted to the values in the sequence file", 3000
             )
 
         # If t_new > t_old: ask if you want to extend sequence, if so just add FLAT intervals at end
         # If t_new < t_old: ask if you want to crop sequence.
-        newSeqLength = (self.seqEditor.n_samples - 1) * self.seqEditor.t_step
+        new_sequence_length = (self.seqEditor.n_samples - 1) * self.seqEditor.t_step
 
         # Depending on how long the new sequence is, channels may need to be manually changed.  These changes will be entered in this
         # dictionary to be passed to the update function later.
-        channelsToUpdate = {}
-        if newSeqLength > self.sequence.get_length():
+        channels_to_update = {}
+        if new_sequence_length > self.sequence.get_length():
             result = tk_message_box.askquestion(
                 "Please confirm changes",
-                f"Sequence length will be increased from {self.sequence.get_length()} to {newSeqLength}. Channels will be set as constant from their current end values to compensate."
+                f"Sequence length will be increased from {self.sequence.get_length()} to {new_sequence_length}. Channels will be set as constant from their current end values to compensate."
                 + "\nIs that ok?",
                 icon="warning",
             )
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
             if result == "yes":
-                for chNum in self.sequence.get_channel_nums():
+                for ch_num in self.sequence.get_channel_nums():
                     # fill in channelsToUpdate dict.
-                    tV_pairs, interval_styles = (
-                        self.sequence.get_tv_pairs(chNum),
-                        self.sequence.get_v_interval_styles(chNum),
+                    tv_pairs, interval_styles = (
+                        self.sequence.get_tv_pairs(ch_num),
+                        self.sequence.get_v_interval_styles(ch_num),
                     )
                     # If there are more value pairs than interval styles, the last pair was on the final time step of the old sequence.
                     # For the new (longer) sequence this would be invalid, so add another interval style to take this final value and
                     # set it as a constant.
-                    if len(tV_pairs) > len(interval_styles):
+                    if len(tv_pairs) > len(interval_styles):
                         interval_styles.append(IntervalStyle.FLAT)
-                        channelsToUpdate[chNum] = (tV_pairs, interval_styles)
+                        channels_to_update[ch_num] = (tv_pairs, interval_styles)
             else:
-                resetChanges()
+                reset_changes()
                 return
 
-        elif newSeqLength < self.sequence.get_length():
+        elif new_sequence_length < self.sequence.get_length():
             result = tk_message_box.askquestion(
                 "Please confirm changes",
-                f"Sequence length will be decreased from {self.sequence.get_length()} to {newSeqLength}. Channels will be cropped with there last time interval being made constant to compensate."
+                f"Sequence length will be decreased from {self.sequence.get_length()} to {new_sequence_length}. Channels will be cropped with there last time interval being made constant to compensate."
                 + "\nIs that ok?",
                 icon="warning",
             )
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
             if result == "yes":
-                for chNum in self.sequence.get_channel_nums():
-                    tV_pairs, interval_styles = self.chEditor.getChannelSequence(chNum)
+                for ch_num in self.sequence.get_channel_nums():
+                    tv_pairs, interval_styles = self.chEditor.get_channel_sequence(ch_num)
                     # Cut any tV pairs that are not outside the sequence length
-                    tV_pairs = sorted(
-                        [x for x in tV_pairs if x[0] <= newSeqLength], key=lambda x: x[0]
+                    tv_pairs = sorted(
+                        [x for x in tv_pairs if x[0] <= new_sequence_length], key=lambda x: x[0]
                     )
                     # If of the remaining pairs, the last pair in on the last timestep of the new sequence,
                     # then the channel is fully specified by just cropping the interval_styles list accordingly.
                     # If not, we need to add a final interval style to be constant in order to make the sequence valid.
-                    if tV_pairs[-1][0] == newSeqLength:
-                        interval_styles = interval_styles[0 : len(tV_pairs) - 1]
+                    if tv_pairs[-1][0] == new_sequence_length:
+                        interval_styles = interval_styles[0 : len(tv_pairs) - 1]
                     else:
-                        interval_styles = interval_styles[0 : len(tV_pairs) - 1] + [
-                            IntervalStyle.FLAT
+                        interval_styles = [
+                            *interval_styles[0 : len(tv_pairs) - 1],
+                            IntervalStyle.FLAT,
                         ]
                     # fill in channelsToUpdate dict.
-                    channelsToUpdate[chNum] = (tV_pairs, interval_styles)
+                    channels_to_update[ch_num] = (tv_pairs, interval_styles)
 
             else:
-                resetChanges()
+                reset_changes()
                 return
 
         # Try to update the timing variables on the sequence
         try:
             self.sequence.update_time_steps(
-                self.seqEditor.n_samples, self.seqEditor.t_step, channels_to_update=channelsToUpdate
+                self.seqEditor.n_samples,
+                self.seqEditor.t_step,
+                channels_to_update=channels_to_update,
             )
-            self.seqPlot.reloadPlotData()
-            self.chEditor.refreshRows(self.chEditor.liveChNum)
+            self.seqPlot.reload_plot_data()
+            self.chEditor.refresh_rows(self.chEditor.livech_num)
 
         # Catch validation errors, reset the variables in the UI and display an appropriate warning message
         except MultipleInvalidSequenceChannelError as mulErr:
-            errMsg = str(mulErr) + "\n"
+            error_message = str(mulErr) + "\n"
             for i in range(0, len(mulErr.errors)):
-                errMsg += f"\nChannel {mulErr.errorChannels[i]} - {mulErr.errors[i]!s}"
+                error_message += f"\nChannel {mulErr.errorChannels[i]} - {mulErr.errors[i]!s}"
                 print(mulErr.errorChannels[i], str(mulErr.errors[i]))
 
-            tk_message_box.showwarning("Unable to applySamplingConfiguration changes", errMsg)
+            tk_message_box.showwarning(
+                "Unable to applySamplingConfiguration changes", error_message
+            )
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
 
             # reset the changes made and explain what has happened
-            resetChanges()
+            reset_changes()
 
-    def displayWarning(self, message, delay=3000):
+    def display_warning(self, message, delay=3000):
         """Create an unobtrusive warning label that disappears after a delay."""
-        warningLabel = tk.Label(self, text=message, bg="yellow", height=1)
-        warningLabel.grid(row=2, column=0, columnspan=2, sticky=tk.N + tk.E + tk.W + tk.S)
-        self.after(delay, warningLabel.destroy)
+        warning_label = tk.Label(self, text=message, bg="yellow", height=1)
+        warning_label.grid(row=2, column=0, columnspan=2, sticky=tk.N + tk.E + tk.W + tk.S)
+        self.after(delay, warning_label.destroy)
 
 
-class Notes_UI(tk.Frame):
+class NotesUI(tk.Frame):
     def __init__(self, parent, sequence_reader):
         tk.Frame.__init__(self, parent)
         self.sequence_reader: SequenceReader = sequence_reader
 
-        self.seqNotes, self.seqNotesFrame = self.createSeqNotes()
-        self.userNotes, self.userNotesFrame = self.createUserNotes()
+        self.seqNotes, self.seqNotesFrame = self.create_sequence_notes()
+        self.userNotes, self.userNotesFrame = self.create_user_notes()
 
         self.pack_propagate(False)
         self.seqNotesFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
         self.userNotesFrame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
 
-    def createSeqNotes(self):
-        seqNotesFrame = tk.LabelFrame(self, text="Sequence notes", height=100)
-        seqNotesFrame.pack_propagate(False)
+    def create_sequence_notes(self):
+        sequence_notes_frame = tk.LabelFrame(self, text="Sequence notes", height=100)
+        sequence_notes_frame.pack_propagate(False)
 
-        scrollbar = tk.Scrollbar(seqNotesFrame)
+        scrollbar = tk.Scrollbar(sequence_notes_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Setting the width just enables the widget size to change - the actual size is determined
         # by the frame
-        seqNotes = tk.Text(seqNotesFrame, wrap=tk.WORD, yscrollcommand=scrollbar.set, width=1)
+        sequence_notes = tk.Text(
+            sequence_notes_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set, width=1
+        )
         notes = f"sequence name: {self.sequence_reader.get_name()}\nlast saved: {self.sequence_reader.get_time()} on {self.sequence_reader.get_date()}\n\nThe channel assignments when this sequence was last saved were:\n"
 
         for x in self.sequence_reader.get_channel_assignment_notes():
             notes += f"Ch {x[0]}: {x[1]}\n"
 
-        seqNotes.insert(tk.END, notes)
-        scrollbar.config(command=seqNotes.yview)
-        seqNotes.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        sequence_notes.insert(tk.END, notes)
+        scrollbar.config(command=sequence_notes.yview)
+        sequence_notes.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        seqNotes.config(state=tk.DISABLED)
+        sequence_notes.config(state=tk.DISABLED)
 
-        return seqNotes, seqNotesFrame
+        return sequence_notes, sequence_notes_frame
 
-    def createUserNotes(self):
-        userNotesFrame = tk.LabelFrame(self, text="User notes")
-        scrollbar = tk.Scrollbar(userNotesFrame)
+    def create_user_notes(self):
+        user_notes_frame = tk.LabelFrame(self, text="User notes")
+        scrollbar = tk.Scrollbar(user_notes_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Setting the width just enables the widget size to change - the actual size is determined
         # by the frame
-        userNotes = tk.Text(userNotesFrame, wrap=tk.WORD, yscrollcommand=scrollbar.set, width=1)
+        user_notes = tk.Text(user_notes_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set, width=1)
 
         notes = self.sequence_reader.get_user_notes()
 
-        userNotes.insert(tk.END, notes)
-        scrollbar.config(command=userNotes.yview)
-        userNotes.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        user_notes.insert(tk.END, notes)
+        scrollbar.config(command=user_notes.yview)
+        user_notes.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        return userNotes, userNotesFrame
+        return user_notes, user_notes_frame
 
-    def getUserNotes(self):
+    def get_user_notes(self):
         return self.userNotes.get(1.0, tk.END)
 
 
-class SequenceEditor_UI(tk.Frame):
+class SequenceEditorUI(tk.Frame):
     def __init__(self, parent, sequence_reader):
         tk.Frame.__init__(self, parent)
         self.sequence_reader = sequence_reader
         self.n_samples, self.t_step = self.sequence_reader.get_sequence_init_args()
         self.global_timings = self.sequence_reader.get_global_timings()
 
-        samplingConfigFrame = tk.LabelFrame(
+        sampling_config_frame = tk.LabelFrame(
             self, text="Sampling configuration", font=("Helvetica", 12)
         )
 
-        labelOpts = {"font": ("Helvetica", 10), "anchor": tk.E, "justify": tk.RIGHT}
+        label_opts = {"font": ("Helvetica", 10), "anchor": tk.E, "justify": tk.RIGHT}
 
         self.applyButton = tk.Button(
-            samplingConfigFrame,
+            sampling_config_frame,
             text="Apply",
-            command=self.applySamplingConfiguration,
+            command=self.apply_sampling_configuration,
             state=tk.DISABLED,
         )
 
         self.samVar = tk.IntVar()
         self.samVar.set(self.n_samples)
         # %P = value of the entry if the edit is allowed
-        vcmdSam = (self.register(self.validateSamVar), "%P")
+        vcmd_sam = (self.register(self.validate_sam_var), "%P")
 
-        samlabel = tk.Label(samplingConfigFrame, text="Num. samples:", **labelOpts)
+        samlabel = tk.Label(sampling_config_frame, text="Num. samples:", **label_opts)
         self.samWid = tk.Entry(
-            samplingConfigFrame, validate="key", textvariable=self.samVar, vcmd=vcmdSam
+            sampling_config_frame, validate="key", textvariable=self.samVar, vcmd=vcmd_sam
         )
 
         self.tStepVar = tk.DoubleVar()
         self.tStepVar.set(self.t_step)
         # %P = value of the entry if the edit is allowed
-        vcmdtStep = (self.register(self.validate_t_step), "%P")
+        vcmd_tstep = (self.register(self.validate_t_step), "%P")
 
-        tSteplabel = tk.Label(samplingConfigFrame, text="time step (\u03bcs):", **labelOpts)
+        t_step_label = tk.Label(sampling_config_frame, text="time step (\u03bcs):", **label_opts)
         self.tStepWid = tk.Entry(
-            samplingConfigFrame, validate="key", textvariable=self.tStepVar, vcmd=vcmdtStep
+            sampling_config_frame, validate="key", textvariable=self.tStepVar, vcmd=vcmd_tstep
         )
 
         self.gridOpts = {"padx": 5, "pady": 5}
@@ -448,14 +459,14 @@ class SequenceEditor_UI(tk.Frame):
         samlabel.grid(row=0, column=0, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"])
         self.samWid.grid(row=0, column=1, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"])
 
-        tSteplabel.grid(row=1, column=0, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"])
+        t_step_label.grid(row=1, column=0, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"])
         self.tStepWid.grid(row=1, column=1, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"])
-        self.tStepTooltip = tooltip.createToolTip(
-            self.tStepWid, f"{10**3 / float(self.tStepWid.get())}kHz rep. rate", openDelay=500
+        self.tStepTooltip = tooltip.create_tool_tip(
+            self.tStepWid, f"{10**3 / float(self.tStepWid.get())}kHz rep. rate", open_delay=500
         )
         self.tStepWid.bind(
             "<FocusOut>",
-            lambda event: self.tStepTooltip.updateText(
+            lambda event: self.tStepTooltip.update_text(
                 f"{10**3 / float(self.tStepWid.get())}kHz rep. rate"
             ),
         )
@@ -464,14 +475,14 @@ class SequenceEditor_UI(tk.Frame):
             row=0, column=2, rowspan=2, padx=self.gridOpts["padx"], pady=self.gridOpts["pady"]
         )
 
-        samplingConfigFrame.pack(side=tk.TOP, padx=15, pady=15, fill=tk.X, expand=1)
+        sampling_config_frame.pack(side=tk.TOP, padx=15, pady=15, fill=tk.X, expand=1)
 
-        globalTimingFrame = tk.LabelFrame(self, text="Global timings", font=("Helvetica", 12))
+        global_timing_frame = tk.LabelFrame(self, text="Global timings", font=("Helvetica", 12))
 
         self.globalTimingRows = []
 
         for timing in self.global_timings:
-            self.globalTimingRows.append(Frame_GlobalTimingRow(globalTimingFrame, *timing))
+            self.globalTimingRows.append(GlobalTimingRowFrame(global_timing_frame, *timing))
 
         i = 0
         for row in self.globalTimingRows:
@@ -481,63 +492,63 @@ class SequenceEditor_UI(tk.Frame):
         icon = Image.open("icons/add_icon.png").resize((12, 12))
         icon = ImageTk.PhotoImage(icon)
         self.addButton = ImageButton(
-            globalTimingFrame,
+            global_timing_frame,
             image=icon,
-            command=lambda: self.addRow(globalTimingFrame),
+            command=lambda: self.add_row(global_timing_frame),
             height=12,
             width=12,
         )
         self.addButton.image_ref = icon  # prevent garbage collection
         self.addButton.grid(row=i, column=0, sticky=tk.W, padx=10, pady=10)
 
-        globalTimingFrame.pack(side=tk.BOTTOM, padx=15, pady=15, fill=tk.BOTH, expand=1)
+        global_timing_frame.pack(side=tk.BOTTOM, padx=15, pady=15, fill=tk.BOTH, expand=1)
 
-        self.bind("<FocusOut>", self.updateGlobalTimings)
-        self.bind("<Leave>", self.updateGlobalTimings)
+        self.bind("<FocusOut>", self.update_global_timings)
+        self.bind("<Leave>", self.update_global_timings)
 
-    def addRow(self, rowFrame):
-        _, nRows = rowFrame.grid_size()
-        self.addButton.grid(row=nRows, column=0, sticky=tk.W, padx=10, pady=10)
+    def add_row(self, row_frame):
+        _, n_rows = row_frame.grid_size()
+        self.addButton.grid(row=n_rows, column=0, sticky=tk.W, padx=10, pady=10)
 
-        namePopup = PopupEntry(
+        name_popup = PopupEntry(
             self,
             "Create global timing",
             "Please enter the name of the new global timing - this cannot be edited after this point.",
         )
         # wait for the popup window to be destroyed before continuing
-        self.winfo_toplevel().wait_window(namePopup.top)
+        self.winfo_toplevel().wait_window(name_popup.top)
 
-        newRow = Frame_GlobalTimingRow(rowFrame, time="", name=namePopup.value)
-        self.globalTimingRows.append(newRow)
-        newRow.grid(
-            row=nRows - 1,
+        new_row = GlobalTimingRowFrame(row_frame, time="", name=name_popup.value)
+        self.globalTimingRows.append(new_row)
+        new_row.grid(
+            row=n_rows - 1,
             column=0,
             sticky=tk.W,
             padx=self.gridOpts["padx"],
             pady=self.gridOpts["pady"],
         )
 
-    def validateSamVar(self, newValue):
+    def validate_sam_var(self, new_value):
         """Check the input is an integer and enable the applySamplingConfiguration button if the new value is not that
         which is currently set on the sequence"""
         try:
-            int(newValue)
+            int(new_value)
         except ValueError:
             return False
-        if int(newValue) != self.n_samples:
+        if int(new_value) != self.n_samples:
             self.applyButton.config(state=tk.NORMAL)
         else:
             self.applyButton.config(state=tk.DISABLED)
         return True
 
-    def validate_t_step(self, newValue):
+    def validate_t_step(self, new_value):
         """Check the input is an float and enable the applySamplingConfiguration button if the new value is not that
         which is currently set on the sequence"""
         try:
-            float(newValue)
+            float(new_value)
         except ValueError:
             return False
-        if float(newValue) != self.t_step:
+        if float(new_value) != self.t_step:
             self.applyButton.config(state=tk.NORMAL)
         else:
             self.applyButton.config(state=tk.DISABLED)
@@ -549,13 +560,13 @@ class SequenceEditor_UI(tk.Frame):
     def set_t_step(self, t_step):
         self.tStepVar.set(t_step)
 
-    def updateGlobalTimings(self, event):
+    def update_global_timings(self, event):
         self.global_timings = [
             (x.time, x.name) for x in self.globalTimingRows if x.isComplete() and x.isActive()
         ]
         self.winfo_toplevel().updateGlobalTimings()  # type: ignore
 
-    def applySamplingConfiguration(self):
+    def apply_sampling_configuration(self):
         """Update self.n_samples and self.t_step
         call up to Sequence_UI to update the sequence
         Sequence validates or rejects changes
@@ -566,7 +577,7 @@ class SequenceEditor_UI(tk.Frame):
         self.winfo_toplevel().updateSequenceSamplingConfiguration()  # type: ignore
 
 
-class Frame_GlobalTimingRow(tk.Frame):
+class GlobalTimingRowFrame(tk.Frame):
     def __init__(self, parent, time="", name="", **kwargs):
         tk.Frame.__init__(self, parent, **kwargs)
 
@@ -575,13 +586,13 @@ class Frame_GlobalTimingRow(tk.Frame):
         self.active = True
 
         self.timeWid = tk.Entry(self)
-        if self.time != None:
+        if self.time is not None:
             self.timeWid.insert(0, self.time)
 
-        self.timeWid.bind("<FocusOut>", self.validateTime)
+        self.timeWid.bind("<FocusOut>", self.validate_time)
 
         self.nameWid = tk.Entry(self)
-        if self.name != None:
+        if self.name is not None:
             self.nameWid.insert(0, self.name)
         self.nameWid.configure(state=tk.DISABLED)
 
@@ -598,7 +609,7 @@ class Frame_GlobalTimingRow(tk.Frame):
         self.timeWid.grid(row=0, column=1, sticky=tk.W, padx=5)
         self.deleteButton.grid(row=0, column=2, sticky=tk.W, padx=5)
 
-    def validateTime(self, params):
+    def validate_time(self, params):
         if self.timeWid.get().strip() == "":
             self.time = self.timeWid.get()
         else:
@@ -610,10 +621,10 @@ class Frame_GlobalTimingRow(tk.Frame):
 
     #     def validateName(self, params):
     #         self.name = self.nameWid.get()
-    def isActive(self):
+    def is_active(self):
         return self.active
 
-    def isComplete(self):
+    def is_complete(self):
         return self.time != "" and self.name != ""
 
     def delete(self):
@@ -626,7 +637,7 @@ class PopupEntry:
         self.value = ""
 
         top = self.top = tk.Toplevel(parent, **kwargs)
-        self.centerWindow()
+        self.center_window()
         top.grab_set()
         top.title(title)
 
@@ -635,39 +646,39 @@ class PopupEntry:
         self.entry = tk.Entry(top)
         self.entry.grid(row=1, column=0, columnspan=2)
 
-        tk.Button(top, text="Confirm", command=self.Confirm).grid(row=2, column=0)
-        tk.Button(top, text="Cancel", command=self.Destroy).grid(row=2, column=1)
+        tk.Button(top, text="Confirm", command=self.confirm).grid(row=2, column=0)
+        tk.Button(top, text="Cancel", command=self.destroy).grid(row=2, column=1)
 
-    def centerWindow(self):
+    def center_window(self):
         """Centers the popup window on it's parent"""
         self.top.update_idletasks()
 
-        topSize = [int(x) for x in self.top.geometry().split("+")[0].split("x")]
-        parentSize = [
+        top_size = [int(x) for x in self.top.geometry().split("+")[0].split("x")]
+        parent_size = [
             int(x)
             for x in self.top.master.winfo_toplevel().winfo_geometry().split("+")[0].split("x")
         ]
-        xParent, yParent = [
+        x_parent, y_parent = [
             int(x) for x in self.top.master.winfo_toplevel().winfo_geometry().split("+")[1:]
         ]
-        xTop, yTop = (
-            xParent + parentSize[0] / 2 - topSize[0] / 2,
-            yParent + parentSize[1] / 2 - topSize[1] / 2,
+        x_top, y_top = (
+            x_parent + parent_size[0] / 2 - top_size[0] / 2,
+            y_parent + parent_size[1] / 2 - top_size[1] / 2,
         )
 
-        self.top.geometry("%dx%d%+d%+d" % tuple(topSize + [xTop] + [yTop]))
+        self.top.geometry(f"{top_size[0]}x{top_size[1]}{int(x_top):+d}{int(y_top):+d}")
 
-    def Confirm(self):
+    def confirm(self):
         self.value = self.entry.get()
-        self.Destroy()
+        self.destroy()
 
-    def Destroy(self):
+    def destroy(self):
         self.top.grab_release()
         self.top.master.focus_set()
         self.top.destroy()
 
 
-class SequencePlot_UI(tk.LabelFrame):
+class SequencePlotUI(tk.LabelFrame):
     def __init__(
         self,
         parent,
@@ -685,55 +696,57 @@ class SequencePlot_UI(tk.LabelFrame):
         self.t = self.sequence.get_time_steps()
         # A dictionary to store the 2dLine matplotlib objects relating to each plotted channel
         self.chPlots = {}
-        for chNum in sequence.get_channel_nums():
-            (chPlot,) = self.ax.plot(
+        for ch_num in sequence.get_channel_nums():
+            (ch_plot,) = self.ax.plot(
                 self.t,
-                self.sequence.get_channel_val_array(chNum),
-                label=self.getLegLabel(chNum, sequence_channel_labels[chNum]),
+                self.sequence.get_channel_val_array(ch_num),
+                label=self.get_legend_label(ch_num, sequence_channel_labels[ch_num]),
             )
-            self.chPlots[chNum] = chPlot
+            self.chPlots[ch_num] = ch_plot
 
         # Always cut the plot tight on the time axis and with a 10% buffer on the value axis
         self.ax.locator_params(axis="x", tight=True)
         self.ax.margins(y=0.1)
         self.rescale_view()
 
-        self.interactiveLegend = self.getInteractiveLegend()
+        self.interactiveLegend = self.get_interactive_legend()
         self.interactiveLegend.show()
 
-    def drawLegend(self):
+    def draw_legend(self):
         self.ax.legend(
             loc="upper left", bbox_to_anchor=(1.05, 1), ncol=1, borderaxespad=0, fontsize=12
         )
         self.fig.subplots_adjust(left=0.05, bottom=0.06, right=0.68, top=0.96)
 
-        self.interactiveLegend = self.getInteractiveLegend()
+        self.interactiveLegend = self.get_interactive_legend()
         self.interactiveLegend.show()
 
-    def getLegLabel(self, chNum, chLabel):
+    def get_legend_label(self, ch_num, ch_label):
         """Convert a channel number and label into a string to be dsiplayed in the plot legend."""
-        return f"Ch {chNum}: {chLabel}"
+        return f"Ch {ch_num}: {ch_label}"
 
-    def updateChLabels(self, sequence_channel_labels):
-        for chNum in self.sequence.get_channel_nums():
-            self.chPlots[chNum].set_label(self.getLegLabel(chNum, sequence_channel_labels[chNum]))
+    def update_channel_labels(self, sequence_channel_labels):
+        for ch_num in self.sequence.get_channel_nums():
+            self.chPlots[ch_num].set_label(
+                self.get_legend_label(ch_num, sequence_channel_labels[ch_num])
+            )
         self.interactiveLegend.destroy()
-        self.interactiveLegend = self.getInteractiveLegend()
+        self.interactiveLegend = self.get_interactive_legend()
         self.interactiveLegend.show()
 
-    def updateChPlot(self, chNum):
+    def update_ch_plot(self, ch_num):
         """Update one of the channel plots to show new y-data (the time data will be unchanged as that is
         set for the whole sequence rather than a single channel)."""
-        self.chPlots[chNum].set_ydata(self.sequence.get_channel_val_array(chNum))
+        self.chPlots[ch_num].set_ydata(self.sequence.get_channel_val_array(ch_num))
         self.rescale_view()
         self.fig.canvas.draw()
 
-    def reloadPlotData(self):
+    def reload_plot_data(self):
         """Reload all plot data from the sequence - typically called after updating variables that affect all channels,
         e.g. update interval, n_samples etc."""
         self.t = self.sequence.get_time_steps()
-        for chNum in self.sequence.get_channel_nums():
-            self.chPlots[chNum].set_data(self.t, self.sequence.get_channel_val_array(chNum))
+        for ch_num in self.sequence.get_channel_nums():
+            self.chPlots[ch_num].set_data(self.t, self.sequence.get_channel_val_array(ch_num))
         self.rescale_view()
         self.fig.canvas.draw()
 
@@ -743,7 +756,7 @@ class SequencePlot_UI(tk.LabelFrame):
         self.ax.relim()
         self.ax.autoscale_view()
 
-    def getInteractiveLegend(self, ax=None):
+    def get_interactive_legend(self, ax=None):
         self.ax.legend(
             loc="upper left", bbox_to_anchor=(1.05, 1), ncol=1, borderaxespad=0, fontsize=12
         )
@@ -770,7 +783,7 @@ class _InteractiveLegend:
         self._drag_anchor_x = 1.0
 
     def _setup_connections(self):
-        handles, labels = self.legend.axes.get_legend_handles_labels()
+        handles, _labels = self.legend.axes.get_legend_handles_labels()
         for artist in self.legend.texts + handles:
             artist.set_picker(10)
 
@@ -859,7 +872,7 @@ class _InteractiveLegend:
         self.toolbar.destroy()
 
 
-class ChannelEditor_UI(tk.Frame):
+class ChannelEditorUI(tk.Frame):
     def __init__(
         self,
         parent,
@@ -877,7 +890,7 @@ class ChannelEditor_UI(tk.Frame):
         self.configured_channel_calibrations = configured_channel_calibrations
 
         self.global_timings = sequence_reader.get_global_timings()
-        self.liveChNum = 0  # Will be modified by the dropdown
+        self.livech_num = 0  # Will be modified by the dropdown
 
         # Before adding widgets lets configure the grid
         self.grid_columnconfigure(0, weight=0, pad=15, uniform="cols")
@@ -898,28 +911,28 @@ class ChannelEditor_UI(tk.Frame):
 
         # Create all the row frames for the different channels
         self.rows, self.rowFrames = {}, {}
-        for chNum in self.sequence.get_channel_nums():
-            self.rows[chNum], self.rowFrames[chNum] = self.createRowsFrame(chNum)
+        for ch_num in self.sequence.get_channel_nums():
+            self.rows[ch_num], self.rowFrames[ch_num] = self.create_rows_frame(ch_num)
 
         # Add the column select drop-down menu
-        self.dropdown = self.createChannelDropdown()
+        self.dropdown = self.create_channel_dropdown()
         self.dropdown.grid(row=1, column=0, sticky=tk.N)
 
-    def refreshRows(self, chNum):
-        self.rowFrames[chNum].destroy()
-        self.rows[chNum], self.rowFrames[chNum] = self.createRowsFrame(chNum)
-        self.channelSelected(self.liveChannel)
+    def refresh_rows(self, ch_num):
+        self.rowFrames[ch_num].destroy()
+        self.rows[ch_num], self.rowFrames[ch_num] = self.create_rows_frame(ch_num)
+        self.channel_selected(self.liveChannel)
 
-    #     def createRowsFrame(self, chNum):
-    #         tV_pairs = self.sequence.get_tV_pairs(chNum)
-    #         V_intervalStyes = self.sequence.get_V_intervalStyles(chNum)
+    #     def createrows_frame(self, ch_num):
+    #         tV_pairs = self.sequence.get_tV_pairs(ch_num)
+    #         V_intervalStyes = self.sequence.get_V_intervalStyles(ch_num)
     #
-    #         rowsFrame = tk.Frame(self)
+    #         rows_frame = tk.Frame(self)
     #         rows = []
     #         # Add a row for every configuer tV_pair on the sequence channel
     #         for i in range(0,len(tV_pairs)):
     #             try:
-    #                 rows.append(Frame_ChannelEditorRow(rowsFrame, tV_pairs[i], V_intervalStyes[i], self.global_timings))
+    #                 rows.append(Frame_ChannelEditorRow(rows_frame, tV_pairs[i], V_intervalStyes[i], self.global_timings))
     #             # It is possible for there to be one fewer interval styles than pairs if the last pair is on the
     #             # final step of the sequence - we presume that is the case here (if we are on the last pair of
     #             # course!) as validation is done when saving / loading the sequence.
@@ -928,57 +941,57 @@ class ChannelEditor_UI(tk.Frame):
     #                     raise err
     #
     #         # Add one extra blank row
-    #         rows.append(Frame_ChannelEditorRow(rowsFrame, global_timings=self.global_timings))
+    #         rows.append(Frame_ChannelEditorRow(rows_frame, global_timings=self.global_timings))
     #
     #         for r in rows:
     #             r.pack()
     #
-    #         return rows, rowsFrame
+    #         return rows, rows_frame
 
-    def _onFrameConfigure(self, rowsCanvas):
+    def _on_frame_configure(self, rows_canvas):
         """Reset the scroll region to encompass the inner frame for a channel rows canvas"""
-        rowsCanvas.configure(scrollregion=rowsCanvas.bbox("all"))
+        rows_canvas.configure(scrollregion=rows_canvas.bbox("all"))
 
-    def createRowsFrame(self, chNum):
-        tV_pairs = self.sequence.get_tv_pairs(chNum)
-        V_intervalStyes = self.sequence.get_v_interval_styles(chNum)
+    def create_rows_frame(self, ch_num):
+        tv_pairs = self.sequence.get_tv_pairs(ch_num)
+        v_interval_styles = self.sequence.get_v_interval_styles(ch_num)
 
-        topFrame = tk.Frame(self)
+        top_frame = tk.Frame(self)
 
         # A load of jazz putting the frame in a canvas with a scrollbar just to get scrolling working
-        rowsCanvas = tk.Canvas(topFrame, borderwidth=0)
-        scrollbar = tk.Scrollbar(topFrame, orient="vertical", command=rowsCanvas.yview)
-        rowsCanvas.configure(yscrollcommand=scrollbar.set)
+        rows_canvas = tk.Canvas(top_frame, borderwidth=0)
+        scrollbar = tk.Scrollbar(top_frame, orient="vertical", command=rows_canvas.yview)
+        rows_canvas.configure(yscrollcommand=scrollbar.set)
 
-        rowsCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        rows_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        rowsFrame = tk.Frame(rowsCanvas)
+        rows_frame = tk.Frame(rows_canvas)
 
-        rowsCanvas.create_window((0, 0), window=rowsFrame, anchor=tk.NW)
-        rowsFrame.bind(
-            "<Configure>", lambda event, canvas=rowsCanvas: self._onFrameConfigure(canvas)
+        rows_canvas.create_window((0, 0), window=rows_frame, anchor=tk.NW)
+        rows_frame.bind(
+            "<Configure>", lambda event, canvas=rows_canvas: self._on_frame_configure(canvas)
         )
 
         # Get the channel calibration if it exists
         try:
-            chCalibration = self.configured_channel_calibrations[chNum]
+            ch_calibration = self.configured_channel_calibrations[ch_num]
         except KeyError:
-            chCalibration = None
+            ch_calibration = None
 
         # Set up whether we are building rows for a configured channel or not.
-        valueUnits = chCalibration[0] if chCalibration else "V"
+        value_units = ch_calibration[0] if ch_calibration else "V"
 
         rows = []
         # Add a row for every configure tV_pair on the sequence channel
-        for i in range(0, len(tV_pairs)):
+        for i in range(0, len(tv_pairs)):
             try:
                 rows.append(
-                    Frame_ChannelEditorRow(
-                        rowsFrame,
-                        tV_pairs[i],
-                        V_intervalStyes[i],
-                        chCalibration,
+                    ChannelEditorRowFrame(
+                        rows_frame,
+                        tv_pairs[i],
+                        v_interval_styles[i],
+                        ch_calibration,
                         self.global_timings,
                     )
                 )
@@ -986,15 +999,15 @@ class ChannelEditor_UI(tk.Frame):
             # final step of the sequence - we presume that is the case here (if we are on the last pair of
             # course!) as validation is done when saving / loading the sequence.
             except IndexError as err:
-                if i != len(tV_pairs) - 1:
+                if i != len(tv_pairs) - 1:
                     raise err
 
         # Add one extra blank row
         rows.append(
-            Frame_ChannelEditorRow(
-                rowsFrame,
+            ChannelEditorRowFrame(
+                rows_frame,
                 interval_style=IntervalStyle.FLAT,
-                channel_calibration=chCalibration,
+                channel_calibration=ch_calibration,
                 global_timings=self.global_timings,
             )
         )
@@ -1006,25 +1019,27 @@ class ChannelEditor_UI(tk.Frame):
         down_icon = ImageTk.PhotoImage(down_icon)
         up_icon = Image.open("icons/up_icon.png").resize((12, 12))
         up_icon = ImageTk.PhotoImage(up_icon)
-        sortRowsButton = tk.Button(
-            rowsFrame,
+        sort_rows_button = tk.Button(
+            rows_frame,
             text="Time (\u03bcs)",
             font=lab_font,
             image=down_icon,
             compound=tk.RIGHT,
             relief=tk.FLAT,
         )
-        sortRowsButton.down_icon = down_icon  # type: ignore
-        sortRowsButton.up_icon = up_icon  # type: ignore
-        sortRowsButton.downState = None  # type: ignore
-        sortRowsButton.configure(
-            command=lambda sortButton=sortRowsButton, rows=rows: self.sortRows(sortButton, rows)
+        sort_rows_button.down_icon = down_icon  # type: ignore
+        sort_rows_button.up_icon = up_icon  # type: ignore
+        sort_rows_button.downState = None  # type: ignore
+        sort_rows_button.configure(
+            command=lambda sort_button=sort_rows_button, rows=rows: self.sort_rows(
+                sort_button, rows
+            )
         )
 
-        value_col_label = tk.Label(rowsFrame, text=f"Value ({valueUnits})", font=lab_font)
-        interval_col_label = tk.Label(rowsFrame, text="Interval style", font=lab_font)
+        value_col_label = tk.Label(rows_frame, text=f"Value ({value_units})", font=lab_font)
+        interval_col_label = tk.Label(rows_frame, text="Interval style", font=lab_font)
 
-        sortRowsButton.grid(row=0, column=0)
+        sort_rows_button.grid(row=0, column=0)
         value_col_label.grid(row=0, column=1)
         interval_col_label.grid(row=0, column=2)
 
@@ -1035,136 +1050,136 @@ class ChannelEditor_UI(tk.Frame):
 
         icon = Image.open("icons/add_icon.png").resize((12, 12))
         icon = ImageTk.PhotoImage(icon)
-        addRowButton = ImageButton(rowsFrame, image=icon)
-        addRowButton.image_ref = icon
-        addRowButton.configure(
-            command=lambda chNum=chNum, chCalibration=chCalibration: self.addRow(
-                rowsFrame, chNum, chCalibration, addRowButton
+        add_row_button = ImageButton(rows_frame, image=icon)
+        add_row_button.image_ref = icon
+        add_row_button.configure(
+            command=lambda ch_num=ch_num, ch_calibration=ch_calibration: self.add_row(
+                rows_frame, ch_num, ch_calibration, add_row_button
             )
         )
-        addRowButton.grid(row=i, column=0, sticky=tk.W)
+        add_row_button.grid(row=i, column=0, sticky=tk.W)
 
-        return rows, topFrame
+        return rows, top_frame
 
-    def addRow(self, rowsFrame, chNum, chCalibration, addRowButton):
+    def add_row(self, rows_frame, ch_num, ch_calibration, add_row_button):
         """Add another row for another time - value pair."""
-        _, nRows = rowsFrame.grid_size()
-        addRowButton.grid(row=nRows, column=0, sticky=tk.W)
+        _, n_rows = rows_frame.grid_size()
+        add_row_button.grid(row=n_rows, column=0, sticky=tk.W)
 
-        newRow = Frame_ChannelEditorRow(
-            rowsFrame,
+        new_row = ChannelEditorRowFrame(
+            rows_frame,
             interval_style=IntervalStyle.FLAT,
-            channel_calibration=chCalibration,
+            channel_calibration=ch_calibration,
             global_timings=self.global_timings,
         )
-        self.rows[chNum].append(newRow)
-        newRow.grid(row=nRows - 1, column=0, columnspan=3)
+        self.rows[ch_num].append(new_row)
+        new_row.grid(row=n_rows - 1, column=0, columnspan=3)
 
-    def sortRows(self, sortButton, rows):
+    def sort_rows(self, sort_button, rows):
         """The function called to sort the rows on a channel by time. Can either order in ascending or descending -
         will toggle between these functionalities on each call by toggling the .downState boolean on the button
         widget.  On the first call (i.e. before the rows have definatively been ordered) it will default to ascending."""
 
         # Find out what order we are sorting the rows into (i.e. the opposite of the current ordering.
-        # Note is sortButton.downState is None (i.e. what it is after initialisation) then newDownState is True.
-        newDownState = not sortButton.downState
+        # Note is sort_button.downState is None (i.e. what it is after initialisation) then new_down_state is True.
+        new_down_state = not sort_button.downState
 
-        rowsWithArgs = [(row, row.grid_info()) for row in rows]
-        populatedRows = sorted([x[1].pop("row") for x in rowsWithArgs])
+        rows_with_args = [(row, row.grid_info()) for row in rows]
+        populated_rows = sorted([x[1].pop("row") for x in rows_with_args])
 
-        def getTime(rowWithArgs, undefinedIsPositive):
-            t = rowWithArgs[0].get_tV_pair()[0]
+        def get_time(row_with_args, undefined_is_postive):
+            t = row_with_args[0].get_tV_pair()[0]
             # If t can't be converted to a float (i.e. the widget isn't fully filled in)
             # return infinity so it is ordered accordingly.
             try:
                 float(t)
             except ValueError:
-                t = np.inf if undefinedIsPositive else -np.inf
+                t = np.inf if undefined_is_postive else -np.inf
             return t
 
-        rowsWithArgs = sorted(
-            rowsWithArgs, key=lambda x: getTime(x, newDownState), reverse=not newDownState
+        rows_with_args = sorted(
+            rows_with_args, key=lambda x: get_time(x, new_down_state), reverse=not new_down_state
         )
 
-        for row, args in rowsWithArgs:
+        for row, args in rows_with_args:
             row.grid_forget()
-            row.grid(row=populatedRows.pop(0), **args)
+            row.grid(row=populated_rows.pop(0), **args)
 
         # Set the new state of the widget and configure the direction of the arrow accordingly.
-        sortButton.downState = newDownState
-        sortButton.configure(
-            image=sortButton.down_icon if sortButton.downState else sortButton.up_icon
+        sort_button.downState = new_down_state
+        sort_button.configure(
+            image=sort_button.down_icon if sort_button.downState else sort_button.up_icon
         )
-        # print sortButton.state #AttributeError
+        # print sort_button.state #AttributeError
 
-    def createChannelDropdown(self):
+    def create_channel_dropdown(self):
 
-        channelOptions = []
+        channel_options = []
 
-        for chNum in self.sequence.get_channel_nums():
-            channelOptions.append(self.sequence_channel_labels[chNum])
+        for ch_num in self.sequence.get_channel_nums():
+            channel_options.append(self.sequence_channel_labels[ch_num])
 
         self.liveChannel = tk.StringVar(self)
-        self.liveChannel.set(channelOptions[0])  # default value
-        self.channelSelected(self.liveChannel)
+        self.liveChannel.set(channel_options[0])  # default value
+        self.channel_selected(self.liveChannel)
 
-        #         dropdown = applySamplingConfiguration(tk.OptionMenu, (self, liveChannel) + tuple(channelOptions))
+        #         dropdown = applySamplingConfiguration(tk.OptionMenu, (self, liveChannel) + tuple(channel_options))
         dropdown = ttk.OptionMenu(
             self,
             self.liveChannel,
-            channelOptions[0],
-            *channelOptions,
-            command=lambda x: self.channelSelected(self.liveChannel),
+            channel_options[0],
+            *channel_options,
+            command=lambda x: self.channel_selected(self.liveChannel),
         )
         return dropdown
 
-    def channelSelected(self, liveChannel):
-        self.rowFrames[self.liveChNum].grid_forget()
-        self.liveChNum = next(
-            x[0] for x in self.sequence_channel_labels.items() if x[1] == liveChannel.get()
+    def channel_selected(self, live_channel):
+        self.rowFrames[self.livech_num].grid_forget()
+        self.livech_num = next(
+            x[0] for x in self.sequence_channel_labels.items() if x[1] == live_channel.get()
         )
-        self.rowFrames[self.liveChNum].grid(
+        self.rowFrames[self.livech_num].grid(
             row=1, column=1, columnspan=3, sticky=tk.N + tk.S + tk.W + tk.E
         )
 
-    def updateChannelLabels(self, sequence_channel_labels):
+    def update_channel_labels(self, sequence_channel_labels):
         self.sequence_channel_labels = sequence_channel_labels
         #         self.currentChannel get
 
-        channelOptions = []
-        for chNum in self.sequence.get_channel_nums():
-            channelOptions.append(self.sequence_channel_labels[chNum])
-        #             self.dropdown['menu'].add_command(label=channelOptions[-1], command=tk._setit(self.liveChannel, channelOptions[-1]))
+        channel_options = []
+        for ch_num in self.sequence.get_channel_nums():
+            channel_options.append(self.sequence_channel_labels[ch_num])
+        #             self.dropdown['menu'].add_command(label=channel_options[-1], command=tk._setit(self.liveChannel, channel_options[-1]))
 
         self.dropdown.set_menu(
             self.liveChannel.get()
-            if self.liveChannel.get() in channelOptions
-            else channelOptions[0],
-            *channelOptions,
+            if self.liveChannel.get() in channel_options
+            else channel_options[0],
+            *channel_options,
         )
 
-    #         if not self.liveChannel.get() in channelOptions:
-    #             self.liveChannel.set(channelOptions[0])
+    #         if not self.liveChannel.get() in channel_options:
+    #             self.liveChannel.set(channel_options[0])
 
-    def updateChannelCalibrations(self, configured_channel_calibrations):
+    def update_channel_calibrations(self, configured_channel_calibrations):
         self.configured_channel_calibrations = configured_channel_calibrations
 
-        for chNum in [k for k, _ in self.rows.items()]:
-            self.refreshRows(chNum)
+        for ch_num in [k for k, _ in self.rows.items()]:
+            self.refresh_rows(ch_num)
 
-    def getChannelSequence(self, chNum):
-        tV_pairs = []
+    def get_channel_sequence(self, ch_num):
+        tv_pairs = []
         interval_styles = []
 
-        for row in self.rows[chNum]:
+        for row in self.rows[ch_num]:
             if row.isComplete():
-                tV_pairs.append(row.get_tV_pair())
+                tv_pairs.append(row.get_tV_pair())
                 interval_styles.append(row.get_interval_style())
 
-        return tV_pairs, interval_styles
+        return tv_pairs, interval_styles
 
 
-class Frame_ChannelEditorRow(tk.Frame):
+class ChannelEditorRowFrame(tk.Frame):
     """
     A sub-class of a Tkinter.Frame to create a row in the sequence editor and have all it's widgets/values
     persist..
@@ -1173,12 +1188,14 @@ class Frame_ChannelEditorRow(tk.Frame):
     def __init__(
         self,
         parent,
-        tV_pair=(None, None),
+        tv_pair=(None, None),
         interval_style=None,
         channel_calibration=None,
-        global_timings=[],
+        global_timings=None,
         **kwargs,
     ):
+        if global_timings is None:
+            global_timings = []
         tk.Frame.__init__(self, parent, **kwargs)
 
         #         self.tV_pair = tV_pair
@@ -1201,11 +1218,11 @@ class Frame_ChannelEditorRow(tk.Frame):
         #         self.intervalWid.configure('indicatoron'=False)
 
         # Set the initial values if a tV_pair was provided (no need to trigger an update as everything is being initialised)
-        if tV_pair != (None, None):
-            self.tWid.setValue(tV_pair[0], triggerUpdate=False)
-            self.vWid.setValue(tV_pair[1], triggerUpdate=False)
-        if interval_style != None:
-            self.intervalWid.setValue(interval_style, triggerUpdate=False)
+        if tv_pair != (None, None):
+            self.tWid.set_value(tv_pair[0], trigger_update=False)
+            self.vWid.set_value(tv_pair[1], trigger_update=False)
+        if interval_style is not None:
+            self.intervalWid.set_value(interval_style, trigger_update=False)
 
         self.tWid.grid(row=0, column=0)
         self.vWid.grid(row=0, column=1)
@@ -1215,14 +1232,14 @@ class Frame_ChannelEditorRow(tk.Frame):
         self.grid_columnconfigure(1, weight=1, pad=3, uniform="cols")
         self.grid_columnconfigure(2, weight=1, pad=3, uniform="cols")
 
-    def get_tV_pair(self):
+    def get_tv_pair(self):
         return (self.tWid.value, self.vWid.value)
 
     def get_interval_style(self):
         return self.intervalWid.value
 
-    def isComplete(self):
-        return "" not in self.get_tV_pair() and self.get_interval_style() != ""
+    def is_complete(self):
+        return "" not in self.get_tv_pair() and self.get_interval_style() != ""
 
 
 class TimeCombobox(ttk.Combobox):
@@ -1232,40 +1249,40 @@ class TimeCombobox(ttk.Combobox):
         self.value_labels = value_labels
         self.value = self.get()
 
-        self.bind("<<ComboboxSelected>>", self.onValidate)
-        self.bind("<FocusOut>", self.onValidate)
+        self.bind("<<ComboboxSelected>>", self.on_validate)
+        self.bind("<FocusOut>", self.on_validate)
 
-    def setValue(self, newValue, triggerUpdate=True):
+    def set_value(self, new_value, trigger_update=True):
         """Set the stored widget value as an appropriate float and the displayed
         value as the appropriate label if one exists."""
         # If the newValue is a value label - register the value as the corresponding value_option
         try:
-            self.value = float(self.value_options[self.value_labels.index(newValue)])
+            self.value = float(self.value_options[self.value_labels.index(new_value)])
         except ValueError:
-            self.value = float(newValue) if newValue != "" else newValue
+            self.value = float(new_value) if new_value != "" else new_value
         # If the new value corresponds to a value_label, display the label instead of the value
         try:
-            self.set(self.value_labels[self.value_options.index(float(newValue))])
+            self.set(self.value_labels[self.value_options.index(float(new_value))])
         except ValueError:
-            self.set(newValue)
+            self.set(new_value)
 
-        if triggerUpdate:
+        if trigger_update:
             self.winfo_toplevel().updateLiveSequenceChannel()  # type: ignore
 
-    def onValidate(self, event):
-        if self.doValidation(self.get()):
-            self.setValue(self.get(), triggerUpdate=True)
+    def on_validate(self, event):
+        if self.do_validation(self.get()):
+            self.set_value(self.get(), trigger_update=True)
         else:
             self.set(self.value)
 
-    def doValidation(self, newValue):
+    def do_validation(self, new_value):
         # Pre-configured options are automatically valid
-        if newValue in self.value_labels or newValue.strip() == "":
+        if new_value in self.value_labels or new_value.strip() == "":
             return True
         # otherwise make sure the entry can be converted to a float
         else:
             try:
-                float(newValue)
+                float(new_value)
                 return True
             except ValueError:
                 return False
@@ -1278,37 +1295,37 @@ class ValueEntry(ttk.Entry):
         """
         tk.Entry.__init__(self, parent)
 
-        self.bind("<FocusOut>", self.focusOut)
+        self.bind("<FocusOut>", self.focus_out)
         self.value = self.get()
 
-    def setValue(self, newValue, triggerUpdate=True):
-        self.value = newValue
+    def set_value(self, new_value, trigger_update=True):
+        self.value = new_value
         self.delete(0, tk.END)
         self.insert(0, self.value)
 
-        if triggerUpdate:
+        if trigger_update:
             self.winfo_toplevel().updateLiveSequenceChannel()  # type: ignore
 
-    def focusOut(self, params):
+    def focus_out(self, params):
         # If the entry can be converted to a float it is valid, otherwise do not update
         # the stored value
         try:
-            self.setValue(float(self.get()), triggerUpdate=True)
+            self.set_value(float(self.get()), trigger_update=True)
         except ValueError:
             # A blank entry is allowed
             if self.get().strip() == "":
-                self.setValue("")
+                self.set_value("")
             else:
-                self.setValue(self.value)
+                self.set_value(self.value)
 
 
 class CalibratedValueEntry(ValueEntry):
     """A value entry for a calibrated channel - subclasses ValueEntry but extends it
     to run user input values through a calibration function before storing/updating"""
 
-    def __init__(self, parent, calibrationToValFunc, calibrationFromValFunc):
-        self.calibrationToValFunc = calibrationToValFunc
-        self.calibrationFromValFunc = calibrationFromValFunc
+    def __init__(self, parent, calibration_to_value_func, calibration_from_value_func):
+        self.calibrationToValFunc = calibration_to_value_func
+        self.calibrationFromValFunc = calibration_from_value_func
         ValueEntry.__init__(self, parent)
 
     def get(self):
@@ -1325,17 +1342,17 @@ class CalibratedValueEntry(ValueEntry):
 class IntervalStyleDropdown(tk.OptionMenu):
     def __init__(self, parent, variable, value_options, **kwargs):
         tk.OptionMenu.__init__(
-            self, parent, variable, *value_options, command=self.focusOut, **kwargs
+            self, parent, variable, *value_options, command=self.focus_out, **kwargs
         )
         self.variable = variable
         self.value = self.variable.get()
 
-    def setValue(self, newValue, triggerUpdate=True):
-        self.value = newValue
-        self.variable.set(IntervalStyle.to_string(newValue))
+    def set_value(self, new_value, trigger_update=True):
+        self.value = new_value
+        self.variable.set(IntervalStyle.to_string(new_value))
 
-        if triggerUpdate:
+        if trigger_update:
             self.winfo_toplevel().updateLiveSequenceChannel()  # type: ignore
 
-    def focusOut(self, params):
-        self.setValue(IntervalStyle.from_string(self.variable.get()), triggerUpdate=True)
+    def focus_out(self, params):
+        self.set_value(IntervalStyle.from_string(self.variable.get()), trigger_update=True)

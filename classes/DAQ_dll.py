@@ -1629,7 +1629,7 @@ class DAQ2502:
         err = dll.D2K_DIO_PortConfig(self.card, port, direction)
         if err != 0:
             print(err)
-            raise Daq2502Exception("Error configuring the digital line", err)
+            raise Daq2502Error("Error configuring the digital line", err)
 
     # Digital output
     def write_digital_port(self, bit_values, port):
@@ -1678,8 +1678,10 @@ class DAQ2502:
     )
 
 
-class Daq2502Exception(Exception):
-    def __init__(self, message, errors=[]):
+class Daq2502Error(Exception):
+    def __init__(self, message, errors=None):
         # Call the base class constructor with the parameters it needs
+        if errors is None:
+            errors = []
         super().__init__(message)
         self.errors = errors

@@ -18,7 +18,7 @@ from typing import Any, Optional, cast
 import numpy as np
 from configobj import ConfigObj
 
-from classes.DAQ import (
+from classes.daq import (
     INPUT_LINE,
     OUTPUT_LINE,
     Channel_P1A,
@@ -45,7 +45,7 @@ from classes.experimental_configs import (
 )
 
 # from instruments.WX218x.WX218x_awg import Channel
-from classes.Sequence import Sequence
+from classes.sequence import Sequence
 
 GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 

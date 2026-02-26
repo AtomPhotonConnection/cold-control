@@ -20,7 +20,7 @@ except (OSError, FileNotFoundError, ImportError):
 from UI_classes.UI_helpers import ImageButton
 
 
-class Camera_UI(tk.LabelFrame):
+class CameraUI(tk.LabelFrame):
     """
     Allows the user to display a live stream from a camera.
     """
@@ -74,16 +74,16 @@ class Camera_UI(tk.LabelFrame):
 
         self.button_frame = tk.Frame(self)
         self.startCameraButton = tk.Button(
-            self.button_frame, text="Start camera", command=self.startCamera
+            self.button_frame, text="Start camera", command=self.start_camera
         )
         self.startCameraButton.pack(side=tk.LEFT)
         self.stopCameraButton = tk.Button(
-            self.button_frame, text="Stop camera", command=self.stopCamera
+            self.button_frame, text="Stop camera", command=self.stop_camera
         )
         self.stopCameraButton.pack(side=tk.RIGHT)
         icon = ImageTk.PhotoImage(Image.open("icons/config_icon.png").resize((30, 30)))
         self.configure_camera_button = ImageButton(
-            self.button_frame, image=icon, width=25, height=25, command=self.cameraConfigButton
+            self.button_frame, image=icon, width=25, height=25, command=self.camera_config_button
         )
         self.configure_camera_button.pack(side=tk.RIGHT)
         self.configure_camera_button.image_ref = icon  # prevent garbage collection
@@ -92,7 +92,7 @@ class Camera_UI(tk.LabelFrame):
         self.button_frame.grid(row=1, column=0)
 
         # As we don't automatically start streaming display a camera icon.
-        self.updateDisplayedFrame(Image.open("icons/camera_icon.png").resize(self.video_dims))
+        self.update_displayed_frame(Image.open("icons/camera_icon.png").resize(self.video_dims))
 
         # This binding is trggered when the UI resizes and changes the video dimensions accordingly.
         self.bind("<Configure>", self._resize_image)
@@ -109,13 +109,13 @@ class Camera_UI(tk.LabelFrame):
         self.video_dims = (new_width, int(new_width / self.video_aspect_ratio))
         self.video_frame.configure(height=self.video_dims[1], width=self.video_dims[0])
         if self.pil_image_cache is not None:
-            self.updateDisplayedFrame(self.pil_image_cache)
+            self.update_displayed_frame(self.pil_image_cache)
 
-    def startCamera(self):
+    def start_camera(self):
         """
         Set up the camera, start streaming and start updating the displayed frame.
         """
-        self.prepareCamera(self.cam)
+        self.prepare_camera(self.cam)
 
         if not self.cam.callback_registered:
             self.cam.register_frame_ready_callback()
@@ -123,12 +123,12 @@ class Camera_UI(tk.LabelFrame):
         self.is_live = True
         self.parent.camera_live = True  # set the variable for the parent
 
-        self.takeFrame(1000)
+        self.take_frame(1000)
         self.startCameraButton.config(bg="SystemButtonFace")
         self.stopCameraButton.config(bg="red")
         print("Camera is live")
 
-    def prepareCamera(self, cam):
+    def prepare_camera(self, cam):
         """
         Gets the camera ready to stream live.
         TODO - move these values into the UI and away from being hardcoded.
@@ -149,7 +149,7 @@ class Camera_UI(tk.LabelFrame):
         # Store frames per ms to stop us having to constantly poll the camera for it.
         self.cam_fpms = int(10.0**3 / self.cam.get_frame_rate())
 
-    def stopCamera(self):
+    def stop_camera(self):
         self.is_live = False
         self.parent.camera_live = False
         self.after(self.cam_fpms, self.cam.stop_live())
@@ -157,7 +157,7 @@ class Camera_UI(tk.LabelFrame):
         self.stopCameraButton.config(bg="SystemButtonFace")
         print("Camera is stopped")
 
-    def takeFrame(self, cam_frame_timeout):
+    def take_frame(self, cam_frame_timeout):
         """
         Wait until the camera has a fresh frame, poll for it, convert it to greyscale, rotate it to the correct orientation and display it
         """
@@ -170,12 +170,12 @@ class Camera_UI(tk.LabelFrame):
             .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         )
         #
-        self.updateDisplayedFrame(img)
+        self.update_displayed_frame(img)
 
         if self.is_live:
-            self.img.after(self.cam_fpms, lambda: self.takeFrame(1000))
+            self.img.after(self.cam_fpms, lambda: self.take_frame(1000))
 
-    def updateDisplayedFrame(self, image):
+    def update_displayed_frame(self, image):
         """
         Resize the image to the current video dimensions and update the display.
         """
@@ -187,12 +187,12 @@ class Camera_UI(tk.LabelFrame):
         )
         self.update()
 
-    def cameraConfigButton(self):
-        config_UI = Camera_configuration_UI(self, self.cam)
-        self.winfo_toplevel().wait_window(config_UI)
+    def camera_config_button(self):
+        config_ui = CameraConfigurationUI(self, self.cam)
+        self.winfo_toplevel().wait_window(config_ui)
         self.winfo_toplevel().focus_set()
 
-    def closeCameras(self):
+    def close_cameras(self):
         """
         Closes any live cameras.
         """
@@ -203,7 +203,7 @@ class Camera_UI(tk.LabelFrame):
             self.ic_ic.close_library()
 
 
-class Camera_configuration_UI(tk.Toplevel):
+class CameraConfigurationUI(tk.Toplevel):
     def __init__(self, parent, camera, **kwargs):
         """This object allows the user to edit the properties of the currently selected camera."""
         tk.Toplevel.__init__(self, parent, **kwargs)
@@ -229,7 +229,7 @@ class Camera_configuration_UI(tk.Toplevel):
         r = 0
         for info in self.properties:
             label, entry, slider, auto_check = self.__get_property_wids(
-                *info, inverse=True if info[0] == "exposure" else False
+                *info, inverse=info[0] == "exposure"
             )
 
             label.grid(row=r, column=0)
@@ -251,7 +251,7 @@ class Camera_configuration_UI(tk.Toplevel):
         self.wm_title("Camera configuration")
         self.grab_set()
         # Changes the close button to call my close function.
-        self.protocol("WM_DELETE_WINDOW", self.closeWindow)
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
 
     def __get_property_wids(self, label, property, inverse=False):
         """
@@ -326,7 +326,8 @@ class Camera_configuration_UI(tk.Toplevel):
                 property.auto = auto_enabled
 
                 def update_wids(property, entry_wid, slider_wid):
-                    value = property.value
+                    # What is this function doing? Value is assigned but not used
+                    value = property.value  # noqa: F841
 
                 # Update the state and values of the entry and slider widgets depending on if auto is enabled or disabled.
                 user_wid_state = tk.DISABLED if auto_enabled else tk.NORMAL
@@ -382,7 +383,7 @@ class Camera_configuration_UI(tk.Toplevel):
         frame = tk.Frame(self)
 
         apply_button = tk.Button(
-            frame, text="Apply", command=lambda: self.closeWindow(False), width=15, bg="green"
+            frame, text="Apply", command=lambda: self.close_window(False), width=15, bg="green"
         )
         cancel_button = tk.Button(frame, text="Cancel", command=self.cancel, width=15, bg="red")
         apply_button.grid(row=0, column=0, sticky=tk.E)
@@ -395,7 +396,7 @@ class Camera_configuration_UI(tk.Toplevel):
         Revert changes and close the window.
         """
         self.revert()
-        self.closeWindow(False)
+        self.close_window(False)
 
     def revert(self):
         """
@@ -404,10 +405,10 @@ class Camera_configuration_UI(tk.Toplevel):
         for info in self.init_vals_info:
             prop, init_auto, init_val = info
             prop.value = init_val
-            if init_auto != None:
+            if init_auto is not None:
                 prop.auto = init_auto
 
-    def closeWindow(self, ask_to_apply_changes=True):
+    def close_window(self, ask_to_apply_changes=True):
         """
         Close the top window.
         """
@@ -415,7 +416,7 @@ class Camera_configuration_UI(tk.Toplevel):
             apply_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit", "Would you like to apply these changes?", parent=self
             )
-            if apply_on_exit == None:
+            if apply_on_exit is None:
                 return
             if not apply_on_exit:
                 self.revert()

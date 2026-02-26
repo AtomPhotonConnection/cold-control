@@ -8,11 +8,11 @@ from typing import Any
 
 import classes.Styles as Styles
 from classes.config_readers import ConfigReader, ExperimentConfigReader
-from UI_classes.Camera_UI import Camera_UI
-from UI_classes.DAQ_UI import DAQ_UI
+from UI_classes.Camera_UI import CameraUI
+from UI_classes.DAQ_UI import DaqUI
 from UI_classes.Experimental_UI import ExperimentalUI
-from UI_classes.Labbook_UI import Labbook_UI
-from UI_classes.Sequence_UI import Sequence_UI
+from UI_classes.Labbook_UI import LabbookUI
+from UI_classes.Sequence_UI import DaqSequenceUI
 
 # For logging on ALWE61 lab PC
 logging.basicConfig(
@@ -57,7 +57,7 @@ class ColdControlUI(tk.Frame):
 
         """Load DAQ channels and cards from the config file.  Set up the DAQ_controller with these."""
         self.daq_config_fname = self.config_reader.get_daq_config_fname()
-        self.daq_UI = DAQ_UI(self, self.daq_config_fname, development_mode=self.development_mode)
+        self.daq_UI = DaqUI(self, self.daq_config_fname, development_mode=self.development_mode)
 
         """Load a sequence — prefer from experiment config, fall back to rootConfig."""
         self.experiment_config_fname = self.config_reader.get_experiment_config_fname()
@@ -70,7 +70,7 @@ class ColdControlUI(tk.Frame):
             self.sequence_fname = self.config_reader.get_sequence_fname()
             sequence = None  # Sequence_UI will load from fname
 
-        self.sequence_ui = Sequence_UI(
+        self.sequence_ui = DaqSequenceUI(
             self,
             self.sequence_fname,
             self.daq_UI.daq_controller.get_channel_number_name_dict(only_visible=False),
@@ -79,7 +79,7 @@ class ColdControlUI(tk.Frame):
         )
 
         """Start up the camera UI."""
-        self.camera_UI = Camera_UI(self, ic_imaging_control=None)
+        self.camera_UI = CameraUI(self, ic_imaging_control=None)
         self.camera_live = (
             self.camera_UI.is_live
         )  # monitors status of camera to prevent taking photos while camera is live
@@ -99,7 +99,7 @@ class ColdControlUI(tk.Frame):
         )
 
         """Initialise the labook UI"""
-        self.labbook_UI = Labbook_UI(self)
+        self.labbook_UI = LabbookUI(self)
 
         """Configure the interface and place the displays for each UI appropriately."""
         self.grid_columnconfigure(0, weight=1, pad=3, uniform="cols")
@@ -145,7 +145,7 @@ class ColdControlUI(tk.Frame):
             print("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
             print("Closing camera connections...")
-            self.camera_UI.closeCameras()
+            self.camera_UI.close_cameras()
             print("...all camera connections closed.")
             print("Releasing DAQ cards...")
             if not self.development_mode:

@@ -24,10 +24,10 @@ import pandas as pd
 # In development mode (or on machines without the DLL), these will be stubs.
 # ---------------------------------------------------------------------------
 if TYPE_CHECKING:
-    from .DAQ_dll import DAQ2502, Daq2502Exception, dll
+    from .daq_dll import DAQ2502, Daq2502Error, dll
 else:
     try:
-        from classes.DAQ_dll import DAQ2502, Daq2502Exception, dll
+        from classes.daq_dll import DAQ2502, Daq2502Error, dll
     except (OSError, ImportError):
         dll = None  # type: ignore[assignment]
 
@@ -36,7 +36,7 @@ else:
         class _Daq2502Error(Exception): ...
 
         DAQ2502 = _DAQ2502
-        Daq2502Exception = _Daq2502Error
+        Daq2502Error = _Daq2502Error
 
         print("[DAQ] D2K-Dask64 DLL not available — running with stub DAQ2502.")
 
@@ -964,7 +964,7 @@ class DAQCard(DAQ2502):  # type: ignore
 
                 registered_lines.append(dio)
 
-            except Daq2502Exception:
+            except Daq2502Error:
                 print(
                     f"Error configuring digital line ('{dio.dio_name}') on card {dio.dio_name}, port {self.card}, line {dio.port}.  Not registering line."
                 )
