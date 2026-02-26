@@ -10,7 +10,7 @@ from instruments.WX218x.WX218x_DLL import (
     WX218x_TriggerSlope,
 )
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 
 # Constants for marker configuration
 

@@ -7,8 +7,8 @@ Created on 25 Mar 2016
 import tkinter as tk
 
 # from tkinter import font as tkFont
-from tkinter import filedialog as tkFileDialog
-from tkinter import messagebox as tkMessageBox
+from tkinter import filedialog as tk_file_dialog
+from tkinter import messagebox as tk_message_box
 from tkinter import ttk
 
 import matplotlib.pyplot as plt
@@ -23,11 +23,11 @@ from PIL import Image, ImageTk
 import UI_classes.ToolTip_UI as tooltip
 
 # import wx
-from classes.Config import SequenceReader, SequenceWriter
+from classes.config_readers import SequenceReader, SequenceWriter
 from classes.Sequence import (
     IntervalStyle,
-    InvalidSequenceChannelException,
-    MultipleInvalidSequenceChannelException,
+    InvalidSequenceChannelError,
+    MultipleInvalidSequenceChannelError,
     Sequence,
 )
 
@@ -78,7 +78,7 @@ class Sequence_UI(tk.Toplevel):
         self.sequence_fname: str = sequence_fname
         print(f"Loading sequence from file: {self.sequence_fname}")
         self.sequence_reader = SequenceReader(self.sequence_fname)
-        self.sequence: Sequence = self.sequence_reader.loadSequence()
+        self.sequence: Sequence = self.sequence_reader.load_sequence()
         self.configured_channel_labels: dict = configured_channel_labels
         self.configured_channel_calibrations: dict = configured_channel_calibrations
 
@@ -152,7 +152,7 @@ class Sequence_UI(tk.Toplevel):
         created.  If a channel number is given but not expected it is removed from the list."""
         sequence_channel_labels = {}
 
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             try:
                 chLab = configured_channel_labels[chNum]
             except KeyError:
@@ -168,26 +168,26 @@ class Sequence_UI(tk.Toplevel):
         self.CloseButton = tk.Button(buttons, text="Close", command=self.closeWindow)
         self.CloseButton.grid(row=1, column=0, padx=5, pady=5, sticky=tk.S + tk.E)
 
-        self.saveLoadButtons = tk.Frame(buttons)
-        self.LoadButton = tk.Button(
-            self.saveLoadButtons, text="Load sequence", command=self.loadSeq
-        )
-        self.SaveButton = tk.Button(
-            self.saveLoadButtons, text="Save sequence", command=self.saveSeq
-        )
-        self.LoadButton.pack(side=tk.TOP, padx=5, pady=5)
-        self.SaveButton.pack(side=tk.TOP, padx=5, pady=5)
-        self.saveLoadButtons.grid(row=0, column=0, padx=5, pady=5, sticky=tk.N + tk.E)
+        # self.saveLoadButtons = tk.Frame(buttons)
+        # self.LoadButton = tk.Button(
+        #     self.saveLoadButtons, text="Load sequence", command=self.loadSeq
+        # )
+        # self.SaveButton = tk.Button(
+        #     self.saveLoadButtons, text="Save sequence", command=self.saveSeq
+        # )
+        # self.LoadButton.pack(side=tk.TOP, padx=5, pady=5)
+        # self.SaveButton.pack(side=tk.TOP, padx=5, pady=5)
+        # self.saveLoadButtons.grid(row=0, column=0, padx=5, pady=5, sticky=tk.N + tk.E)
 
         return buttons
 
     def loadSeq(self):
-        fname = tkFileDialog.askopenfilename(title="Load a sequence", initialdir="")
+        fname = tk_file_dialog.askopenfilename(title="Load a sequence", initialdir="")
 
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname != "":
             self.sequence_reader = SequenceReader(fname)
-            self.sequence: Sequence = self.sequence_reader.loadSequence()
+            self.sequence: Sequence = self.sequence_reader.load_sequence()
 
             self.configureForCurrentSequence()
 
@@ -195,7 +195,7 @@ class Sequence_UI(tk.Toplevel):
         self.lift(self.parent)
 
     def saveSeq(self):
-        fname = tkFileDialog.asksaveasfilename(title="Save a sequence")
+        fname = tk_file_dialog.asksaveasfilename(title="Save a sequence")
         # Check for empyy filenames (i.e. when the user cancelled the acion)
         if fname != "":
             writer = SequenceWriter(fname)
@@ -227,9 +227,9 @@ class Sequence_UI(tk.Toplevel):
         liveChNum = self.chEditor.liveChNum
         tV_pairs, interval_styles = self.chEditor.getChannelSequence(liveChNum)
         try:
-            self.sequence.updateChannel(liveChNum, tV_pairs, interval_styles)
+            self.sequence.update_channel(liveChNum, tV_pairs, interval_styles)
             self.seqPlot.updateChPlot(liveChNum)
-        except InvalidSequenceChannelException as err:
+        except InvalidSequenceChannelError as err:
             # The new sequence was invalid and the update rejected - refresh the rows
             # for the live channel to reverse the changes made.
             self.chEditor.refreshRows(liveChNum)
@@ -239,7 +239,7 @@ class Sequence_UI(tk.Toplevel):
 
     def updateGlobalTimings(self):
         self.chEditor.global_timings = self.seqEditor.global_timings
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             self.chEditor.refreshRows(chNum)
 
     def updateSequenceSamplingConfiguration(self):
@@ -260,21 +260,21 @@ class Sequence_UI(tk.Toplevel):
         # Depending on how long the new sequence is, channels may need to be manually changed.  These changes will be entered in this
         # dictionary to be passed to the update function later.
         channelsToUpdate = {}
-        if newSeqLength > self.sequence.getLength():
-            result = tkMessageBox.askquestion(
+        if newSeqLength > self.sequence.get_length():
+            result = tk_message_box.askquestion(
                 "Please confirm changes",
-                f"Sequence length will be increased from {self.sequence.getLength()} to {newSeqLength}. Channels will be set as constant from their current end values to compensate."
+                f"Sequence length will be increased from {self.sequence.get_length()} to {newSeqLength}. Channels will be set as constant from their current end values to compensate."
                 + "\nIs that ok?",
                 icon="warning",
             )
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
             if result == "yes":
-                for chNum in self.sequence.getChannelNums():
+                for chNum in self.sequence.get_channel_nums():
                     # fill in channelsToUpdate dict.
                     tV_pairs, interval_styles = (
-                        self.sequence.get_tV_pairs(chNum),
-                        self.sequence.get_V_intervalStyles(chNum),
+                        self.sequence.get_tv_pairs(chNum),
+                        self.sequence.get_v_interval_styles(chNum),
                     )
                     # If there are more value pairs than interval styles, the last pair was on the final time step of the old sequence.
                     # For the new (longer) sequence this would be invalid, so add another interval style to take this final value and
@@ -286,17 +286,17 @@ class Sequence_UI(tk.Toplevel):
                 resetChanges()
                 return
 
-        elif newSeqLength < self.sequence.getLength():
-            result = tkMessageBox.askquestion(
+        elif newSeqLength < self.sequence.get_length():
+            result = tk_message_box.askquestion(
                 "Please confirm changes",
-                f"Sequence length will be decreased from {self.sequence.getLength()} to {newSeqLength}. Channels will be cropped with there last time interval being made constant to compensate."
+                f"Sequence length will be decreased from {self.sequence.get_length()} to {newSeqLength}. Channels will be cropped with there last time interval being made constant to compensate."
                 + "\nIs that ok?",
                 icon="warning",
             )
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
             if result == "yes":
-                for chNum in self.sequence.getChannelNums():
+                for chNum in self.sequence.get_channel_nums():
                     tV_pairs, interval_styles = self.chEditor.getChannelSequence(chNum)
                     # Cut any tV pairs that are not outside the sequence length
                     tV_pairs = sorted(
@@ -320,20 +320,20 @@ class Sequence_UI(tk.Toplevel):
 
         # Try to update the timing variables on the sequence
         try:
-            self.sequence.updateTimeSteps(
-                self.seqEditor.n_samples, self.seqEditor.t_step, channelsToUpdate=channelsToUpdate
+            self.sequence.update_time_steps(
+                self.seqEditor.n_samples, self.seqEditor.t_step, channels_to_update=channelsToUpdate
             )
             self.seqPlot.reloadPlotData()
             self.chEditor.refreshRows(self.chEditor.liveChNum)
 
         # Catch validation errors, reset the variables in the UI and display an appropriate warning message
-        except MultipleInvalidSequenceChannelException as mulErr:
+        except MultipleInvalidSequenceChannelError as mulErr:
             errMsg = str(mulErr) + "\n"
             for i in range(0, len(mulErr.errors)):
                 errMsg += f"\nChannel {mulErr.errorChannels[i]} - {mulErr.errors[i]!s}"
                 print(mulErr.errorChannels[i], str(mulErr.errors[i]))
 
-            tkMessageBox.showwarning("Unable to applySamplingConfiguration changes", errMsg)
+            tk_message_box.showwarning("Unable to applySamplingConfiguration changes", errMsg)
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
 
@@ -682,13 +682,13 @@ class SequencePlot_UI(tk.LabelFrame):
         self.sequence: Sequence = sequence
 
         self.fig, self.ax = plt.subplots()
-        self.t = self.sequence.getTimeSteps()
+        self.t = self.sequence.get_time_steps()
         # A dictionary to store the 2dLine matplotlib objects relating to each plotted channel
         self.chPlots = {}
-        for chNum in sequence.getChannelNums():
+        for chNum in sequence.get_channel_nums():
             (chPlot,) = self.ax.plot(
                 self.t,
-                self.sequence.getChannelValArray(chNum),
+                self.sequence.get_channel_val_array(chNum),
                 label=self.getLegLabel(chNum, sequence_channel_labels[chNum]),
             )
             self.chPlots[chNum] = chPlot
@@ -715,7 +715,7 @@ class SequencePlot_UI(tk.LabelFrame):
         return f"Ch {chNum}: {chLabel}"
 
     def updateChLabels(self, sequence_channel_labels):
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             self.chPlots[chNum].set_label(self.getLegLabel(chNum, sequence_channel_labels[chNum]))
         self.interactiveLegend.destroy()
         self.interactiveLegend = self.getInteractiveLegend()
@@ -724,16 +724,16 @@ class SequencePlot_UI(tk.LabelFrame):
     def updateChPlot(self, chNum):
         """Update one of the channel plots to show new y-data (the time data will be unchanged as that is
         set for the whole sequence rather than a single channel)."""
-        self.chPlots[chNum].set_ydata(self.sequence.getChannelValArray(chNum))
+        self.chPlots[chNum].set_ydata(self.sequence.get_channel_val_array(chNum))
         self.rescale_view()
         self.fig.canvas.draw()
 
     def reloadPlotData(self):
         """Reload all plot data from the sequence - typically called after updating variables that affect all channels,
         e.g. update interval, n_samples etc."""
-        self.t = self.sequence.getTimeSteps()
-        for chNum in self.sequence.getChannelNums():
-            self.chPlots[chNum].set_data(self.t, self.sequence.getChannelValArray(chNum))
+        self.t = self.sequence.get_time_steps()
+        for chNum in self.sequence.get_channel_nums():
+            self.chPlots[chNum].set_data(self.t, self.sequence.get_channel_val_array(chNum))
         self.rescale_view()
         self.fig.canvas.draw()
 
@@ -898,7 +898,7 @@ class ChannelEditor_UI(tk.Frame):
 
         # Create all the row frames for the different channels
         self.rows, self.rowFrames = {}, {}
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             self.rows[chNum], self.rowFrames[chNum] = self.createRowsFrame(chNum)
 
         # Add the column select drop-down menu
@@ -940,8 +940,8 @@ class ChannelEditor_UI(tk.Frame):
         rowsCanvas.configure(scrollregion=rowsCanvas.bbox("all"))
 
     def createRowsFrame(self, chNum):
-        tV_pairs = self.sequence.get_tV_pairs(chNum)
-        V_intervalStyes = self.sequence.get_V_intervalStyles(chNum)
+        tV_pairs = self.sequence.get_tv_pairs(chNum)
+        V_intervalStyes = self.sequence.get_v_interval_styles(chNum)
 
         topFrame = tk.Frame(self)
 
@@ -1101,7 +1101,7 @@ class ChannelEditor_UI(tk.Frame):
 
         channelOptions = []
 
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             channelOptions.append(self.sequence_channel_labels[chNum])
 
         self.liveChannel = tk.StringVar(self)
@@ -1132,7 +1132,7 @@ class ChannelEditor_UI(tk.Frame):
         #         self.currentChannel get
 
         channelOptions = []
-        for chNum in self.sequence.getChannelNums():
+        for chNum in self.sequence.get_channel_nums():
             channelOptions.append(self.sequence_channel_labels[chNum])
         #             self.dropdown['menu'].add_command(label=channelOptions[-1], command=tk._setit(self.liveChannel, channelOptions[-1]))
 
@@ -1197,7 +1197,7 @@ class Frame_ChannelEditorRow(tk.Frame):
             if not channel_calibration
             else CalibratedValueEntry(self, *channel_calibration[1:3])
         )
-        self.intervalWid = IntervalStyleDropdown(self, tk.StringVar(), IntervalStyle.getAll())
+        self.intervalWid = IntervalStyleDropdown(self, tk.StringVar(), IntervalStyle.get_all())
         #         self.intervalWid.configure('indicatoron'=False)
 
         # Set the initial values if a tV_pair was provided (no need to trigger an update as everything is being initialised)
@@ -1332,10 +1332,10 @@ class IntervalStyleDropdown(tk.OptionMenu):
 
     def setValue(self, newValue, triggerUpdate=True):
         self.value = newValue
-        self.variable.set(IntervalStyle.toString(newValue))
+        self.variable.set(IntervalStyle.to_string(newValue))
 
         if triggerUpdate:
             self.winfo_toplevel().updateLiveSequenceChannel()  # type: ignore
 
     def focusOut(self, params):
-        self.setValue(IntervalStyle.fromString(self.variable.get()), triggerUpdate=True)
+        self.setValue(IntervalStyle.from_string(self.variable.get()), triggerUpdate=True)

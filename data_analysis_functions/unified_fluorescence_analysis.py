@@ -83,7 +83,7 @@ class UnifiedFluorescenceProcessor:
         self.results = []
         self.aligned_data_cache = {}
 
-    def load_csv_files(self, shot_folder: Path) -> List[pd.DataFrame]:
+    def load_csv_files(self, shot_folder: Path) -> list[pd.DataFrame]:
         """
         Load all iteration CSV files from a shot folder.
 
@@ -124,12 +124,12 @@ class UnifiedFluorescenceProcessor:
 
     def align_and_average(
         self,
-        dataframes: List[pd.DataFrame],
+        dataframes: list[pd.DataFrame],
         fluor_drop_voltage: Optional[float] = None,
         time_before_drop: Optional[float] = None,
         time_after_drop: Optional[float] = None,
         num_points: Optional[int] = None,
-    ) -> tuple[pd.DataFrame, List[float]]:
+    ) -> tuple[pd.DataFrame, list[float]]:
         """
         Align multiple traces based on fluorescence drop timing and average them.
 

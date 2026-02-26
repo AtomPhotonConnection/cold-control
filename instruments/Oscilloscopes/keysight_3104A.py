@@ -7,10 +7,11 @@ Created on 22/05/2025.
 the connection to and data acquisition from an oscilloscope (Keysight 3104A / InfiniiVision 3000T).
 """
 
+import contextlib
 import logging
-import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import cast
 
 import matplotlib.pyplot as plt
@@ -148,12 +149,12 @@ class OscilloscopeManager:
         current_time = datetime.now().strftime("%H-%M-%S")
 
         # Ensure the new directory exists
-        directory = os.path.join("data", current_date)
-        os.makedirs(directory, exist_ok=True)
+        directory = Path("data") / current_date
+        directory.mkdir(parents=True, exist_ok=True)
 
         # Creates full file name including time and parent folders
         full_name = f"{window}_{current_time}_{filename}"
-        full_name = os.path.join(directory, full_name)
+        full_name = directory / full_name
 
         # Saves the dataframe
         dataframe.to_csv(full_name, index=False)
@@ -223,7 +224,7 @@ class OscilloscopeManager:
          - timebase_range (tuple): Start and stop time for the timebase
          - high_impedance (bool): Used only when data_chs values are plain (lower, upper) tuples.
         """
-        #print("configuring the scope settings")
+        # print("configuring the scope settings")
         self.clear_error_queue()
         self._write_with_retry("ACQUIRE:TYPE HRESOLUTION")
 
@@ -299,17 +300,17 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
-    def set_to_digitize(self, channels=[1, 2]):
-        """
-        Function to set the scope to digitize mode. This is the primary way to collect
-        data from the scope. Use this before sending a trigger pulse to the scope.
-        """
-        query_result = self._query_with_retry(":DIGitize;*OPC?")
-        query_result = cast(str, query_result)
-        ok = query_result.strip() == "1"
-        if ok:
-            print(f"Oscilloscope digitized channels {channels}.")
-        return ok
+    # def set_to_digitize(self, channels=(1, 2)):
+    #     """
+    #     Function to set the scope to digitize mode. This is the primary way to collect
+    #     data from the scope. Use this before sending a trigger pulse to the scope.
+    #     """
+    #     query_result = self._query_with_retry(":DIGitize;*OPC?")
+    #     query_result = cast(str, query_result)
+    #     ok = query_result.strip() == "1"
+    #     if ok:
+    #         print(f"Oscilloscope digitized channels {channels}.")
+    #     return ok
 
     def set_to_stop(self):
         """
@@ -323,20 +324,16 @@ class OscilloscopeManager:
         """
         Function to reset the oscilloscope. This will clear all settings and data.
         """
-        try:
+        with contextlib.suppress(Exception):
             cast(MessageBasedResource, self.scope).clear()
-        except Exception:
-            pass
         self._write_with_retry("*RST")
 
     def clear_scope(self):
         """
         Function to clear the oscilloscope. This will clear all settings and data.
         """
-        try:
+        with contextlib.suppress(Exception):
             cast(MessageBasedResource, self.scope).clear()
-        except Exception:
-            pass
         self.clear_error_queue()
         print("Oscilloscope cleared.")
 
@@ -379,7 +376,7 @@ class OscilloscopeManager:
                 )
             preamble = cast(str, self._query_with_retry("WAVEFORM:PREAMBLE?"))
             pre = preamble.split(",")
-            #print(f"Preamble info: {pre}")
+            # print(f"Preamble info: {pre}")
             num_points = int(pre[2])
             x_incr = float(pre[4])  # XINCREMENT is at index 4
             x_orig = float(pre[5])  # XORIGIN is at index 5
@@ -456,7 +453,7 @@ class OscilloscopeManager:
         self._write_with_retry(":SINGLE")
 
         # Poll :AER? (Trigger Armed Event Register); returns 1 when armed.
-        #print("Waiting for oscilloscope to arm (polling :AER?)...\n")
+        # print("Waiting for oscilloscope to arm (polling :AER?)...\n")
         start_time = time.perf_counter()
         armed_status = 0
         acq_started = False
@@ -476,10 +473,8 @@ class OscilloscopeManager:
 
         if not acq_started:
             print("Oscilloscope did not arm within the maximum wait time.")
-            try:
+            with contextlib.suppress(Exception):
                 cast(MessageBasedResource, self.scope).clear()
-            except Exception:
-                pass
             self.clear_error_queue()
             raise RuntimeError("Oscilloscope failed to arm within the specified time.")
 
@@ -490,7 +485,7 @@ class OscilloscopeManager:
         """
         Wait for acquisition to complete after trigger. Polls :ACQuire:COMPlete?, :TER?, :RSTATE?.
         """
-        #print("Waiting for acquisition to complete...")
+        # print("Waiting for acquisition to complete...")
         start_time = time.perf_counter()
         triggered = False
         success = False

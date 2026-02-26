@@ -11,24 +11,35 @@ The **root config** (`configs/rootConfig.ini`) is the single entry point. It spe
 - **Sequence config** – which DAQ sequence (timing and channel voltages) to use
 - **DAQ config** – which DAQ cards/channels/DIOs exist and how they are wired
 - **Absorption imaging config** – used for absorption-imaging experiments
-- **Photon production / experiment config** – used for MOT fluorescence and related experiments (scope, AWG, camera, sweep)
+- **Experiment config** – used for MOT fluorescence and related experiments (scope, AWG, camera, sweep)
 
-The experiment config can in turn reference:
+The experiment config references instrument configs by path:
 
+- A **scope config** – standalone scope settings (trigger, channels, ranges, impedance, coupling)
 - An **AWG config** – waveforms and AWG sequence
-- Optionally a **sweep config** – when running parameter sweeps (e.g. AWG pulse sweeps)
+- A **sequence config** – DAQ sequence path (overrides `rootConfig.ini`)
+
 
 So the dependency tree is:
 
 ```
 rootConfig.ini
-├── sequence_filename     → sequence config (e.g. readout_with_MOTC.ini)
+├── sequence_filename     → sequence config (DEPRECATED — prefer sequence_config in experiment config)
 ├── daq_config_filename  → DAQ config (e.g. daq_config_may25.ini)
 ├── absorbtion_images_config_filename → absorption imaging config
-├── experiment_config_filename        → experiment config (preferred key)
-└── photon_production_config_filename → experiment config (deprecated, kept for backward compatibility)
-                                         ├── [awg_settings] config_path → AWG config (e.g. jan26_new_seq.ini)
-                                         └── default_sweep_config_path  → optional default sweep config for UI dialog
+└── experiment_config_filename        → experiment config (preferred key)
+     ├── scope_config    → standalone scope config (e.g. scope/keysight_feb26.ini)
+     ├── awg_config      → AWG config (e.g. awg_configs/jan26_new_seq.ini)
+     ├── sequence_config → sequence config (e.g. sequence/readout_with_MOTC.ini)
+     └── default_sweep_config_path → optional default sweep config for UI dialog
+
+sweep config (self-contained superset of experiment config)
+├── scope_config    → scope config path
+├── awg_config      → AWG config path
+├── sequence_config → sequence config path
+├── experiment params (save location, mot reload, iterations)
+├── sweep params (sweep_type, num_shots, defaults, sweeps)
+└── [metadata] experiment_type = "MOT Fluorescence Sweep"
 ```
 
 All configs use **ConfigObj** (INI-style with optional nested `[[sections]]`). Paths in the root config are typically relative (e.g. `configs\daq\daq_config_may25.ini`). Relative paths are resolved from **config root**: `COLD_CONTROL_CONFIG_ROOT` env var if set, otherwise the current working directory.
@@ -39,45 +50,72 @@ All configs use **ConfigObj** (INI-style with optional nested `[[sections]]`). P
 
 **Purpose:** Points to the sequence, DAQ, absorption imaging, and experiment config files. Also sets development mode.
 
-**Reader:** `ConfigReader` in `classes/Config.py`. Used by `Root_UI.py`, calibration scripts, and lab control scripts. All returned paths are resolved relative to **config root** (`get_config_root()`: `COLD_CONTROL_CONFIG_ROOT` env var if set, else current working directory).
+**Reader:** `ConfigReader` in `classes/config_readers.py`. Used by `Root_UI.py`, calibration scripts, and lab control scripts. All returned paths are resolved relative to **config root** (`get_config_root()`: `COLD_CONTROL_CONFIG_ROOT` env var if set, else current working directory).
 
 | Option | Description |
 |--------|-------------|
-| `sequence_filename` | Path to the sequence config (DAQ timing and channel outputs). |
+| `sequence_filename` | **(Deprecated)** Path to the sequence config. Prefer `sequence_config` in the experiment config instead. Still used as fallback. |
 | `daq_config_filename` | Path to the DAQ config (cards, channels, DIOs). |
 | `absorbtion_images_config_filename` | Path to the absorption imaging experiment config. |
-| `experiment_config_filename` | **Preferred.** Path to the MOT fluorescence / experiment config (scope, AWG, camera, etc.). |
-| `photon_production_config_filename` | **Deprecated.** Same as experiment config; kept for backward compatibility. Code prefers `experiment_config_filename` if both are set. |
+| `experiment_config_filename` | **Preferred.** Path to the MOT fluorescence / experiment config. |
 | `development_mode` | Boolean; when true, enables development-mode behaviour (e.g. mocked DAQ). |
 
-Use `get_experiment_config_fname()` or `get_photon_production_config_fname()` (both return the experiment config path). Only one of each filename is active; commented lines are alternatives.
+Use `get_experiment_config_fname()` to get the experiment config path.
 
 ---
 
 ## 3. Experiment config (e.g. `expt_config_feb26.ini`)
 
-**Purpose:** Defines a single MOT-fluorescence–style experiment: save location, iterations, whether camera/scope/AWG are used, and their settings (including scope channel ranges, impedance, coupling). Can point to an AWG config.
+**Purpose:** Defines a single MOT-fluorescence-style experiment: save location, iterations, and references to instrument configs (scope, AWG, sequence) by path.
 
-**Reader:** `ExperimentConfigReader.get_mot_flourescence_configuration()` (and related) in `classes/Config.py`. Loaded by Experimental_UI using the path from the root config’s `photon_production_config_filename`.
+**Reader:** `ExperimentConfigReader.get_mot_flourescence_configuration()` in `classes/config_readers.py`. Loaded by Experimental_UI using the path from the root config's `experiment_config_filename`.
 
-**Required:** A `[metadata]` section with `experiment_type` (e.g. `"MOT Fluorescence"`). This is used to decide which getter runs (e.g. MOT fluorescence vs absorption imaging).
+**Required:** A `[metadata]` section with `experiment_type` (e.g. `"MOT Fluorescence"`).
 
-**Optional:** `config_type = experiment` in `[metadata]` enables structure validation on load. `default_sweep_config_path` (top-level) sets the default file/directory for the “Configure fluoresce sweep” file dialog when present and valid.
+**Optional:** `config_type = experiment` in `[metadata]` enables structure validation on load. `default_sweep_config_path` (top-level) sets the default file/directory for the sweep file dialog.
 
-### Top-level options
+### New format (preferred)
+
+Instrument configs are referenced by path. Whether scope/AWG/camera are used is determined by whether the corresponding path key is present.
 
 | Option | Description |
 |--------|-------------|
 | `save location` | Directory (or base path) for saving experiment data. |
 | `mot reload` | MOT reload time (e.g. milliseconds). |
 | `iterations` | Number of experiment iterations (shots) per run. |
-| `use_cam` | `True`/`False` – use camera. |
-| `use_scope` | `True`/`False` – use oscilloscope. |
-| `use_awg` | `True`/`False` – use AWG. |
+| `scope_config` | Path to standalone scope config file (see section 3a). Presence means scope is used. |
+| `awg_config` | Path to AWG config file. Presence means AWG is used. |
+| `sequence_config` | Path to sequence config file. Overrides `rootConfig.ini` `sequence_filename`. |
+| `default_sweep_config_path` | Optional. Default sweep config file for UI dialog. |
 
-### Section: `[scope_settings]`
+### Old format (backward compatible, deprecated)
 
-Used only if `use_scope` is True.
+A `DeprecationWarning` is emitted when inline scope/AWG settings are detected.
+
+| Option | Description |
+|--------|-------------|
+| `use_cam` | `True`/`False` - use camera. |
+| `use_scope` | `True`/`False` - use oscilloscope. |
+| `use_awg` | `True`/`False` - use AWG. |
+| `[scope_settings]` | Inline scope settings (trigger, channels, ranges, impedance, coupling). |
+| `[awg_settings]` | Inline AWG path reference (`config_path`). |
+
+### Section: `[metadata]`
+
+| Option | Description |
+|--------|-------------|
+| `experiment_type` | String identifying the experiment type, e.g. `"MOT Fluorescence"`. |
+| `config_type` | Optional. Set to `experiment` to enable validation. |
+
+---
+
+## 3a. Scope config (e.g. `scope/keysight_feb26.ini`)
+
+**Purpose:** Standalone scope settings extracted from inline experiment config `[scope_settings]`. Referenced from experiment/sweep configs by path. Parsed into a `ScopeConfiguration` object.
+
+**Reader:** `ScopeConfigReader.load_scope_configuration()` in `classes/config_readers.py`.
+
+### Top-level options
 
 | Option | Description |
 |--------|-------------|
@@ -85,37 +123,17 @@ Used only if `use_scope` is True.
 | `trigger_level` | Trigger level (voltage). |
 | `sample_rate` | Scope sample rate (Hz). |
 | `time_range` | Timebase range as `start, stop` (e.g. `-100e-6, 4.1e-3`). |
-| `[[data_channels]]` | Subsection: channel number → voltage range as `lower, upper` (e.g. `1 = -1.0, 5.0`). |
-| `[[data_channel_impedance]]` | Optional. Channel number → `high` or `low` (1 MΩ or 50 Ω). Default per channel: `high`. If the impedance is `low`, then the coupling cannot be `AC` and the voltage range must be <5 V. |
-| `[[data_channel_coupling]]` | Optional. Channel number → `AC` or `DC`. Default per channel: `DC`. |
 
-### Section: `[awg_settings]`
+### Section: `[data_channels]`
 
-Used only if `use_awg` is True.
+Subsections `[[1]]`, `[[2]]`, etc. one per channel. Channel number is the subsection key.
 
 | Option | Description |
 |--------|-------------|
-| `config_path` | Path to the AWG config file (waveforms, sequence, channels, etc.). |
-| `config_path_single` | Optional path to a second AWG config (e.g. single-channel); can be empty. |
+| `range` | Voltage range as `lower, upper` (e.g. `-1.0, 5.0`). |
+| `impedance` | `high` (1 MOhm) or `low` (50 Ohm). Default: `high`. |
+| `coupling` | `AC` or `DC`. Default: `DC`. |
 
-### Section: `[camera_settings]`
-
-Used only if `use_cam` is True (not shown in the example you opened). Typically includes `cam_exposure`, `cam_gain`, `camera_trig_ch`, `camera_trig_levs`, `camera_pulse_width`, `save_images`, etc.
-
-### Section: `[metadata]`
-
-| Option | Description |
-|--------|-------------|
-| `experiment_type` | String identifying the experiment type, e.g. `"MOT Fluorescence"`. Drives which configuration getter is called. |
-| `config_type` | Optional. Set to `experiment` to enable validation of required keys/sections on load. If present and not `experiment`, a warning is emitted. |
-
-### Optional top-level
-
-| Option | Description |
-|--------|-------------|
-| `default_sweep_config_path` | Path to a sweep config file. If set and the file exists, the “Configure fluoresce sweep” dialog opens with this file’s directory and optionally this file selected. |
-
----
 
 ## 4. AWG config (e.g. `awg_configs/jan26_new_seq.ini`)
 
@@ -155,7 +173,7 @@ Per-waveform:
 
 **Purpose:** Defines the DAQ sequence: total time, step, global timings (labels), and per-channel time–voltage pairs and interval styles. This is what the sequence UI edits and what the DAQ runs.
 
-**Reader:** `SequenceReader` in `classes/Config.py`; `loadSequence()` builds a `Sequence` object. The root config’s `sequence_filename` points to this file.
+**Reader:** `SequenceReader` in `classes/config_readers.py`; `load_sequence()` builds a `Sequence` object. The root config’s `sequence_filename` points to this file.
 
 ### Section: `[notes]`
 
@@ -186,11 +204,44 @@ Subsections `[[0]]`, `[[1]]`, … one per DAQ channel.
 
 ## 6. Sweep config (e.g. `sweeps/feb26_sweep_level.ini`)
 
-**Purpose:** Defines a parameter sweep over multiple “shots”: e.g. different AWG pulse parameters (Rabi frequencies, waveforms) or different imaging parameters. The UI loads a sweep config when you run a sweep; it is not referenced from the experiment config file.
+**Purpose:** Defines a parameter sweep over multiple "shots": e.g. different AWG pulse parameters (Rabi frequencies, waveforms) or different imaging parameters. The UI loads a sweep config when you run a sweep.
 
-**Reader:** `ExperimentConfigReader.get_mot_flourescence_configuration_sweep()` in `classes/Config.py`. Returns sweep type, number of shots, and a sweep parameter dict.
+**Reader:** `ExperimentConfigReader.get_full_sweep_configuration()` (new format) or `get_mot_flourescence_configuration_sweep()` (old format) in `classes/config_readers.py`. Returns a `MotFluoresceConfigurationSweep` object.
 
-### Top-level options
+### New format (self-contained, preferred)
+
+New-format sweep files are self-contained: they include all experiment parameters, instrument config paths, and sweep parameters. Detected by `[metadata] experiment_type = "MOT Fluorescence Sweep"`.
+
+#### Top-level experiment params
+
+| Option | Description |
+|--------|-------------|
+| `save location` | Save directory. |
+| `mot reload` | MOT reload time. |
+| `iterations` | Iterations per shot. |
+| `scope_config` | Path to scope config file. |
+| `awg_config` | Path to AWG config file. |
+| `sequence_config` | Path to sequence config file. |
+
+#### Sweep params
+
+| Option | Description |
+|--------|-------------|
+| `notes` | Optional free-form description. |
+| `num_shots` | Number of shots per sweep point. |
+| `sweep_type` | `"awg_sequence"` or `"mot_imaging"`. |
+
+#### Section: `[metadata]`
+
+| Option | Description |
+|--------|-------------|
+| `experiment_type` | Must be `"MOT Fluorescence Sweep"`. |
+
+### Old format (backward compatible)
+
+Old-format sweep files contain only sweep parameters; experiment config is loaded separately from the currently active experiment config file. No `[metadata]` section.
+
+### Top-level options (both formats)
 
 | Option | Description |
 |--------|-------------|
@@ -241,7 +292,7 @@ Sweep dict is built from sections that define ranges:
 
 **Purpose:** Defines which DAQ cards exist, which channels belong to which card, channel names, limits, calibrations, and DIOs. Used to build the `DAQ_controller` and the DAQ UI.
 
-**Reader:** `DaqReader.load_DAQ_controller()` in `classes/Config.py`.
+**Reader:** `DaqReader.load_daq_controller()` in `classes/config_readers.py`.
 
 ### Section: `[DAQ cards]`
 
@@ -290,7 +341,7 @@ Subsections `[[0]]`, `[[1]]`, … per channel. Channel numbers and order must ma
 
 **Purpose:** Config for absorption-imaging experiments: which channel triggers the camera, which controls imaging power, scan vs fixed frequency, exposure/gain, MOT reload, backgrounds, etc.
 
-**Reader:** `ExperimentConfigReader.get_absorbtion_imaging_configuration()` in `classes/Config.py`. Used when `experiment_type` is absorption imaging (or when the UI loads absorption imaging mode from the root config’s absorption imaging config path).
+**Reader:** `ExperimentConfigReader.get_absorbtion_imaging_configuration()` in `classes/config_readers.py`. Used when `experiment_type` is absorption imaging (or when the UI loads absorption imaging mode from the root config’s absorption imaging config path).
 
 **Typical options (names as in code):**
 
@@ -320,17 +371,23 @@ Subsections `[[0]]`, `[[1]]`, … per channel. Channel numbers and order must ma
 
 ### 9.1 Implemented
 
-- **Config root:** Relative paths from the root config are resolved from **config root** (`get_config_root()` in `classes/Config.py`). Default is current working directory; override with env var `COLD_CONTROL_CONFIG_ROOT`.
-- **experiment_config_filename:** Root config supports `experiment_config_filename` (preferred). `photon_production_config_filename` is still read and written for backward compatibility; a deprecation warning is emitted when only the old key is present. Use `get_experiment_config_fname()` or `get_photon_production_config_fname()`.
-- **config_type:** In experiment config `[metadata]`, optional `config_type = experiment` enables validation of required keys/sections when the config is loaded. If `config_type` is present and not `experiment`, a warning is emitted.
-- **default_sweep_config_path:** Optional top-level key in the experiment config. When set and the file exists, the “Configure fluoresce sweep” dialog uses its directory and file as the default.
-- **Validation on load:** When `config_type = experiment`, `ExperimentConfigReader` runs `_validate_experiment_config_structure()` (required top-level keys, `[metadata].experiment_type`, and conditional checks for `[scope_settings]` / `[awg_settings]` when `use_scope` / `use_awg` is True).
+- **Config root:** Relative paths from the root config are resolved from **config root** (`get_config_root()` in `classes/config_readers.py`). Default is current working directory; override with env var `COLD_CONTROL_CONFIG_ROOT`.
+- **experiment_config_filename:** Root config supports `experiment_config_filename` (preferred). `photon_production_config_filename` is removed.
+- **Standalone scope configs:** Scope settings are now in standalone `.ini` files (e.g. `configs/scope/keysight_feb26.ini`), parsed by `ScopeConfigReader` into `ScopeConfiguration` objects. Experiment configs reference them by path via `scope_config`.
+- **Self-contained experiment configs:** Experiment configs reference instrument configs (scope, AWG, sequence) by path instead of embedding settings inline. Old inline `[scope_settings]`/`[awg_settings]` format is still supported with deprecation warnings.
+- **Sequence path in experiment config:** `sequence_config` in experiment configs overrides `rootConfig.ini`'s `sequence_filename` (which is now deprecated).
+- **Self-contained sweep configs:** Sweep configs can now be self-contained supersets that include experiment parameters, instrument config paths, and sweep parameters. Detected by `[metadata] experiment_type = "MOT Fluorescence Sweep"`. Old sweep-only files are still supported.
+- **config_type:** In experiment config `[metadata]`, optional `config_type = experiment` enables validation.
+- **default_sweep_config_path:** Optional top-level key in the experiment config for the sweep file dialog default.
+- **Validation on load:** When `config_type = experiment`, `ExperimentConfigReader` runs `_validate_experiment_config_structure()`.
+- **Deprecation warnings:** `PhotonProductionExperiment`, `ExperimentalAutomationRunner`, inline scope/AWG settings, and `ConfigReader.get_sequence_fname()` all emit `DeprecationWarning`.
 
 ### 9.2 Further improvements
 
-- **Shared defaults:** A small “lab defaults” config or environment section could be merged when loading to avoid repeating MOT reload, sample rates, etc., across configs.
-- **Config diff / template:** A script that diffs two configs of the same type or generates a template INI from the expected structure would help when adding new experiments.
-- **Optional config_type for other files:** Same pattern (optional `config_type` + validation) could be applied to AWG, sequence, DAQ, and sweep configs.
+- **Shared defaults:** A small "lab defaults" config could avoid repeating MOT reload, sample rates, etc., across configs.
+- **Config diff / template:** A script that diffs two configs or generates a template INI.
+- **Optional config_type for other files:** Same pattern could be applied to AWG, sequence, DAQ, and sweep configs.
+- **Migrate remaining sweep files:** Convert remaining old-format sweep configs to self-contained format with `[metadata]` section.
 
 ---
 
@@ -352,13 +409,13 @@ Subsections `[[0]]`, `[[1]]`, … per channel. Channel numbers and order must ma
 | You want to… | Edit / select |
 |--------------|----------------|
 | Change which sequence/DAQ/experiment are loaded | `configs/rootConfig.ini` |
-| Change scope ranges, impedance, coupling, trigger | Experiment config `[scope_settings]` and `[[data_channels]]` etc. |
-| Change AWG waveforms and sequence | AWG config (path in experiment config `[awg_settings] config_path`) |
-| Change DAQ timing and channel voltages | Sequence config (path in root `sequence_filename`) |
+| Change scope ranges, impedance, coupling, trigger | Scope config file (e.g. `scope/keysight_feb26.ini`), referenced from experiment config via `scope_config` |
+| Change AWG waveforms and sequence | AWG config (referenced from experiment config via `awg_config`) |
+| Change DAQ timing and channel voltages | Sequence config (referenced from experiment config via `sequence_config`, or root `sequence_filename`) |
 | Change DAQ hardware (cards, channels, DIOs) | DAQ config (path in root `daq_config_filename`) |
 | Run a parameter sweep (e.g. AWG levels) | Sweep config (chosen in UI; structure depends on `sweep_type`) |
 | Change absorption imaging params | Absorption imaging config (path in root `absorbtion_images_config_filename`) |
 
 ---
 
-*Generated for the cold-control codebase. Config readers live in `classes/Config.py`; experiment and sweep logic in `classes/ExperimentalConfigs.py` and `classes/ExperimentalRunner.py`.*
+*Generated for the cold-control codebase. Config readers live in `classes/config_readers.py`; experiment and sweep logic in `classes/experimental_configs.py` and `classes/experimental_runner.py`.*

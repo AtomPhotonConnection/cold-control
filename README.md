@@ -11,7 +11,7 @@ The below is not an exhaustive list and neglects most specfics, however it hopef
   - A TkInter based interface for the experiment is run from [Root_UI](Root_UI.py).
   - DAQ cards write static voltages and play preceisely timed sequences to execute the experiment.  To this end the [DAQ](DAQ.py) (for the hardware interface) and [DAQ_UI](DAQ_UI.py) (for the GUI interface) modules contain the functionality to synchronise and control multiple ADLINK-2502 DAQ cards.  A calibration between these voltages and the functionality they control is also supported - for example an acousto-optic modulator (AOM) that controls the power and frequency of a given laser-line is far better interfaced with by requesting the desired power and frequency, rather than manually changing the voltage that drives it.
   - The data handling and an interface for custom sequences played on the DAQ cards to control a given experimental run are provided by [Sequence](Sequence.py) and [Sequence_UI](Sequence_UI.py).
-  - Controlling all other aspects of the experimental run (automated staging of multiple experiments, data aquisition, on-the-fly analysis etc) are provided by the [ExperimentalRunner](ExperimentalRunner.py) and [Experimental_UI](Experimental_UI.py).
+  - Controlling all other aspects of the experimental run (automated staging of multiple experiments, data aquisition, on-the-fly analysis etc) are provided by the [experimental_runner](experimental_runner.py) and [Experimental_UI](Experimental_UI.py).
 
   - The [instruments](instruments) folder contains python wrappers to talk to various devices including:
     - [Tarbor Electronics WX218x AWG](instruments/WX218x)
@@ -30,13 +30,13 @@ The [calibrations_scripts](calibrations/calibration_scripts/) folder contains sc
 
 The [classes](classes/) folder contains classes used to manage the experiment. These include:
  - The classes to manage the [DAQ cards](classes/DAQ.py), from which the DAQ cards can be controlled individually
- - Classes to manage the [Experimental Configs](classes/ExperimentalConfigs.py). For example, a class like MotFluoresceConfig has all the configuration needed for a MOT Fluorescence experiment.
- - Classes to [run the experiments](classes/ExperimentalRunner.py). An instance of a config class (as defined in the experimental configs file) can be passed to one of the experimental runner classes and this will execute the experiment according to the specified parameters.
+ - Classes to manage the [Experimental Configs](classes/experimental_configs.py). For example, a class like MotFluoresceConfig has all the configuration needed for a MOT Fluorescence experiment.
+ - Classes to [run the experiments](classes/experimental_runner.py). An instance of a config class (as defined in the experimental configs file) can be passed to one of the experimental runner classes and this will execute the experiment according to the specified parameters.
  - Classes to manage the [daq sequences](classes/Sequence.py). Rather than controlling each DAQ card individually, a sequence can be used to preload a set of DAQ values at different times, which can then be played.
  - Classes to [read the config files](classes/Config.py). As all the parameters for experiments are saved in config files, the config classes are used to read data from the config files and then use this to create a config object as defined in experimental configs.
 
 The [configs](configs/) folder contains .ini files used to specify the configurations (or parameters for) a particular experiment. When a user creates a config file and uses it to run an experiment, the process is as follows:
-User creates config file -> Config file read by Config.py class -> Parameters loaded into ExperimentalConfigs.py class -> Experiment executed by ExperimentalRunner.py class
+User creates config file -> Config file read by Config.py class -> Parameters loaded into ExperimentalConfigs.py class -> Experiment executed by experimental_runner.py class
 
 The [data_analysis_functions](data_analysis_functions/) folder contains scripts to analyse the data from particular experiments.
 

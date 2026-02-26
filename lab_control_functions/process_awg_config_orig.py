@@ -14,7 +14,7 @@ from instruments.WX218x.WX218x_DLL import (
     WX218x_TriggerSlope,
 )
 
-from classes.ExperimentalConfigs import AwgConfiguration, PhotonProductionConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, PhotonProductionConfiguration, Waveform
 
 
 # essentially this loads all the data onto all the channels as well as the markers and awaits an external trigger to play the sequence
@@ -235,9 +235,16 @@ def configure_awg(
                     )
                 ]
                 print(
-                    f"\tFor waveform with freq {waveform.get_mod_frequency() * 10**-6}MHz, using calib for {min(waveform_aom_calibs, key=lambda calib_freq: (
-                            np.abs(calib_freq - waveform.get_mod_frequency() * 10**-6)
-                        ))}MHz"
+                    f"\tFor waveform with freq {
+                        waveform.get_mod_frequency() * 10**-6
+                    }MHz, using calib for {
+                        min(
+                            waveform_aom_calibs,
+                            key=lambda calib_freq: np.abs(
+                                calib_freq - waveform.get_mod_frequency() * 10**-6
+                            ),
+                        )
+                    }MHz"
                 )
 
             seg_length = waveform.get_n_samples() + abs(delay) + abs(channel_abs_offset)
