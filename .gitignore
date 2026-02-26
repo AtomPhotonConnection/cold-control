@@ -8,7 +8,6 @@
 .github
 .ipynb_checkpoints
 .ruff_cache
-.vscode
 
 labbook/**
 
