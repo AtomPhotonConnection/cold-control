@@ -713,39 +713,34 @@ class AWGManager:
 
     # ----- MARK:compound methods
 
-    def configure_for_triggered_output(
+    def _configure_for_triggered_output(
         self,
         _sample_rate: float,
         _channels: list[int],
         _burst_count: int,
         _amplitudes: list[float],
         _offsets: list[float],
+        _output_mode: str = "USER",
     ) -> None:
         """
-        One-call setup that mirrors the old ``configure_awg`` workflow:
+        Configure AWG for triggered output.
 
-        1. Abort + disable channels.
-        2. Clear memory.
-        3. Set sample rate, arbitrary mode, coupling.
-        4. Configure trigger on each channel.
-        5. (Waveforms must still be uploaded separately.)
+        1. Abort + disable channels, clear memory.
+        2. Set instrument level parameters (continuous mode off, coupled channels, trigger parameters).
+        3. Set channel specific parameters (sample rate, output mode, amplitude, offset).
         """
         trigger_level = 1.6  # V, typical for external trigger from scope or pulse generator
         trigger_slope = "POS"  # positive edge trigger
         trigger_source = "EXT"  # external trigger input
-        output_mode = "USER"  # arbitrary waveform mode
 
         self.abort()
         for ch in _channels:
             self.disable_channel(ch)
         self.clear_all()
-
         self.delete_all_segments()
 
-        self.enable_coupling()
-        # self.disable_coupling()
-
         self.set_continuous(False)  # triggered mode
+        self.enable_coupling()  # couple channels 1&2 and 3&4 so they share a sample clock
         self.set_trigger_level(trigger_level)
         self.set_trigger_source(trigger_source)
         self.set_trigger_slope(trigger_slope)
@@ -754,21 +749,57 @@ class AWGManager:
         for i, ch in enumerate(_channels):
             self.select_channel(ch)
             self._write(f":FREQ:RAST {_sample_rate:.10g}")
-            self._write(f":FUNC:MODE {output_mode}")
+            self._write(f":FUNC:MODE {_output_mode}")
             self._write(f":VOLT {_amplitudes[i]}")
             self._write(f":VOLT:OFFS {_offsets[i]}")
 
-    def upload_and_arm(self, awg_cfg: AwgConfiguration) -> None:
+    def _configure_for_continuous_output(
+        self,
+        _sample_rate: float,
+        _channels: list[int],
+        _amplitudes: list[float],
+        _offsets: list[float],
+        _output_mode: str = "USER",
+    ) -> None:
         """
-        Full configure → upload → arm cycle used by experiment runners.
+        Configure AWG for continuous (free-running) output.
+
+        1. Abort + disable channels, clear memory.
+        2. Set instrument level parameters (continuous mode, coupled channels).
+        3. Set channel specific parameters (sample rate, output mode, amplitude, offset).
+        """
+
+        self.abort()
+        for ch in _channels:
+            self.disable_channel(ch)
+        self.clear_all()
+        self.delete_all_segments()
+
+        self.set_continuous(True)  # continuous mode
+        self.enable_coupling()  # couple channels 1&2 and 3&4 so they share a sample clock
+
+        for i, ch in enumerate(_channels):
+            self.select_channel(ch)
+            self._write(f":FREQ:RAST {_sample_rate:.10g}")
+            self._write(f":FUNC:MODE {_output_mode}")
+            self._write(f":VOLT {_amplitudes[i]}")
+            self._write(f":VOLT:OFFS {_offsets[i]}")
+
+    def _upload_core(self, awg_cfg: AwgConfiguration, continuous: bool = False) -> None:
+        """
+        Core upload logic shared by both triggered and continuous modes.
 
         Parameters
         ----------
         awg_cfg : AwgConfiguration
             The AWG configuration object containing all necessary settings.
+        continuous : bool
+            If True, configure for continuous output. If False, configure for triggered output.
+
         Returns
         -------
-        None
+        dict[int, np.ndarray]
+            Processed waveform data for each channel (for testing/verification)
         """
         self.delete_all_segments()  # clear waveform memory
 
@@ -800,15 +831,23 @@ class AWGManager:
         )
         self._log.info(f"self.check_errors(): {self.check_errors()}")
         self._log.info("Waveforms processed and ready for upload.")
-        # --- Configure the scope for triggered output ---
-        self.configure_for_triggered_output(
-            sample_rate, outp_channels, burst_count, ch_amplitudes, ch_offsets
-        )
+
+        # --- Configure the scope for triggered or continuous output ---
+        if continuous:
+            self._configure_for_continuous_output(
+                sample_rate, outp_channels, ch_amplitudes, ch_offsets
+            )
+            self.wait_opc()
+            self._log.info("AWG configured for continuous output.")
+        else:
+            self._configure_for_triggered_output(
+                sample_rate, outp_channels, burst_count, ch_amplitudes, ch_offsets
+            )
+            self.wait_opc()
+            self._log.info("AWG configured for triggered output.")
 
         self._log.info(f"self.check_errors(): {self.check_errors()}")
 
-        self.wait_opc()
-        self._log.info("AWG configured for triggered output.")
         print("\n--- Starting waveform upload ---\n")
 
         # --- Upload waveforms for each channel ---
@@ -838,10 +877,38 @@ class AWGManager:
             self.enable_channel(ch)
             self.select_segment(1)  # ensure segment 1 is selected for output
 
-        self.initiate()
-        self._log.info("AWG armed and waiting for trigger.")
+    def upload_and_arm(self, awg_cfg: AwgConfiguration) -> None:
+        """
+        Full configure → upload → arm cycle used by experiment runners.
 
+        Parameters
+        ----------
+        awg_cfg : AwgConfiguration
+            The AWG configuration object containing all necessary settings.
+        Returns
+        -------
+        None
+        """
+        self._upload_core(awg_cfg, continuous=False)
+        self.initiate()
+
+        self._log.info("AWG armed and waiting for trigger.")
         print("AWG armed and waiting for trigger.")
+
+    def upload_and_play(self, awg_cfg: AwgConfiguration) -> None:
+        """
+        Full configure → upload → play cycle for continuous mode.
+
+        Parameters
+        ----------
+        awg_cfg : AwgConfiguration
+            The AWG configuration object containing all necessary settings.
+        """
+        self._upload_core(awg_cfg, continuous=True)
+        self.initiate()
+
+        self._log.info("AWG playing continuously.")
+        print("AWG playing continuously.")
 
     # ----- context manager ---------------------------------------------------
 

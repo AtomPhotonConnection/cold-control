@@ -4,9 +4,9 @@ Pulse Shape Experiment Classes
 Self-contained module with three classes for running pulse-shape calibration
 experiments on the AWG + oscilloscope setup:
 
-    PulseShapeConfig           – parses a .ini file into typed attributes
-    PulseShapeExperimentResult – holds all data/metrics from a single run
-    PulseShapeExperimentRunner – programs AWG, reads scope, returns a Result
+    PulseShapeConfig           - parses a .ini file into typed attributes
+    PulseShapeExperimentResult - holds all data/metrics from a single run
+    PulseShapeExperimentRunner - programs AWG, reads scope, returns a Result
 
 These classes deliberately contain *no* optimisation logic.  The optimisation
 loop (NLMS, Wiener, gradient descent, etc.) lives in the calling script, which
@@ -28,6 +28,7 @@ Usage example::
     runner.close()
 """
 
+import contextlib
 import csv
 import logging
 import time
@@ -40,7 +41,8 @@ import numpy as np
 import pandas as pd
 from configobj import ConfigObj
 
-from classes.experimental_configs import AwgConfiguration, Waveform
+from classes.config_readers import AwgConfigReader, ScopeConfigReader
+from classes.experimental_configs import AwgConfiguration
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 from instruments.WX218x.awg_manager import AWGManager
 
@@ -242,13 +244,13 @@ class PulseShapeExperimentResult:
     Container for all data produced by a single pulse-shape experiment run.
 
     Attributes:
-        waveform_sent       – the waveform that was uploaded to the AWG
-        measured_signal     – scope-measured voltage (resampled to waveform length)
-        theoretical_signal  – the target / desired waveform
-        time_array          – time axis in seconds
-        measured_std        – per-sample standard deviation from the scope
-        mse, rmse, mae      – error metrics (measured vs theoretical)
-        signed_error        – element-wise (measured − theoretical)
+        waveform_sent       - the waveform that was uploaded to the AWG
+        measured_signal     - scope-measured voltage (resampled to waveform length)
+        theoretical_signal  - the target / desired waveform
+        time_array          - time axis in seconds
+        measured_std        - per-sample standard deviation from the scope
+        mse, rmse, mae      - error metrics (measured vs theoretical)
+        signed_error        - element-wise (measured - theoretical)
     """
 
     def __init__(
@@ -399,22 +401,6 @@ class PulseShapeExperimentRunner:
         waveform: 1-D numpy array — the waveform to play on the AWG channel.
     """
 
-    # Map channel name strings to integers (matching awg_control2 convention)
-    _CH_MAP: dict[str, int] = {
-        "channel1": 1,
-        "channel2": 2,
-        "channel3": 3,
-        "channel4": 4,
-        "ch1": 1,
-        "ch2": 2,
-        "ch3": 3,
-        "ch4": 4,
-        "1": 1,
-        "2": 2,
-        "3": 3,
-        "4": 4,
-    }
-
     def __init__(self, config: PulseShapeConfig, waveform: np.ndarray) -> None:
         self.config = config
         self.waveform = waveform
@@ -424,18 +410,6 @@ class PulseShapeExperimentRunner:
         self.awg: Optional[AWGManager] = None
         self.awg_config_obj: Optional[AwgConfiguration] = None
         self.waveform_duration_s: float = 0.0
-
-    # ----- helpers -----------------------------------------------------------
-
-    @classmethod
-    def _ch_int(cls, ch) -> int:
-        """Convert a channel identifier (string or int) to an integer 1–4."""
-        if isinstance(ch, int):
-            return ch
-        key = str(ch).lower().strip()
-        if key in cls._CH_MAP:
-            return cls._CH_MAP[key]
-        raise ValueError(f"Unknown AWG channel identifier: {ch!r}")
 
     # ----- hardware helpers --------------------------------------------------
 
@@ -451,6 +425,7 @@ class PulseShapeExperimentRunner:
                 pass
         logger.info("Connecting to AWG...")
         self.awg = AWGManager(resource_id=awg_id)
+        self.awg.reset()
         return self.awg
 
     def _connect_scope(self) -> OscilloscopeManager:
@@ -463,38 +438,10 @@ class PulseShapeExperimentRunner:
     def _load_awg_config(self) -> AwgConfiguration:
         """Load the AWG configuration from the .ini path in config."""
         logger.info(f"Loading AWG config from {self.config.awg_config_path}")
-        cfg = ConfigObj(self.config.awg_config_path)
-        cfg_d = cast(dict[str, Any], cfg)
 
-        waveforms_section = cast(dict[str, dict[str, Any]], cfg_d["waveforms"])
-
-        waveforms: list[Waveform] = []
-        for _key, v in waveforms_section.items():
-            _phases = [(float(p), i) for i, p in enumerate(v["phases"])]
-            waveforms.append(
-                Waveform(
-                    fname=v["filename"],
-                    mod_frequency=float(v["modulation frequency"]),
-                    phases=_phases,
-                )
-            )
-
-        awg_config = AwgConfiguration(
-            sample_rate=float(cfg_d["sample rate"]),
-            burst_count=int(cfg_d["burst count"]),
-            waveform_output_channels=list(cfg_d["waveform output channels"]),
-            waveform_output_channel_lags=list(map(float, cfg_d["waveform output channel lags"])),
-            marked_channels=list(cfg_d["marked channels"]),
-            marker_width=eval(cfg_d["marker width"]),
-            waveform_sequence=list(eval(cfg_d["waveform sequence"])),
-            waveforms=waveforms,
-            waveform_stitch_delays=list(eval(cfg_d["waveform stitch delays"])),
-            interleave_waveforms=cfg_d.get("interleave waveforms", "false").lower()
-            in ("true", "t", "yes", "y"),
-        )
-
-        self.awg_config_obj = awg_config
+        self.awg_config_obj = AwgConfigReader(self.config.awg_config_path).load_awg_configuration()
         logger.info("AWG configuration loaded")
+
         return self.awg_config_obj
 
     def _program_awg(self, signal: np.ndarray, label: str = "signal") -> None:
@@ -520,12 +467,7 @@ class PulseShapeExperimentRunner:
 
         # --- Validate target channel -----------------------------------------
         ch_idx = self.config.channel - 1
-        print(f"Config AWG channel: {self.config.channel} (index {ch_idx})")
-        if ch_idx >= len(cfg.waveform_sequence):
-            raise ValueError(
-                f"Channel {self.config.channel} not in AWG waveform_sequence "
-                f"({len(cfg.waveform_sequence)} channels configured)"
-            )
+
         wf_ids = cfg.waveform_sequence[ch_idx]
         if not wf_ids:
             raise ValueError(f"No waveforms configured for channel {self.config.channel}")
@@ -533,6 +475,8 @@ class PulseShapeExperimentRunner:
         # Replace the first waveform on the target channel with our signal
         target_wf_id = wf_ids[0]
         cfg.waveforms[target_wf_id].data = signal.tolist()
+        # remove other waveforms from the sequence to ensure only our signal is played
+        cfg.waveform_sequence[ch_idx] = [target_wf_id]
 
         logger.info(
             f"Programming AWG ch{self.config.channel} with '{label}' "
@@ -541,126 +485,18 @@ class PulseShapeExperimentRunner:
 
         # --- Connect to AWG --------------------------------------------------
         awg = self._connect_awg(self.config.awg_id)
-        awg.reset()
 
-        ch_names = cfg.waveform_output_channels
-        ch_ints = [1]  # [self._ch_int(c) for c in ch_names]
-
-        # 1. Safe state: stop output and disable all channels
-        # awg.abort() # I don't think you need to do this
-        # awg.disable_all_channels(ch_ints)
-        awg.clear_all()
-
-        # 2. Global configuration
-        awg.configure_sample_rate(cfg.sample_rate)
-        awg.set_output_mode("USER")  # arbitrary waveform mode
-        awg.enable_coupling()
-
-        # Configure trigger
-        print("Configuring trigger settings for all channels")
-        for ch_int in ch_ints:
-            awg.select_channel(ch_int)
-            awg.set_burst_count(cfg.burst_count)
-            awg.set_continuous(True)  # False)  # in future we'll want this to be false
-            awg.set_trigger_level(1.6)  # volts, adjust as needed
-            awg.set_trigger_source("EXT")  # external trigger
-            awg.set_trigger_slope("POS")  # trigger on rising edge
-
-        opc = awg.wait_opc()
-        print("channel triggers configured")
-
-        # awg.set_trace_mode("SING")
-
-        # --- Compute channel timing offsets ----------------------------------
-        lags = np.asarray(cfg.waveform_output_channel_lags, dtype=float)
-        raw_offsets = np.rint(lags * cfg.sample_rate * 1e-6).astype(int)
-        abs_offsets = raw_offsets - raw_offsets.min()
-
-        # --- Calculate stitch delays for interleaved waveforms ---------------
-        if cfg.interleave_waveforms and cfg.waveform_stitch_delays is not None:
-            stitch_delays: list[int] = []
-            for direction, target_wf_ids in cfg.waveform_stitch_delays:
-                ids = target_wf_ids or []
-                total = sum(cfg.waveforms[wid].get_n_samples() for wid in ids)
-                stitch_delays.append(int(direction) * total)
-        else:
-            stitch_delays = [0] * len(ch_names)
-
-        # --- Build per-channel waveform arrays -------------------------------
-        all_channel_data: list[np.ndarray] = []
-        for i, (ch_name, s_delay, ch_offset) in enumerate(
-            zip(ch_names, stitch_delays, abs_offsets)
-        ):
-            ch_wf_ids = cfg.waveform_sequence[i]
-            waveforms = [cfg.waveforms[wid] for wid in ch_wf_ids]
-
-            raw_chunks = [np.array(w.get(sample_rate=cfg.sample_rate)) for w in waveforms]
-            full_wf = np.concatenate(raw_chunks)
-
-            # Stitch-delay padding
-            pad_l = abs(s_delay) if s_delay < 0 else 0
-            pad_r = abs(s_delay) if s_delay > 0 else 0
-            full_wf = np.pad(full_wf, (pad_l, pad_r), "constant")
-
-            # Channel timing-offset padding (shift waveform right)
-            full_wf = np.pad(full_wf, (ch_offset, 0), "constant")
-
-            all_channel_data.append(full_wf)
-
-        # --- Align all channels to the same length (mult of 16) --------------
-        max_len = max(len(d) for d in all_channel_data)
-        if max_len % 16 != 0:
-            max_len += 16 - (max_len % 16)
-        aligned: list[np.ndarray] = [
-            np.pad(d, (0, max_len - len(d)), "constant") for d in all_channel_data
-        ]
-        print(f"Aligned all channels to {max_len} samples (multiple of 16)")
-        # print(f"Configuring trigger mode")
-        # awg.configure_trigger(mode="EXT", level=1.6, slope="POS")
-        # print(f"Setting burst count to {cfg.burst_count}")
-        # awg.set_burst_count(cfg.burst_count)
-
-        # --- Upload waveforms and configure per-channel settings --------------
-        for ch_int, data in zip(ch_ints, aligned):
-            print(f"Uploading to channel {ch_int} (length {len(data)} samples)")
-
-            awg.upload_waveform(data, segment=1, channel=ch_int)
-            awg.wait_opc()
-            print(f"Uploaded waveform to channel {ch_int}, segment 1")
-
-        awg.set_amplitude(1, 0.3)  # volts, adjust as needed
-        awg.set_offset(1, 0.0)  # volts, adjust as needed
-
-        print("All waveforms uploaded and amplitudes set")
-        # # --- Configure markers -----------------------------------------------
-        # marker_wid = int(cfg.marker_width * 1e-6 * cfg.sample_rate)
-        # NOTE: marker width not being used currently
-        # marked_ch_ints = {self._ch_int(c) for c in cfg.marked_channels if c}
-        for ch_int in [2]:
-            if ch_int in [2]:  # [self._ch_int(c) for c in cfg.marked_channels if c]:
-                print(f"Configuring marker on channel {ch_int} with width {10} samples")
-                awg.configure_marker(marker=2, width=4, delay=1e-9)
-                awg.wait_opc()
-
-        # --- Enable outputs and arm ------------------------------------------
-        for ch_int in ch_ints:
-            print(f"Enabling output for channel {ch_int}")
-            awg.enable_channel(ch_int)
-        print("AWG outputs enabled, initiating...")
-        awg.initiate()
-        awg.trigger()
-        awg.select_channel(1)
-        awg.inst.write(":TRAC:SEL 1")
+        awg.upload_and_play(cfg)
         print("AWG running...")
 
-        self.waveform_duration_s = max_len / cfg.sample_rate
+        self.waveform_duration_s = len(signal) / cfg.sample_rate
         logger.info(f"AWG armed — waveform duration {self.waveform_duration_s * 1e6:.1f} µs")
 
     def _save_waveform_csv(self, signal: np.ndarray, label: str) -> Path:
         """Write waveform to a timestamped CSV in the output directory."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         csv_path = self.config.output_dir / f"awg_{label}_{timestamp}.csv"
-        with open(csv_path, "w", newline="") as f:
+        with csv_path.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(signal)
         logger.info(f"Saved waveform CSV: {csv_path}")
@@ -806,6 +642,8 @@ class PulseShapeExperimentRunner:
         time.sleep(0.5)
 
         # 3. Scope acquisition
+        # TODO: this information should be extracted from a scope config object
+        # scope_cfg = ScopeConfigReader()
         acq: _ScopeAcquisition = self._build_scope_acq()
         trig_ch, trig_level = self.config.trigger_channel, self.config.trigger_level
 
@@ -813,12 +651,12 @@ class PulseShapeExperimentRunner:
         mean_df, std_df = acq.acquire_data([self.config.data_channel], self.config.num_measurements)
 
         # Extract voltage columns
-        voltage_col = [c for c in mean_df.columns if "Voltage" in c][0]
+        voltage_col = next(c for c in mean_df.columns if "Voltage" in c)
         print(f"Extracted voltage column from scope data: '{voltage_col}'")
-        measured_voltage = mean_df[voltage_col].values
+        measured_voltage = mean_df[voltage_col].to_numpy()
 
         std_col = [c for c in std_df.columns if "Voltage" in c]
-        measured_std = std_df[std_col[0]].values if std_col and len(std_df) > 0 else None
+        measured_std = std_df[std_col[0]].to_numpy() if std_col and len(std_df) > 0 else None
 
         theo_path = self.config.get_theoretical_signal_path()
         theoretical_signal = load_signal_from_path(theo_path, self.config.amplitude)
@@ -865,10 +703,8 @@ class PulseShapeExperimentRunner:
                 pass
             self.awg = None
         if self.scope is not None and self._owns_scope:
-            try:
+            with contextlib.suppress(Exception):
                 self.scope.quit()
-            except Exception:
-                pass
             self.scope = None
 
 

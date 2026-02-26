@@ -495,7 +495,7 @@ class AwgConfigReader:
         cfg = self.config
 
         raw_seq = eval(self.config["waveform sequence"])
-        waveform_sequence = tuple(tuple(ch) for ch in raw_seq)
+        waveform_sequence = list(list(ch) for ch in raw_seq)
 
         awg_config = AwgConfiguration(
             waveform_sequence=waveform_sequence,

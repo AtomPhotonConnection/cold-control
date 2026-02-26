@@ -306,7 +306,7 @@ class AwgConfiguration:
 
     def __init__(
         self,
-        waveform_sequence: tuple[tuple[int, ...], ...],
+        waveform_sequence: list[list[int]],
         waveforms: tuple[Waveform, ...],
         sample_rate: float,
         burst_count: int,
