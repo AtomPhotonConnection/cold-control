@@ -278,7 +278,7 @@ def calibrate_frequency(
     for v in np.arange(
         calibration_V_range[0], calibration_V_range[1] + calibration_V_step, calibration_V_step
     ):
-        daq_controller.updateChannelValue(chNum_to_calibrate, v)
+        daq_controller.update_channel_value(chNum_to_calibrate, v)
         time.sleep(writeToQueryDelay)
         vData.append(v)
         calData.append(counter.query("N?", delay=queryToReadDelay))
@@ -417,7 +417,7 @@ def percentage_power(
         calibration_V_range[0], calibration_V_range[1] + calibration_V_step, calibration_V_step
     ):
         print(v)
-        daq_controller.updateChannelValue(chNum_to_calibrate, v)
+        daq_controller.update_channel_value(chNum_to_calibrate, v)
         time.sleep(writeToQueryDelay)
         vData.append(v)
         calData.append(power_meter.read)

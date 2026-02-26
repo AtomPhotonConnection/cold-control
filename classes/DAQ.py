@@ -1036,7 +1036,7 @@ class DAQController:
     def get_channel_values(self):
         return np.array([[v] for _, v in sorted(self.channelValues.items())])
 
-    def toggle_continuous_ouput(self):
+    def toggle_continuous_output(self):
         self.continuousOutput = not self.continuousOutput
         if self.continuousOutput:
             self.write(np.array([[v] for _, v in sorted(self.channelValues.items())]))

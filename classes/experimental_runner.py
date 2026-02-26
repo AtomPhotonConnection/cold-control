@@ -105,7 +105,7 @@ class GenericExperiment(Generic[T]):
         self.isDaqContinuousOutput = self.daq_controller.continuousOutput
         if not self.isDaqContinuousOutput:
             print("DAQ output must be on to run a sequence - turning it on.")
-            self.daq_controller.toggle_continuous_ouput()
+            self.daq_controller.toggle_continuous_output()
 
     def run(self):
         raise NotImplementedError()
@@ -116,7 +116,7 @@ class GenericExperiment(Generic[T]):
             self.daq_controller.write_channel_values()
         else:
             print("Reverting DAQ output to off.")
-            self.daq_controller.toggle_continuous_ouput()
+            self.daq_controller.toggle_continuous_output()
             self.daq_controller.write_channel_values()
 
     def close(self):
@@ -1744,7 +1744,7 @@ class ExperimentalAutomationRunner:
 
         if not self.daq_controller.continuousOutput:
             print("DAQ output must be on to run an experiement - turning it on.")
-            self.daq_controller.toggle_continuous_ouput()
+            self.daq_controller.toggle_continuous_output()
 
     def get_next_experiment(self) -> tuple[PhotonProductionExperiment, str, list[float]]:
 

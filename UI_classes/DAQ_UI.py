@@ -131,7 +131,7 @@ class DAQ_UI(tk.Frame):
             chFrame.reload()
 
     def toggleDAQbutton(self):
-        self.daq_controller.toggle_continuous_ouput()
+        self.daq_controller.toggle_continuous_output()
         if self.daq_controller.continuousOutput:
             self.daqOutputButton.configure(bg="green")
         else:
@@ -153,7 +153,7 @@ class Frame_DAQchannel(tk.Frame):
     A sub-class of a Tkinter.Frame to create entry widgets and decorations for setting DAQ channels.
     """
 
-    def __init__(self, parent, DAQChannel, DAQ_controller):
+    def __init__(self, parent, DAQChannel: DAQChannel, DAQ_controller):
         """
         Constructor
         """
@@ -167,7 +167,7 @@ class Frame_DAQchannel(tk.Frame):
 
         self.frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.tooltip = tooltip.createToolTip(self, self.DAQchannel.getHelpText(), openDelay=2000)
+        self.tooltip = tooltip.createToolTip(self, self.DAQchannel.get_help_text(), openDelay=2000)
 
     def addEntry(self):
         self.entry = Entry_DAQchannel(self.frame, self.DAQcontroller, self.DAQchannel)
@@ -179,7 +179,7 @@ class Frame_DAQchannel(tk.Frame):
         self.entry.destroy()
         self.lab.destroy()
         self.addEntry()
-        self.tooltip.text = self.DAQchannel.getHelpText()
+        self.tooltip.text = self.DAQchannel.get_help_text()
 
 
 class Frame_DIOline(tk.Frame):
@@ -323,7 +323,7 @@ class Entry_DAQchannel(tk.Entry):
         if flashCol:
             self.flash(flashCol)
         # Update channel value (after converting it to a voltage if the channel is calibrated)
-        self.controller.updateChannelValue(
+        self.controller.update_channel_value(
             self.channel.chNum,
             self.chValue
             if not self.channel.isCalibrated

@@ -138,7 +138,7 @@ class DummyDAQController:
 
     def get_channels(self, only_visible: bool = False) -> list:
         if only_visible:
-            return [ch for ch in self.channels if ch.isUIVisable]
+            return [ch for ch in self.channels if ch.isUIVisible]
         return list(self.channels)
 
     def get_dios(self) -> list:

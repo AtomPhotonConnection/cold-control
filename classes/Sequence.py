@@ -140,7 +140,7 @@ class _ChannelSequence:
             v_interval_styles = []
         if tv_pairs is None:
             tv_pairs = [(0.0, 0.0)]
-        self.parent = parent_sequence
+        self.parent: Sequence = parent_sequence
 
         self.tV_pairs, self.V_interval_styles = map(
             list, zip(*sorted(zip(tv_pairs, v_interval_styles), key=lambda x: x[0][0]))
@@ -149,7 +149,7 @@ class _ChannelSequence:
         self.validate()
 
     def get_val_array(self):
-        t_span = self.parent.getTimeSteps()
+        t_span = self.parent.get_time_steps()
         v_span = np.array([], dtype=np.float64)
         num_intervals = len(self.V_interval_styles)
         #
@@ -216,14 +216,17 @@ class _ChannelSequence:
         """Validate the sequence information provided for consistency with itself and the parent sequence."""
         if (
             len(self.tV_pairs) == len(self.V_interval_styles) + 1
-            and self.tV_pairs[-1][0] != self.parent.getTimeSteps()[-1]
+            and self.tV_pairs[-1][0] != self.parent.get_time_steps()[-1]
         ):
             raise InvalidSequenceChannelError(
-                f"Sequence validation error: If {len(self.tV_pairs)} time-voltage pairs and {len(self.V_interval_styles)} styles of how to move between them are provided - the last time must be the final data point of the sequence ({self.parent.getTimeSteps()[-1]})."
+                f"Sequence validation error: If {len(self.tV_pairs)} time-voltage pairs and"
+                + f" {len(self.V_interval_styles)} styles of how to move between them are "
+                + "provided - the last time must be the final data point of the sequence"
+                + f" ({self.parent.get_time_steps()[-1]})."
             )
 
         elif len(self.tV_pairs) == len(self.V_interval_styles):
-            if self.tV_pairs[-1][0] >= self.parent.getTimeSteps()[-1]:
+            if self.tV_pairs[-1][0] >= self.parent.get_time_steps()[-1]:
                 raise InvalidSequenceChannelError(
                     f"Sequence validation error: If the same number of time-voltage pairs and interval styles ({len(self.tV_pairs)}) are provided - the final time provided must be before the end of the sequence length.."
                 )
@@ -245,9 +248,10 @@ class _ChannelSequence:
                 f"Every channels sequence must begin at t=0 (here t={self.tV_pairs[0][0]} is the first time provided)."
             )
 
-        if self.tV_pairs[-1][0] > self.parent.getLength():
+        if self.tV_pairs[-1][0] > self.parent.get_length():
             raise InvalidSequenceChannelError(
-                f"A channel sequence cannot be created with a time-voltage pair ({self.tV_pairs[-1]}) outside the total running time of it's parent sequence ({self.parent.getLength()})"
+                f"A channel sequence cannot be created with a time-voltage pair ({self.tV_pairs[-1]})"
+                + f" outside the total running time of it's parent sequence ({self.parent.get_length()})"
             )
 
 
