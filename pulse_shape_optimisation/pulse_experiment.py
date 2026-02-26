@@ -41,8 +41,8 @@ import numpy as np
 import pandas as pd
 from configobj import ConfigObj
 
-from classes.config_readers import AwgConfigReader, ScopeConfigReader
-from classes.experimental_configs import AwgConfiguration
+from classes.config_readers import AwgConfigReader
+from classes.experimental_configs import AwgConfiguration, ScopeConfiguration
 from instruments.Oscilloscopes.agilent_mso9254A import OscilloscopeManager
 from instruments.WX218x.awg_manager import AWGManager
 
@@ -203,6 +203,19 @@ class PulseShapeConfig:
                 self.channel_map[ch_num] = (lower, upper)
         if not self.channel_map:
             self.channel_map = {1: (-0.5, 0.5)}
+
+        # Build a ScopeConfiguration from the parsed oscilloscope fields
+        scope_data_channels: dict[int, dict] = {
+            ch: {"range": rng, "impedance": "high", "coupling": "DC"}
+            for ch, rng in self.channel_map.items()
+        }
+        self.scope_config = ScopeConfiguration(
+            trigger_channel=self.trigger_channel,
+            trigger_level=self.trigger_level,
+            sample_rate=self.samp_rate,
+            time_range=(self.timebase_start, self.timebase_stop),
+            data_channels=scope_data_channels,
+        )
 
         # --- Measurement -----------------------------------------------------
         meas = _cfg_section(self._raw, "Measurement")
@@ -504,18 +517,7 @@ class PulseShapeExperimentRunner:
 
     def _build_scope_acq(self) -> "_ScopeAcquisition":
         """Build a scope acquisition helper. Returns acq."""
-        acq = _ScopeAcquisition(
-            self.scope,
-            {
-                "data_channel": self.config.data_channel,
-                "channel_map": self.config.channel_map,
-                "samp_rate": self.config.samp_rate,
-                "timebase_range": (
-                    self.config.timebase_start,
-                    self.config.timebase_stop,
-                ),
-            },
-        )
+        acq = _ScopeAcquisition(self.scope, self.config.scope_config)
         return acq
 
     def _timebase_align(
@@ -642,8 +644,6 @@ class PulseShapeExperimentRunner:
         time.sleep(0.5)
 
         # 3. Scope acquisition
-        # TODO: this information should be extracted from a scope config object
-        # scope_cfg = ScopeConfigReader()
         acq: _ScopeAcquisition = self._build_scope_acq()
         trig_ch, trig_level = self.config.trigger_channel, self.config.trigger_level
 
@@ -716,7 +716,7 @@ class PulseShapeExperimentRunner:
 class _ScopeAcquisition:
     """Thin wrapper around OscilloscopeManager for configure → acquire."""
 
-    def __init__(self, osc_manager: Any, scope_config: dict) -> None:
+    def __init__(self, osc_manager: Any, scope_config: ScopeConfiguration) -> None:
         self.osc = osc_manager
         self.scope_config = scope_config
 
@@ -727,12 +727,7 @@ class _ScopeAcquisition:
         trigger_slope: str = "+",
     ) -> None:
         """Configure scope channels, timebase, and trigger."""
-        self.osc.configure_scope(
-            self.scope_config["channel_map"],
-            samp_rate=self.scope_config["samp_rate"],
-            timebase_range=self.scope_config["timebase_range"],
-        )
-        self.osc.configure_trigger(trigger_channel, trigger_level, trigger_slope)
+        self.osc.configure_from_config(self.scope_config, trigger_slope)
 
     def acquire_data(
         self, channels: list[int], num_measurements: int = 50

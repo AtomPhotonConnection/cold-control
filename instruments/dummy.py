@@ -231,6 +231,19 @@ class DummyOscilloscopeManager:
             trigger_slope,
         )
 
+    def configure_from_config(self, scope_config, trigger_slope: str = "+") -> None:
+        """Configure from a :class:`ScopeConfiguration` — delegates to existing methods."""
+        self.configure_scope(
+            scope_config.data_channels,
+            samp_rate=scope_config.sample_rate,
+            timebase_range=scope_config.time_range,
+        )
+        self.configure_trigger(
+            scope_config.trigger_channel,
+            scope_config.trigger_level,
+            trigger_slope,
+        )
+
     def set_to_digitize(self, channels: list | None = None) -> bool:
         if channels is None:
             channels = [1, 2]

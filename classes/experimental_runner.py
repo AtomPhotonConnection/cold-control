@@ -47,6 +47,7 @@ from classes.experimental_configs import (
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
     PhotonProductionConfiguration,
+    ScopeConfiguration,
     SingleExperimentConfig,
     Waveform,
 )
@@ -1179,11 +1180,8 @@ class MotFluoresceExperiment(GenericExperiment):
             print("Not using camera for MOT fluorescence experiment.")
 
         if self.with_scope:
-            self.samp_rate = self.mot_fluoresce_config.scope_sample_rate
-            self.time_range = self.mot_fluoresce_config.scope_time_range
-            self.trig_ch = self.mot_fluoresce_config.scope_trigger_channel
-            self.trig_lvl = self.mot_fluoresce_config.scope_trigger_level
-            self.data_chs = self.mot_fluoresce_config.scope_data_channels
+            self.scope_config: ScopeConfiguration = self.mot_fluoresce_config.scope_config  # type: ignore[assignment]
+            assert self.scope_config is not None, "scope_config must be set when use_scope is True."
 
     def __configure_camera(self):
         """
@@ -1247,11 +1245,7 @@ class MotFluoresceExperiment(GenericExperiment):
                 )
                 self.scope = osc.OscilloscopeManager()
             # self.scope.reset_scope()
-            self.scope.configure_scope(
-                self.data_chs, samp_rate=self.samp_rate, timebase_range=self.time_range
-            )
-
-            self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
+            self.scope.configure_from_config(self.scope_config)
             print("scope configured")
             print(f"configuring scope took {time.time() - start_time}s")
             # self.scope.set_to_run()
@@ -1319,7 +1313,7 @@ class MotFluoresceExperiment(GenericExperiment):
         while i <= self.config.iterations:
             print(f"Iteration {i}")
             print(f"loading mot for {self.config.mot_reload}ms")
-            # self.scope.set_to_digitize(self.data_chs)
+            # self.scope.set_to_digitize(self.scope_config.data_channels)
             sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
             self.scope.arm_scope()
@@ -1335,7 +1329,9 @@ class MotFluoresceExperiment(GenericExperiment):
             if success:
                 start_data_time = time.time()
                 print("collecting data")
-                data = self.scope.read_slow_return_data(list(self.data_chs.keys()))
+                data = self.scope.read_slow_return_data(
+                    list(self.scope_config.data_channels.keys())
+                )
                 if data is not None:
                     filename = f"iteration_{i}_data.csv"
                     full_name = full_directory / filename

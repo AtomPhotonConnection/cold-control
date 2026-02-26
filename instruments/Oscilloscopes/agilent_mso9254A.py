@@ -6,10 +6,11 @@ Created on 06/02/2026.
 the connection to and data acquisition from an Agilent Infiniium 9000 Series Oscilloscope.
 """
 
+import contextlib
 import logging
-import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import cast
 
 import matplotlib.pyplot as plt
@@ -145,12 +146,12 @@ class OscilloscopeManager:
         current_time = datetime.now().strftime("%H-%M-%S")
 
         # Ensure the new directory exists
-        directory = os.path.join("data", current_date)
-        os.makedirs(directory, exist_ok=True)
+        directory = Path("data") / current_date
+        directory.mkdir(parents=True, exist_ok=True)
 
         # Creates full file name including time and parent folders
         full_name = f"{window}_{current_time}_{filename}"
-        full_name = os.path.join(directory, full_name)
+        full_name = directory / full_name
 
         # Saves the dataframe
         dataframe.to_csv(full_name, index=False)
@@ -280,7 +281,29 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
-    def set_to_digitize(self, channels=[1, 2]):
+    def configure_from_config(self, scope_config, trigger_slope="+"):
+        """Configure the scope from a :class:`ScopeConfiguration` object.
+
+        This is a convenience wrapper that calls :meth:`configure_scope` and
+        :meth:`configure_trigger` using the parameters stored in *scope_config*.
+
+        Args:
+            scope_config: A ``ScopeConfiguration`` instance (from
+                ``classes.experimental_configs``).
+            trigger_slope: Trigger edge direction, ``"+"`` (default) or ``"-"``.
+        """
+        self.configure_scope(
+            scope_config.data_channels,
+            samp_rate=scope_config.sample_rate,
+            timebase_range=scope_config.time_range,
+        )
+        self.configure_trigger(
+            scope_config.trigger_channel,
+            scope_config.trigger_level,
+            trigger_slope,
+        )
+
+    def set_to_digitize(self, channels=(1, 2)):
         """
         Function to set the scope to digitize mode.
         For Agilent 9000, DIGitize clears memory, starts acquisition, and waits for completion.
@@ -314,19 +337,14 @@ class OscilloscopeManager:
 
     def reset_scope(self):
         """Reset the oscilloscope."""
-        try:
+        with contextlib.suppress(Exception):
             cast(MessageBasedResource, self.scope).clear()
-            # self.scope.clear()
-        except Exception:
-            pass
         self._write_with_retry("*RST")
 
     def clear_scope(self):
         """Clear scope display/data."""
-        try:
+        with contextlib.suppress(Exception):
             cast(MessageBasedResource, self.scope).clear()
-        except Exception:
-            pass
         self.clear_error_queue()
         print("Oscilloscope cleared.")
 
@@ -445,7 +463,7 @@ class OscilloscopeManager:
             2. :DIGitize — clears old data, arms, waits for all averages, stops
             3. Read waveform data (already averaged in hardware)
 
-        Note: :DIGitize internally runs the full acquire cycle (arm → trigger ×N → stop),
+        Note: :DIGitize internally runs the full acquire cycle (arm -> trigger xN -> stop),
         so there is no need to call :RUN beforehand.
 
         Inputs:
