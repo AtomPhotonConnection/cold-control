@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import messagebox as tk_message_box
 from typing import Any
 
-import classes.Styles as Styles
+import classes.temp_name_styles as temp_name_styles
 from classes.config_readers import ConfigReader, ExperimentConfigReader
 from UI_classes.Camera_UI import CameraUI
 from UI_classes.DAQ_UI import DaqUI
@@ -161,6 +161,6 @@ class ColdControlUI(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1600x800")
-    Styles.configureStyles()
+    temp_name_styles.configure_styles()
     ColdControlUI(root).pack(fill="both", expand=True)
     root.mainloop()
