@@ -7,8 +7,8 @@ Created on 25 Mar 2016
 import tkinter as tk
 
 # from tkinter import font as tkFont
-from tkinter import filedialog as tkFileDialog
-from tkinter import messagebox as tkMessageBox
+from tkinter import filedialog as tk_file_dialog
+from tkinter import messagebox as tk_message_box
 from tkinter import ttk
 
 import matplotlib.pyplot as plt
@@ -168,21 +168,21 @@ class Sequence_UI(tk.Toplevel):
         self.CloseButton = tk.Button(buttons, text="Close", command=self.closeWindow)
         self.CloseButton.grid(row=1, column=0, padx=5, pady=5, sticky=tk.S + tk.E)
 
-        self.saveLoadButtons = tk.Frame(buttons)
-        self.LoadButton = tk.Button(
-            self.saveLoadButtons, text="Load sequence", command=self.loadSeq
-        )
-        self.SaveButton = tk.Button(
-            self.saveLoadButtons, text="Save sequence", command=self.saveSeq
-        )
-        self.LoadButton.pack(side=tk.TOP, padx=5, pady=5)
-        self.SaveButton.pack(side=tk.TOP, padx=5, pady=5)
-        self.saveLoadButtons.grid(row=0, column=0, padx=5, pady=5, sticky=tk.N + tk.E)
+        # self.saveLoadButtons = tk.Frame(buttons)
+        # self.LoadButton = tk.Button(
+        #     self.saveLoadButtons, text="Load sequence", command=self.loadSeq
+        # )
+        # self.SaveButton = tk.Button(
+        #     self.saveLoadButtons, text="Save sequence", command=self.saveSeq
+        # )
+        # self.LoadButton.pack(side=tk.TOP, padx=5, pady=5)
+        # self.SaveButton.pack(side=tk.TOP, padx=5, pady=5)
+        # self.saveLoadButtons.grid(row=0, column=0, padx=5, pady=5, sticky=tk.N + tk.E)
 
         return buttons
 
     def loadSeq(self):
-        fname = tkFileDialog.askopenfilename(title="Load a sequence", initialdir="")
+        fname = tk_file_dialog.askopenfilename(title="Load a sequence", initialdir="")
 
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname != "":
@@ -195,7 +195,7 @@ class Sequence_UI(tk.Toplevel):
         self.lift(self.parent)
 
     def saveSeq(self):
-        fname = tkFileDialog.asksaveasfilename(title="Save a sequence")
+        fname = tk_file_dialog.asksaveasfilename(title="Save a sequence")
         # Check for empyy filenames (i.e. when the user cancelled the acion)
         if fname != "":
             writer = SequenceWriter(fname)
@@ -261,7 +261,7 @@ class Sequence_UI(tk.Toplevel):
         # dictionary to be passed to the update function later.
         channelsToUpdate = {}
         if newSeqLength > self.sequence.getLength():
-            result = tkMessageBox.askquestion(
+            result = tk_message_box.askquestion(
                 "Please confirm changes",
                 f"Sequence length will be increased from {self.sequence.getLength()} to {newSeqLength}. Channels will be set as constant from their current end values to compensate."
                 + "\nIs that ok?",
@@ -287,7 +287,7 @@ class Sequence_UI(tk.Toplevel):
                 return
 
         elif newSeqLength < self.sequence.getLength():
-            result = tkMessageBox.askquestion(
+            result = tk_message_box.askquestion(
                 "Please confirm changes",
                 f"Sequence length will be decreased from {self.sequence.getLength()} to {newSeqLength}. Channels will be cropped with there last time interval being made constant to compensate."
                 + "\nIs that ok?",
@@ -333,7 +333,7 @@ class Sequence_UI(tk.Toplevel):
                 errMsg += f"\nChannel {mulErr.errorChannels[i]} - {mulErr.errors[i]!s}"
                 print(mulErr.errorChannels[i], str(mulErr.errors[i]))
 
-            tkMessageBox.showwarning("Unable to applySamplingConfiguration changes", errMsg)
+            tk_message_box.showwarning("Unable to applySamplingConfiguration changes", errMsg)
             # Seems to be a tkinter bug that the parent is shown on top after this message dialog
             self.lift(self.parent)
 

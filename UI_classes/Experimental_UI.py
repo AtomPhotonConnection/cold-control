@@ -25,7 +25,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 
 from classes.config_readers import (
-    ExperimentalAutomationReader,
     ExperimentConfigReader,
     get_config_root,
 )
@@ -38,7 +37,6 @@ from classes.experimental_configs import (
 )
 from classes.experimental_runner import (
     AbsorbtionImagingExperiment,
-    ExperimentalAutomationRunner,
     GenericExperiment,
     MotFluoresceExperiment,
     MotFluoresceSweepExperiment,
@@ -97,7 +95,7 @@ class Experimental_UI(tk.LabelFrame):
         self.set_seq_button = ImageButton(
             self,
             image=icon,
-            text="Set sequence",
+            text="View sequence",
             command=self.openSeqWindow,
             background="green4",
             **butt_opts,
@@ -109,22 +107,12 @@ class Experimental_UI(tk.LabelFrame):
         self.run_seq_button = ImageButton(
             self,
             image=icon,
-            text="Run sequence",
+            text="Run experiment",
             command=self.runSeq,
             background="green2",
             **butt_opts,
         )
         self.run_seq_button.image_ref = icon  # see ImageButton class
-
-        self.run_auto_exp_button = ImageButton(
-            self,
-            image=icon,
-            text="Run automated exp.",
-            command=self.runAutomatedExp,
-            background="green1",
-            **butt_opts,
-        )
-        self.run_auto_exp_button.image_ref = icon  # see ImageButton class
 
         icon = Image.open("icons/config_icon.png").resize((30, 30))
         icon = ImageTk.PhotoImage(icon)
@@ -227,11 +215,10 @@ class Experimental_UI(tk.LabelFrame):
 
         self.set_seq_button.grid(row=0, column=0, **grid_opts)
         self.run_seq_button.grid(row=1, column=0, **grid_opts)
-        self.run_auto_exp_button.grid(row=2, column=0, **grid_opts)
 
         self.configure_photon_production_button.grid(row=1, column=1, **grid_opts)
-        self.total_iterations_frame.grid(row=3, column=0, **grid_opts)
-        self.reload_time_frame.grid(row=4, column=0, **grid_opts)
+        self.total_iterations_frame.grid(row=2, column=0, **grid_opts)
+        self.reload_time_frame.grid(row=3, column=0, **grid_opts)
 
         self.test_bkg_button.grid(row=0, column=2, **grid_opts)
         self.run_abs_img_button.grid(row=1, column=2, **grid_opts)
@@ -455,84 +442,6 @@ class Experimental_UI(tk.LabelFrame):
                 "Invalid experiment type specified.  Must be either PhotonProductionExperiment or MotFluoresceExperiment."
             )
         self.runExperiment(experiment, liveUI, autoCloseLiveUI)
-
-    def runAutomatedExp(self, liveUI=True):
-        fname = tkFileDialog.askopenfilename(
-            parent=self,
-            title="Choose an Experimental Automation Configuration",
-            initialdir=os.path.join(os.getcwd(), "/configs/experimental automation"),
-        )
-
-        # Check for empty filenames (i.e. when the user cancelled the action)
-        if fname != "":
-            experimental_automation_configuration = ExperimentalAutomationReader(
-                fname
-            ).get_experimental_automation_configuration()
-
-            # Note we pass a copy of the photon production configuration so every different experiement can
-            # edit the parameters without effecting the top level settings.
-            automated_experiment = ExperimentalAutomationRunner(
-                daq_controller=self.daq_ui.daq_controller,
-                experimental_automation_configuration=experimental_automation_configuration,
-                photon_production_configuration=cast(
-                    PhotonProductionConfiguration, copy.copy(self.photon_production_config)
-                ),
-            )
-
-            start_automated_experiment = tkMessageBox.askyesno(
-                "Start automated experiment",
-                "Please confirm whether you would like to start an automated experiment.\n"
-                + f"This will consist of {automated_experiment.experiements_to_run} independent sequences and a total of {automated_experiment.get_total_iterations()} MOT throws",
-                parent=self,
-            )
-
-            # Confirm the user wishes to run the automated experiment
-            if start_automated_experiment in (None, False):
-                return
-            elif start_automated_experiment:
-                # If run tone is on, turn it off!
-                if self.run_tone_awg:
-                    self.exit_run_tones()
-
-                automated_experiment.write_to_summary_file(
-                    "\nStarting automated experiment at {0}\n\n".format(time.strftime("%H-%M-%S"))
-                )
-
-                run_next_experiment = True
-                # Run all the queued experiements until we are done or one is manually stopped
-                while automated_experiment.has_next_experiment() and run_next_experiment:
-                    experiment: PhotonProductionExperiment
-                    # Get and run next experiment
-                    experiment, seq_fname, modulation_frequencies = (
-                        automated_experiment.get_next_experiment()
-                    )
-                    self.runExperiment(experiment, liveUI, autoCloseLiveUI=True)
-                    run_next_experiment = not experiment.forced_stop
-
-                    # Log experiment
-                    automated_experiment.write_to_summary_file(
-                        (
-                            "Experiment {0}:\n"
-                            + "    time: {1}\n"
-                            + "    sequence: {2}\n"
-                            + "    iterations: {3}\n"
-                            + "    mot reload: {4}\n"
-                            + "    modulation frequencies: {5}\n"
-                        ).format(
-                            automated_experiment.experiements_iter,
-                            experiment.data_saver.experiment_time,
-                            seq_fname,
-                            experiment.iterations,
-                            experiment.mot_reload_time,
-                            modulation_frequencies,
-                        )
-                    )
-
-                automated_experiment.close()
-                print("Finished automated experiment.")
-                automated_experiment.write_to_summary_file(
-                    "\nFinished automated experiment at {0}\n\n".format(time.strftime("%H-%M-%S"))
-                )
 
     def runAbsorbtionImaging(self, bkg_test=False):
         if self.parent.camera_live:
