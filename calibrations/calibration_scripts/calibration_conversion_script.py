@@ -1,18 +1,18 @@
 # import pyvisa as visa
-import os
+from pathlib import Path
 
-from classes.Config import ConfigReader, DaqReader
-from classes.DAQ import DAQ_channel
+from classes.config_readers import ConfigReader, DaqReader
+from classes.DAQ import DAQChannel
 
-config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
+config_reader = ConfigReader(Path.cwd() / "configs" / "rootConfig.ini")
 daq_config_fname = (
     config_reader.get_daq_config_fname()
 )  # gets the name of the config file for the DAQ cards
 daq_reader = DaqReader(daq_config_fname)
 
-channels: list[DAQ_channel] = []
+channels: list[DAQChannel] = []
 for _, v in daq_reader.config["DAQ channels"].items():
-    channelArgs: tuple[int, str, tuple[float, float], float, bool, str] = (
+    channel_args: tuple[int, str, tuple[float, float], float, bool, str] = (
         int(v["chNum"]),  # chNum (int)
         str(v["chName"]),  # chName (str)
         (float(v["chLimits"][0]), float(v["chLimits"][1])),  # chLimits (tuple[float,float])
@@ -20,7 +20,7 @@ for _, v in daq_reader.config["DAQ channels"].items():
         bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
         str(v["calibrationFname"]),  # calibrationFname (str)
     )
-    channels.append(DAQ_channel(*channelArgs))
+    channels.append(DAQChannel(*channel_args))
 
 # print(channels)
 
@@ -39,16 +39,16 @@ def main_loop():
         main_loop()
         return
 
-    calib_from_V = calib_to_V = None
+    calib_from_v = calib_to_v = None
 
     for channel in channels:
         # print(channel.chNum)
         if channel.chNum == ch_num:
-            calib_to_V = channel.calibrationToVFunc
-            calib_from_V = channel.calibrationFromVFunc
+            calib_to_v = channel.calibrationToVFunc
+            calib_from_v = channel.calibrationFromVFunc
             print(f"This channel is {channel.chName}")
 
-    if calib_to_V is None or calib_from_V is None:
+    if calib_to_v is None or calib_from_v is None:
         print("channel not found")
         main_loop()
         return
@@ -75,9 +75,9 @@ def main_loop():
 
     print("result:")
     if conv_type:
-        print(calib_from_V(value))
+        print(calib_from_v(value))
     else:
-        print(calib_to_V(value))
+        print(calib_to_v(value))
 
     main_loop()
     return

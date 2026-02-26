@@ -11,7 +11,7 @@ import os
 from instruments.WX218x.WX218x_awg import Channel
 
 import lab_control_functions.calibration_functions as calibrate
-from classes.Config import ConfigReader, DaqReader
+from classes.config_readers import ConfigReader, DaqReader
 
 # Select the type of calibration script to run.
 CALIB_TYPE = (
@@ -54,7 +54,7 @@ if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
 
     config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
     daq_config_fname = config_reader.get_daq_config_fname()
-    daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+    daq_controller = DaqReader(daq_config_fname).load_daq_controller()
     daq_controller.continuousOutput = True
 
     calibrate.daq_driven_aom_response(
@@ -106,16 +106,16 @@ elif __name__ == "__main__" and CALIB_TYPE == "another one":
         freq_ch = 14
         config_reader = ConfigReader(os.getcwd() + '/configs/rootConfig.ini')
         daq_config_fname = config_reader.get_daq_config_fname()
-        daq_controller = DaqReader(daq_config_fname).load_DAQ_controller()
+        daq_controller = DaqReader(daq_config_fname).load_daq_controller()
         daq_controller.continuousOutput=True
-        daq_controller.updateChannelValue(15, 1) # for manual control of amplitude input (in V)
+        daq_controller.update_channel_value(15, 1) # for manual control of amplitude input (in V)
 
         calibName = "{0}_freq".format(aom_name)
         vData, calData, units = calibrate_frequency(daq_controller,freq_ch, (0,10), calibration_V_step = get_default_calibration_Vstep())
 
         create_calibration_file(os.getcwd() + '/calibrations/jan/{0}'.format(calibName), vData, calData, units)
         save_calibration_plot(os.getcwd() + '/calibrations/jan/{0}_plot.png'.format(calibName), vData, calData, units, '{0}_plot'.format(calibName))
-        daq_controller.releaseAll()
+        daq_controller.release_all()
     """
 
 else:

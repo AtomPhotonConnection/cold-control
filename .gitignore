@@ -5,6 +5,9 @@
 *.pyc
 .idea
 .conda
+.github
+.ipynb_checkpoints
+.ruff_cache
 
 labbook/**
 

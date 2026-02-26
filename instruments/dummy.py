@@ -31,14 +31,14 @@ class DummyDAQController:
     Stores channel state in memory and prints writes to stdout.
     """
 
-    def __init__(self, channels: list, dios: list | None = None, continuousOutput: bool = False):
+    def __init__(self, channels: list, dios: list | None = None, continuous_ouput: bool = False):
         """
         Parameters
         ----------
-        channels : list[DAQ_channel]
-            DAQ_channel objects (real objects — only their metadata is used).
-        dios : list[DAQ_dio] | None
-            DAQ_dio objects, may be ``None`` or empty.
+        channels : list[DAQChannel]
+            DAQChannel objects (real objects — only their metadata is used).
+        dios : list[DAQDio] | None
+            DAQDio objects, may be ``None`` or empty.
         continuousOutput : bool
             Mirror of the real flag (no effect in dummy mode).
         """
@@ -46,12 +46,12 @@ class DummyDAQController:
         self._slaves: list = []
         self.channels = list(channels)
         self.dios = list(dios) if dios else []
-        self.continuousOutput = continuousOutput
+        self.continuousOutput = continuous_ouput
 
         # Build the same channelValues dict as the real controller
         self.channelValues: dict[int, float] = {ch.chNum: ch.defaultValue for ch in self.channels}
 
-        # Register dummy write/read functions on DIOs (like DAQ_card.validateAndRegisterDigitalIos)
+        # Register dummy write/read functions on DIOs (like DAQCard.validateAndRegisterDigitalIos)
         self._dio_states: dict[int, bool] = {}
         for dio in self.dios:
             self._dio_states[dio.dio_num] = False
@@ -81,17 +81,17 @@ class DummyDAQController:
 
     # -- channel value management --
 
-    def updateChannelValue(self, chNum: int, newValue: float) -> None:
-        self.channelValues[chNum] = newValue
-        _log.debug("[DummyDAQ] Ch %d → %.4f V", chNum, newValue)
+    def update_channel_value(self, ch_num: int, new_value: float) -> None:
+        self.channelValues[ch_num] = new_value
+        _log.debug("[DummyDAQ] Ch %d → %.4f V", ch_num, new_value)
 
-    def writeChannelValues(self) -> None:
+    def write_channel_values(self) -> None:
         _log.info("[DummyDAQ] writeChannelValues: %s", self.channelValues)
 
-    def getChannelValues(self) -> np.ndarray:
+    def get_channel_values(self) -> np.ndarray:
         return np.array([[v] for _, v in sorted(self.channelValues.items())])
 
-    def toggleContinuousOutput(self) -> None:
+    def toggle_continuous_output(self) -> None:
         self.continuousOutput = not self.continuousOutput
         _log.info("[DummyDAQ] continuousOutput → %s", self.continuousOutput)
 
@@ -106,23 +106,23 @@ class DummyDAQController:
 
     # -- sequence load / play --
 
-    def validateAndCorrectControlArray(self, controlArray: np.ndarray) -> np.ndarray:
-        seqChs, numSamps = controlArray.shape
-        totChs = len(self.channels)
-        if seqChs < totChs:
-            controlArray = np.vstack([controlArray, np.zeros([totChs - seqChs, numSamps])])
-        return controlArray
+    def validate_and_correct_control_array(self, control_array: np.ndarray) -> np.ndarray:
+        seq_chs, num_samps = control_array.shape
+        tot_chs = len(self.channels)
+        if seq_chs < tot_chs:
+            control_array = np.vstack([control_array, np.zeros([tot_chs - seq_chs, num_samps])])
+        return control_array
 
-    def write(self, valueArray: np.ndarray) -> None:
-        _log.info("[DummyDAQ] write array shape %s", valueArray.shape)
+    def write(self, value_array: np.ndarray) -> None:
+        _log.info("[DummyDAQ] write array shape %s", value_array.shape)
 
-    def load(self, sequenceArray: np.ndarray) -> None:
-        _log.info("[DummyDAQ] load sequence shape %s", sequenceArray.shape)
+    def load(self, sequence_array: np.ndarray) -> None:
+        _log.info("[DummyDAQ] load sequence shape %s", sequence_array.shape)
 
-    def play(self, t_step: float = 1.0, clearCards: bool = True, buffer_id=None) -> None:
-        _log.info("[DummyDAQ] play  t_step=%.2f µs  clearCards=%s", t_step, clearCards)
+    def play(self, t_step: float = 1.0, clear_cards: bool = True, buffer_id=None) -> None:
+        _log.info("[DummyDAQ] play  t_step=%.2f µs  clearCards=%s", t_step, clear_cards)
 
-    def clearCards(self) -> None:
+    def clear_cards(self) -> None:
         _log.info("[DummyDAQ] clearCards")
 
     def enslave(self, slave) -> None:
@@ -131,24 +131,24 @@ class DummyDAQController:
     def emancipate(self, slave) -> None:
         _log.info("[DummyDAQ] emancipate (no-op)")
 
-    def releaseAll(self) -> None:
-        _log.info("[DummyDAQ] releaseAll")
+    def release_all(self) -> None:
+        _log.info("[DummyDAQ] release_all")
 
     # -- queries --
 
-    def getChannels(self, onlyVisable: bool = False) -> list:
-        if onlyVisable:
-            return [ch for ch in self.channels if ch.isUIVisable]
+    def get_channels(self, only_visible: bool = False) -> list:
+        if only_visible:
+            return [ch for ch in self.channels if ch.isUIVisible]
         return list(self.channels)
 
-    def getDIOs(self) -> list:
+    def get_dios(self) -> list:
         return list(self.dios)
 
-    def getChannelNumberNameDict(self, onlyVisable: bool = False) -> dict:
-        chs = self.getChannels(onlyVisable)
+    def get_channel_number_name_dict(self, only_visible: bool = False) -> dict:
+        chs = self.get_channels(only_visible)
         return {ch.chNum: ch.chName for ch in chs}
 
-    def getChannelCalibrationDict(self) -> dict:
+    def get_channel_calibration_dict(self) -> dict:
         result = {}
         for ch in self.channels:
             if ch.isCalibrated:
@@ -363,17 +363,23 @@ class DummyAWGManager:
 
     # -- clock / sample rate --
 
-    def configure_sample_rate(self, sample_rate: float) -> None:
+    def set_sample_rate(
+        self, sample_rate: float, channels: Optional[tuple[int, ...]] = None
+    ) -> None:
         self._sample_rate = sample_rate
-        self._log.info("[DummyAWG] configure_sample_rate %.2e", sample_rate)
+        self._log.info(
+            f"[DummyAWG] set_sample_rate {sample_rate:.2e} on channels {channels or 'all'}"
+        )
 
     def get_sample_rate(self) -> float:
         return self._sample_rate
 
     # -- output mode --
 
-    def set_output_mode(self, mode: str = "USER") -> None:
-        self._log.info("[DummyAWG] set_output_mode %s", mode)
+    def set_output_mode(
+        self, mode: str = "USER", channels: Optional[tuple[int, ...]] = None
+    ) -> None:
+        self._log.info("[DummyAWG] set_output_mode %s on channels %s", mode, channels or "all")
 
     # -- run mode --
 

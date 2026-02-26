@@ -13,8 +13,8 @@ import re
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog as tkFileDialog
-from tkinter import messagebox as tkMessageBox
+from tkinter import filedialog as tk_file_dialog
+from tkinter import messagebox as tk_message_box
 from tkinter import simpledialog
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Literal, cast
@@ -24,17 +24,18 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 
-from classes.Config import ExperimentalAutomationReader, ExperimentConfigReader, get_config_root
-from classes.DAQ import DAQ_dio
-from classes.ExperimentalConfigs import (
+from classes.config_readers import (
+    ExperimentConfigReader,
+)
+from classes.DAQ import DAQDio
+from classes.experimental_configs import (
     GenericConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
     PhotonProductionConfiguration,
 )
-from classes.ExperimentalRunner import (
+from classes.experimental_runner import (
     AbsorbtionImagingExperiment,
-    ExperimentalAutomationRunner,
     GenericExperiment,
     MotFluoresceExperiment,
     MotFluoresceSweepExperiment,
@@ -55,7 +56,7 @@ from UI_classes.UI_helpers import ImageButton
 # =======================================================================================
 
 
-class Experimental_UI(tk.LabelFrame):
+class ExperimentalUI(tk.LabelFrame):
     def __init__(
         self,
         parent,
@@ -78,9 +79,7 @@ class Experimental_UI(tk.LabelFrame):
             absorbtion_imaging_config_fname
         ).get_absorbtion_imaging_configuration()
         self.expt_config_reader = ExperimentConfigReader(experiment_config_fname)
-        self.photon_production_config: GenericConfiguration = (
-            self.expt_config_reader.get_correct_config()
-        )
+        self.loaded_experiment_config = self.expt_config_reader.get_correct_config()
         self.ic_ic = ic_imaging_control
         self.development_mode = development_mode
 
@@ -93,8 +92,8 @@ class Experimental_UI(tk.LabelFrame):
         self.set_seq_button = ImageButton(
             self,
             image=icon,
-            text="Set sequence",
-            command=self.openSeqWindow,
+            text="View sequence",
+            command=self.open_seq_window,
             background="green4",
             **butt_opts,
         )
@@ -105,22 +104,12 @@ class Experimental_UI(tk.LabelFrame):
         self.run_seq_button = ImageButton(
             self,
             image=icon,
-            text="Run sequence",
-            command=self.runSeq,
+            text="Run experiment",
+            command=self.run_seq,
             background="green2",
             **butt_opts,
         )
         self.run_seq_button.image_ref = icon  # see ImageButton class
-
-        self.run_auto_exp_button = ImageButton(
-            self,
-            image=icon,
-            text="Run automated exp.",
-            command=self.runAutomatedExp,
-            background="green1",
-            **butt_opts,
-        )
-        self.run_auto_exp_button.image_ref = icon  # see ImageButton class
 
         icon = Image.open("icons/config_icon.png").resize((30, 30))
         icon = ImageTk.PhotoImage(icon)
@@ -134,21 +123,26 @@ class Experimental_UI(tk.LabelFrame):
         )
         self.configure_photon_production_button.image_ref = icon  # see ImageButton class
 
+        if isinstance(self.loaded_experiment_config, MotFluoresceConfigurationSweep):
+            cfg = self.loaded_experiment_config.base_config
+        else:
+            cfg = self.loaded_experiment_config
+
         self.total_iterations_frame = Frame_ExperimentalParam(
             self,
             "Num. iterations",
-            initVal=self.photon_production_config.iterations,
+            initVal=cfg.iterations,
             dataType=int,
             helpText="The number of times the experimental sequence will be run.",
-            action=lambda entry_value: self.photon_production_config.set_iterations(entry_value),
+            action=lambda entry_value: cfg.set_iterations(entry_value),
         )
         self.reload_time_frame = Frame_ExperimentalParam(
             self,
             "MOT reload time (ms):",
-            initVal=self.photon_production_config.mot_reload,
+            initVal=cfg.mot_reload,
             dataType=float,
             helpText="The delay between successive iterations.",
-            action=lambda entry_value: self.photon_production_config.set_mot_reload(entry_value),
+            action=lambda entry_value: cfg.set_mot_reload(entry_value),
         )
 
         icon = Image.open("icons/play_icon.png").resize((30, 30))
@@ -157,7 +151,7 @@ class Experimental_UI(tk.LabelFrame):
             self,
             image=icon,
             text="Run abs. imaging",
-            command=lambda: self.runAbsorbtionImaging(),
+            command=lambda: self.run_absorption_imaging(),
             background="deep sky blue",
             **butt_opts,
         )
@@ -166,7 +160,7 @@ class Experimental_UI(tk.LabelFrame):
             self,
             image=icon,
             text="Test background",
-            command=lambda: self.runAbsorbtionImaging(bkg_test=True),
+            command=lambda: self.run_absorption_imaging(bkg_test=True),
             background="light sky blue",
             **butt_opts,
         )
@@ -215,20 +209,7 @@ class Experimental_UI(tk.LabelFrame):
             "repeats": 10,
         }
 
-        # Run sweep button and settings
-        with Image.open("icons/play_icon.png") as img:
-            icon = ImageTk.PhotoImage(img.resize((30, 30)))
-            self.fluoresce_sweep_btn = ImageButton(
-                self,
-                image=icon,
-                text="Run MOT Fluoresce Sweep",
-                command=self.fluoresce_sweep,
-                background="green2",
-                **butt_opts,
-            )
-            self.fluoresce_sweep_btn.image_ref = (
-                icon  # store the image as a variable in the widget to prevent garbage collection.
-            )
+        # (Sweep button removed — runSeq now handles sweep configs directly)
         # with Image.open("icons/config_icon.png") as img:
         #     icon = ImageTk.PhotoImage(img.resize((30,30)))
         #     self.config_fluoresce_sweep_btn = tk.Button(self, image=icon, width=25, height=25, command=self.configure_fluoresce_sweep, background='green4')
@@ -236,11 +217,10 @@ class Experimental_UI(tk.LabelFrame):
 
         self.set_seq_button.grid(row=0, column=0, **grid_opts)
         self.run_seq_button.grid(row=1, column=0, **grid_opts)
-        self.run_auto_exp_button.grid(row=2, column=0, **grid_opts)
 
         self.configure_photon_production_button.grid(row=1, column=1, **grid_opts)
-        self.total_iterations_frame.grid(row=3, column=0, **grid_opts)
-        self.reload_time_frame.grid(row=4, column=0, **grid_opts)
+        self.total_iterations_frame.grid(row=2, column=0, **grid_opts)
+        self.reload_time_frame.grid(row=3, column=0, **grid_opts)
 
         self.test_bkg_button.grid(row=0, column=2, **grid_opts)
         self.run_abs_img_button.grid(row=1, column=2, **grid_opts)
@@ -248,7 +228,6 @@ class Experimental_UI(tk.LabelFrame):
         self.flash_channel_button.grid(row=2, column=2, **grid_opts)
         self.configure_flash_channel_button.grid(row=2, column=3, **grid_opts)
 
-        self.fluoresce_sweep_btn.grid(row=3, column=2, **grid_opts)
         # self.config_fluoresce_sweep_btn.grid(row=3,column=3, **grid_opts)
 
         self.grid_columnconfigure(0, weight=1, uniform="button_col")
@@ -276,7 +255,6 @@ class Experimental_UI(tk.LabelFrame):
 
         self.run_tones_frame = rtf = tk.LabelFrame(self, text="Run tones", font=("Helvetica", 12))
 
-        rtf_butt_opts = {"font": ("Helvetica", 12), "height": 25, "width": 150, "compound": tk.LEFT}
         rtf_grid_opts = {"padx": 5, "pady": 2, "sticky": tk.E + tk.W}
 
         self.run_tone_awg = None
@@ -329,7 +307,7 @@ class Experimental_UI(tk.LabelFrame):
                 rtf, image=self.off_icon, background="red", relief=tk.RAISED, width=28
             )
             toggle_run_tone_button.config(
-                command=lambda button=toggle_run_tone_button, i_ch=i: self.toggleRunTone(
+                command=lambda button=toggle_run_tone_button, i_ch=i: self.toggle_run_tone(
                     button, i_ch
                 )
             )
@@ -343,25 +321,25 @@ class Experimental_UI(tk.LabelFrame):
 
         rtf.grid(row=0, column=4, rowspan=3, **grid_opts)
 
-    def openSeqWindow(self):
+    def open_seq_window(self):
         if (
             self.sequence_ui.configured_channel_labels
-            != self.daq_ui.daq_controller.getChannelNumberNameDict(onlyVisable=False)
+            != self.daq_ui.daq_controller.get_channel_number_name_dict(only_visible=False)
         ):
             self.sequence_ui.configureForNewChannelLabels(
-                self.daq_ui.daq_controller.getChannelNumberNameDict(onlyVisable=False)
+                self.daq_ui.daq_controller.get_channel_number_name_dict(only_visible=False)
             )
         if (
             self.sequence_ui.configured_channel_calibrations
-            != self.daq_ui.daq_controller.getChannelCalibrationDict()
+            != self.daq_ui.daq_controller.get_channel_calibration_dict()
         ):
             self.sequence_ui.configureForNewChannelCalibrations(
-                self.daq_ui.daq_controller.getChannelCalibrationDict()
+                self.daq_ui.daq_controller.get_channel_calibration_dict()
             )
         self.sequence_ui.openWindow()
 
-    def runExperiment(
-        self, loaded_experiment: GenericExperiment, liveUI=True, autoCloseLiveUI=False
+    def run_experiment(
+        self, loaded_experiment: GenericExperiment, live_ui=True, auto_close_live_ui=False
     ):
         """
         Run a photon production experiment. There is a some layered architecture here to be aware of if you
@@ -384,12 +362,12 @@ class Experimental_UI(tk.LabelFrame):
         # loaded_experiment.configure() # The experiment should configure itself, so this is not needed.
         experiment_live_ui = None
 
-        if liveUI:
+        if live_ui:
             assert isinstance(loaded_experiment, PhotonProductionExperiment), (
                 "Live UI only works with PhotonProductionExperiment objects."
             )
             experiment_live_ui = Photon_production_live_UI(
-                self, photon_production_experiment=loaded_experiment, auto_close=autoCloseLiveUI
+                self, photon_production_experiment=loaded_experiment, auto_close=auto_close_live_ui
             )
 
         experiment_thread = loaded_experiment.run_in_thread()
@@ -397,7 +375,7 @@ class Experimental_UI(tk.LabelFrame):
         # Small delay to ensure the photon_production_experiment is flagged as live before the UI starts polling it.
         # Otherwise the UI can think it's already over and not update!
         time.sleep(0.1)
-        if liveUI and experiment_live_ui is not None:
+        if live_ui and experiment_live_ui is not None:
             experiment_live_ui.poll_live_data()
             # Wait for the live window to close!
             self.winfo_toplevel().wait_window(experiment_live_ui)
@@ -408,7 +386,7 @@ class Experimental_UI(tk.LabelFrame):
     #         photon_production_experiment.close()
     #         experiment_live_ui.closeWindow()
 
-    def runSeq(self, liveUI=True, autoCloseLiveUI=False):
+    def run_seq(self, live_ui=True, auto_close_live_ui=False):
         """
         Function to run experimental sequences when the "Run sequence" button is pressed.
         """
@@ -417,19 +395,19 @@ class Experimental_UI(tk.LabelFrame):
             if state:
                 button.invoke()
 
-        if isinstance(self.photon_production_config, PhotonProductionConfiguration):
+        if isinstance(self.loaded_experiment_config, PhotonProductionConfiguration):
             # If the experiment loaded is a photon production experiment, run the code as normal
             experiment = PhotonProductionExperiment(
                 daq_controller=self.daq_ui.daq_controller,
                 sequence=self.sequence_ui.sequence,
-                photon_production_configuration=self.photon_production_config,
+                photon_production_configuration=self.loaded_experiment_config,
                 development_mode=self.development_mode,
             )
 
-        elif isinstance(self.photon_production_config, MotFluoresceConfiguration):
-            if self.photon_production_config.use_cam:
+        elif isinstance(self.loaded_experiment_config, MotFluoresceConfiguration):
+            if self.loaded_experiment_config.use_cam:
                 if self.parent.camera_live:
-                    tkMessageBox.showwarning(
+                    tk_message_box.showwarning(
                         "Error",
                         "Can't run an absorption imaging experiment\n while the camera is running.",
                     )
@@ -441,140 +419,34 @@ class Experimental_UI(tk.LabelFrame):
             experiment = MotFluoresceExperiment(
                 daq_controller=self.daq_ui.daq_controller,
                 sequence=self.sequence_ui.sequence,
-                mot_fluoresce_configuration=self.photon_production_config,
+                mot_fluoresce_configuration=self.loaded_experiment_config,
                 ic_imaging_control=camera_control,
                 sweep=False,
                 development_mode=self.development_mode,
             )
             # The mot fluoresce experiment is a special case where the Live UI is not set up.
-            liveUI = False
-            autoCloseLiveUI = False
+            live_ui = False
+            auto_close_live_ui = False
+
+        elif isinstance(self.loaded_experiment_config, MotFluoresceConfigurationSweep):
+            # Sweep config loaded — run the full sweep experiment
+            sweep_experiment = MotFluoresceSweepExperiment(
+                self.loaded_experiment_config,
+                self.daq_ui.daq_controller,
+                development_mode=self.development_mode,
+            )
+            print("Running MOT Fluoresce Sweep experiment")
+            sweep_experiment.run()
+            return
         else:
             raise Exception(
                 "Invalid experiment type specified.  Must be either PhotonProductionExperiment or MotFluoresceExperiment."
             )
-        self.runExperiment(experiment, liveUI, autoCloseLiveUI)
+        self.run_experiment(experiment, live_ui, auto_close_live_ui)
 
-    def fluoresce_sweep(self):
-        # If run tone is on, turn it off!
-        for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
-            if state:
-                button.invoke()
-
-        # if the flip mirror is up, warn the user
-        dios: list[DAQ_dio] = list(self.daq_ui.daq_controller.getDIOs())
-        # if dios[0].get_state() == 1:
-        #     tkMessageBox.showwarning("Error", "The flip mirror is up, no pulses will reach the atoms. The sweep has been cancelled.")
-        #     return
-
-        initialdir = os.path.join(get_config_root(), "configs", "pulse_shaping_expt", "sweeps")
-
-        fname = tkFileDialog.askopenfilename(
-            parent=self, title="Choose an MOT Fluoresce Sweep Configuration", initialdir=initialdir
-        )
-        if fname != "":
-            parameter_list = ExperimentConfigReader(
-                fname
-            ).get_mot_flourescence_configuration_sweep()
-
-            # print(parameter_list[2])
-            # Number of iterations needs to be pased from config
-
-            sweep_config = MotFluoresceConfigurationSweep(
-                cast(MotFluoresceConfiguration, self.photon_production_config),
-                self.sequence_ui.sequence,
-                parameter_list[0],
-                parameter_list[1],
-                parameter_list[2],
-            )
-            sweep_experiment = MotFluoresceSweepExperiment(
-                sweep_config, self.daq_ui.daq_controller, development_mode=self.development_mode
-            )
-
-            print("Running MOT Fluoresce Sweep experiment")
-            sweep_experiment.run()
-
-    def runAutomatedExp(self, liveUI=True):
-        fname = tkFileDialog.askopenfilename(
-            parent=self,
-            title="Choose an Experimental Automation Configuration",
-            initialdir=os.path.join(os.getcwd(), "/configs/experimental automation"),
-        )
-
-        # Check for empty filenames (i.e. when the user cancelled the action)
-        if fname != "":
-            experimental_automation_configuration = ExperimentalAutomationReader(
-                fname
-            ).get_experimental_automation_configuration()
-
-            # Note we pass a copy of the photon production configuration so every different experiement can
-            # edit the parameters without effecting the top level settings.
-            automated_experiment = ExperimentalAutomationRunner(
-                daq_controller=self.daq_ui.daq_controller,
-                experimental_automation_configuration=experimental_automation_configuration,
-                photon_production_configuration=cast(
-                    PhotonProductionConfiguration, copy.copy(self.photon_production_config)
-                ),
-            )
-
-            start_automated_experiment = tkMessageBox.askyesno(
-                "Start automated experiment",
-                "Please confirm whether you would like to start an automated experiment.\n"
-                + f"This will consist of {automated_experiment.experiements_to_run} independent sequences and a total of {automated_experiment.get_total_iterations()} MOT throws",
-                parent=self,
-            )
-
-            # Confirm the user wishes to run the automated experiment
-            if start_automated_experiment in (None, False):
-                return
-            elif start_automated_experiment:
-                # If run tone is on, turn it off!
-                if self.run_tone_awg:
-                    self.exit_run_tones()
-
-                automated_experiment.write_to_summary_file(
-                    "\nStarting automated experiment at {0}\n\n".format(time.strftime("%H-%M-%S"))
-                )
-
-                run_next_experiment = True
-                # Run all the queued experiements until we are done or one is manually stopped
-                while automated_experiment.has_next_experiment() and run_next_experiment:
-                    experiment: PhotonProductionExperiment
-                    # Get and run next experiment
-                    experiment, seq_fname, modulation_frequencies = (
-                        automated_experiment.get_next_experiment()
-                    )
-                    self.runExperiment(experiment, liveUI, autoCloseLiveUI=True)
-                    run_next_experiment = not experiment.forced_stop
-
-                    # Log experiment
-                    automated_experiment.write_to_summary_file(
-                        (
-                            "Experiment {0}:\n"
-                            + "    time: {1}\n"
-                            + "    sequence: {2}\n"
-                            + "    iterations: {3}\n"
-                            + "    mot reload: {4}\n"
-                            + "    modulation frequencies: {5}\n"
-                        ).format(
-                            automated_experiment.experiements_iter,
-                            experiment.data_saver.experiment_time,
-                            seq_fname,
-                            experiment.iterations,
-                            experiment.mot_reload_time,
-                            modulation_frequencies,
-                        )
-                    )
-
-                automated_experiment.close()
-                print("Finished automated experiment.")
-                automated_experiment.write_to_summary_file(
-                    "\nFinished automated experiment at {0}\n\n".format(time.strftime("%H-%M-%S"))
-                )
-
-    def runAbsorbtionImaging(self, bkg_test=False):
+    def run_absorption_imaging(self, bkg_test=False):
         if self.parent.camera_live:
-            tkMessageBox.showwarning(
+            tk_message_box.showwarning(
                 "Error", "Can't run an absorption imaging experiment\n while the camera is running."
             )
             return
@@ -589,10 +461,10 @@ class Experimental_UI(tk.LabelFrame):
         )
         experiment.run(bkg_test=bkg_test)
         if self.absorbtion_imaging_config.review_processed_images or bkg_test:
-            absorbtion_imaging_review_UI = Absorbtion_imaging_review_UI(self, experiment)
-            self.winfo_toplevel().wait_window(absorbtion_imaging_review_UI)
+            absorption_imaging_review_ui = Absorbtion_imaging_review_UI(self, experiment)
+            self.winfo_toplevel().wait_window(absorption_imaging_review_ui)
 
-    def testAbsorbtionImagingReviewUI(self):
+    def test_absorption_imaging_review_ui(self):
 
         dir = r"C:\Users\apc\workspace\Cold Control Heavy\data\Absorbtion images\22-08-16\17-42-39"
         # dir = r'C:\Users\apc\workspace\Cold Control Heavy\data\Absorbtion images\26-08-16\15-12-27\raw'
@@ -637,10 +509,10 @@ class Experimental_UI(tk.LabelFrame):
                 self.sequence_labels = sequence_labels
                 self.results_ready = True
 
-            def getResults(self):
+            def get_results(self):
                 return self.img_arrs, self.bkg_arrs, self.sequence_labels
 
-            def saveProcessedImages(self, notes=None):
+            def save_processed_images(self, notes=None):
                 if notes:
                     print("Save notes:", notes)
                 print("Saved processed images.")
@@ -649,37 +521,40 @@ class Experimental_UI(tk.LabelFrame):
 
         mock_abs = cast(Any, mock_abs)
 
-        absorbtion_imaging_review_UI = Absorbtion_imaging_review_UI(self, mock_abs)
-        self.winfo_toplevel().wait_window(absorbtion_imaging_review_UI)
+        absorbtion_imaging_review_ui = Absorbtion_imaging_review_UI(self, mock_abs)
+        self.winfo_toplevel().wait_window(absorbtion_imaging_review_ui)
 
-    def toggleRunTone(self, button: tk.Button, i_ch):
+    def toggle_run_tone(self, button: tk.Button, i_ch):
         if i_ch == 4:
             daq_controller = self.daq_ui.daq_controller
-            daq_controller.updateChannelValue(14, 2.485)
-            daq_controller.updateChannelValue(8, 0.0048)
-            for i in range(100):
+            daq_controller.update_channel_value(14, 2.485)
+            daq_controller.update_channel_value(8, 0.0048)
+            for _i in range(100):
                 daq_controller.continuousOutput = True
-                daq_controller.updateChannelValue(
-                    22, 2.6
+                daq_controller.update_channel_value(
+                    22, 2.0
                 )  # for manual control of amplitude input (in V)
-                daq_controller.updateChannelValue(22, 0)
+                daq_controller.update_channel_value(22, 0)
                 time.sleep(1)
             return
         else:
             channel = i_ch + 1
 
-        if self.run_tone_output_states[i_ch] == False:
-            if self.run_tone_awg == None:
+        if not self.run_tone_output_states[i_ch]:
+            if self.run_tone_awg is None:
                 if self.development_mode:
                     from instruments.dummy import DummyAWGManager
 
                     self.run_tone_awg = awg = DummyAWGManager()
                 else:
+                    assert AWGManager is not None, (
+                        "AWGManager class not found.  Make sure the WX218x AWG module is correctly installed."
+                    )
                     self.run_tone_awg = awg = AWGManager()
                 for i in [1, 2, 3, 4]:
                     awg.disable_channel(i)
 
-                awg.configure_sample_rate(1.25 * 10**9)
+                awg.set_sample_rate(1.25 * 10**9)
 
             else:
                 awg = self.run_tone_awg
@@ -739,18 +614,18 @@ class Experimental_UI(tk.LabelFrame):
         self.run_tone_awg = None
 
     def experiment_config_button(self):
-        if isinstance(self.photon_production_config, PhotonProductionConfiguration) and False:
-            config_UI = Photon_production_configuration_UI(
-                self, photon_production_configuration=self.photon_production_config
-            )
-            self.winfo_toplevel().wait_window(config_UI.top)
-            config_reader = None
-            expt_config = config_UI.photon_production_config
+        # elif isinstance(self.loaded_experiment_config, PhotonProductionConfiguration) and False:
+        #     config_UI = Photon_production_configuration_UI(
+        #         self, photon_production_configuration=self.loaded_experiment_config
+        #     )
+        #     self.winfo_toplevel().wait_window(config_UI.top)
+        #     config_reader = None
+        #     expt_config = config_UI.photon_production_config
 
-        elif isinstance(self.photon_production_config, GenericConfiguration):
+        if isinstance(self.loaded_experiment_config, GenericConfiguration):
             config_UI = GenericExperimentConfigUi(
                 self,
-                expt_config=self.photon_production_config,
+                expt_config=self.loaded_experiment_config,
                 expt_config_reader=self.expt_config_reader,
             )
             self.winfo_toplevel().wait_window(config_UI.top)
@@ -758,26 +633,30 @@ class Experimental_UI(tk.LabelFrame):
             expt_config = config_UI.experiment_config
 
         else:
-            tkMessageBox.showwarning("Error", "Invalid photon production configuration type.")
+            tk_message_box.showwarning("Error", "Invalid photon production configuration type.")
             return
 
         # If the user asked for their changes to be applied, set the config accordingly.
         if config_UI.apply_changes:
-            self.photon_production_config = expt_config
+            self.loaded_experiment_config = expt_config
             if config_reader is not None:
                 self.expt_config_reader = config_reader
 
+        # Update UI fields – sweep configs store experiment params on base_config
+        cfg = self.loaded_experiment_config
+        if isinstance(cfg, MotFluoresceConfigurationSweep):
+            cfg = cfg.base_config
         self.total_iterations_frame.entryWid.delete(0, tk.END)
-        self.total_iterations_frame.entryWid.insert(0, self.photon_production_config.iterations)
+        self.total_iterations_frame.entryWid.insert(0, cfg.iterations)
         self.reload_time_frame.entryWid.delete(0, tk.END)
-        self.reload_time_frame.entryWid.insert(0, self.photon_production_config.mot_reload)
+        self.reload_time_frame.entryWid.insert(0, cfg.mot_reload)
 
     def absorbtionImagingConfigButton(self):
         config_UI = Absorbtion_imaging_configuration_UI(
             self,
             absorbtion_imaging_configuration=self.absorbtion_imaging_config,
             daq_controller=self.daq_ui.daq_controller,
-            sequence_length=self.sequence_ui.sequence.getLength(),
+            sequence_length=self.sequence_ui.sequence.get_length(),
             sequence_t_step=self.sequence_ui.sequence.t_step,
         )
         self.winfo_toplevel().wait_window(config_UI.top)
@@ -794,14 +673,14 @@ class Experimental_UI(tk.LabelFrame):
     def flash_channel(self):
         channel = self.flash_channel_config["channel"]
         if channel == -1:
-            tkMessageBox.showwarning("Error", "No channel to flash configured.")
+            tk_message_box.showwarning("Error", "No channel to flash configured.")
             return
 
         duration = self.flash_channel_config["duration"]
         repeats = self.flash_channel_config["repeats"]
 
         if channel == "dio":
-            dio: DAQ_dio = self.daq_ui.daq_controller.getDIOs()[
+            dio: DAQDio = self.daq_ui.daq_controller.get_dios()[
                 0
             ]  # Assuming we flash the first DIO
             for i in range(repeats):
@@ -810,7 +689,7 @@ class Experimental_UI(tk.LabelFrame):
                 print(f"Flash number {i + 1} complete for DIO channel {dio.dio_name}")
             return
 
-        num_name_dict = self.daq_ui.daq_controller.getChannelNumberNameDict()
+        num_name_dict = self.daq_ui.daq_controller.get_channel_number_name_dict()
 
         print(f"Flashing channel {channel}, {num_name_dict[channel]}")
 
@@ -818,9 +697,9 @@ class Experimental_UI(tk.LabelFrame):
         high_val = self.flash_channel_config["high_val"]
 
         for i in range(repeats):
-            self.daq_ui.daq_controller.updateChannelValue(channel, low_val)
+            self.daq_ui.daq_controller.update_channel_value(channel, low_val)
             time.sleep(duration)
-            self.daq_ui.daq_controller.updateChannelValue(channel, high_val)
+            self.daq_ui.daq_controller.update_channel_value(channel, high_val)
             time.sleep(duration)
             print(f"Flash number {i + 1} complete")
 
@@ -833,7 +712,7 @@ class Experimental_UI(tk.LabelFrame):
         if inputs:
             inputs = inputs.split(",")
             if len(inputs) != 5:
-                tkMessageBox.showwarning("Error", "Invalid number of inputs.")
+                tk_message_box.showwarning("Error", "Invalid number of inputs.")
                 return
             try:
                 duration = float(inputs[1])
@@ -845,7 +724,7 @@ class Experimental_UI(tk.LabelFrame):
                 else:
                     channel = int(inputs[0])
             except ValueError:
-                tkMessageBox.showwarning("Error", "Invalid input format.")
+                tk_message_box.showwarning("Error", "Invalid input format.")
                 return
 
             self.flash_channel_config["channel"] = channel
@@ -1171,7 +1050,7 @@ class Photon_production_configuration_UI(object):
         return top
 
     def loadWaveform(self, wfm:Waveform, wfm_fname_wid):
-        fname = tkFileDialog.askopenfilename(master=self.top, title="Load a sequence", initialdir="waveforms")
+        fname = tk_file_dialog.askopenfilename(master=self.top, title="Load a sequence", initialdir="waveforms")
         
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname!= '':
@@ -1200,7 +1079,7 @@ class Photon_production_configuration_UI(object):
     def closeWindow(self, ask_to_apply_changes = True):
         \"""Close the top window.\"""
         if ask_to_apply_changes:
-            apply_on_exit = tkMessageBox.askyesnocancel('Confirm exit',\
+            apply_on_exit = tk_message_box.askyesnocancel('Confirm exit',\
                                                       'Would you like to apply your changes before you exit?',
                                                       parent = self.top)
             if apply_on_exit == None:
@@ -1255,7 +1134,7 @@ class Absorbtion_imaging_configuration_UI:
 
         labels, widgets, fns_to_bind = [], [], []
 
-        controller_channels = self.daq_controller.getChannels()
+        controller_channels = self.daq_controller.get_channels()
         channel_opts_dict: dict[Any, Any] = dict(
             zip(
                 [
@@ -1514,7 +1393,7 @@ class Absorbtion_imaging_configuration_UI:
         widgets.append(abs_img_freq_ch_dropdown)
 
         try:
-            calib_units, _, fromVFunc = self.daq_controller.getChannelCalibrationDict()[
+            calib_units, _, fromVFunc = self.daq_controller.get_channel_calibration_dict()[
                 self.c.abs_img_freq_ch
             ]
         except KeyError:
@@ -1821,7 +1700,7 @@ class Absorbtion_imaging_configuration_UI:
             new_bkg_off_channels = [
                 x
                 for x in entered_bkg_off_channels
-                if x in [ch.chNum for ch in self.daq_controller.getChannels()]
+                if x in [ch.chNum for ch in self.daq_controller.get_channels()]
             ]
             if new_bkg_off_channels != entered_bkg_off_channels:
                 flash_col = "yellow"
@@ -1974,7 +1853,7 @@ class Absorbtion_imaging_configuration_UI:
     def closeWindow(self, ask_to_apply_changes=True):
         """Close the top window."""
         if ask_to_apply_changes:
-            apply_on_exit = tkMessageBox.askyesnocancel(
+            apply_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit",
                 "Would you like to apply your changes before you exit?",
                 parent=self.top,
@@ -2079,14 +1958,14 @@ class GenericExperimentConfigUi:
         return top
 
     def load_config(self, fname_wid):
-        fname = tkFileDialog.askopenfilename(
+        fname = tk_file_dialog.askopenfilename(
             parent=self.top, title="Choose a config file", initialdir="configs"
         )
 
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname != "":
             self.conf_reader = ExperimentConfigReader(fname)
-            self.experiment_config: GenericConfiguration = self.conf_reader.get_correct_config()
+            self.experiment_config = self.conf_reader.get_correct_config()
 
             fname_wid.updateEntry(fname)
 
@@ -2104,7 +1983,7 @@ class GenericExperimentConfigUi:
     def closeWindow(self, ask_to_apply_changes=True):
         """Close the top window."""
         if ask_to_apply_changes:
-            apply_on_exit = tkMessageBox.askyesnocancel(
+            apply_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit",
                 "Would you like to apply your changes before you exit?",
                 parent=self.top,
@@ -2322,7 +2201,7 @@ class Photon_production_live_UI(tk.Toplevel):
         Check if exp is live - if so confirm exit as it will have to end experiment.
         """
         if self.photon_production_experiment.is_live:
-            #             confirmed_exit = tkMessageBox.askyesno('Confirm exit',\
+            #             confirmed_exit = tk_message_box.askyesno('Confirm exit',\
             #                                                          'The photon_production_experiment is still running, if you exit now it will be stopped.\nAre you sure you want to exit?',
             #                                                          parent = self)
             #             if confirmed_exit in (None, False):
@@ -2495,7 +2374,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         # Changes the close button to call my close function.
         self.protocol("WM_DELETE_WINDOW", self.closeWindow)
 
-        img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.getResults()
+        img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.get_results()
 
         if img_arrs == None and bkg_arrs == None:
             raise Exception("There are no images to review")
@@ -2671,7 +2550,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
         """
         Save the images and close the UI.
         """
-        self.absorbtion_imaging_experiment.saveProcessedImages(
+        self.absorbtion_imaging_experiment.save_processed_images(
             notes=self.save_notes_wid.get(1.0, tk.END)
         )
         self.closeWindow(ask_to_save_images=False)
@@ -2679,7 +2558,7 @@ class Absorbtion_imaging_review_UI(tk.Toplevel):
     def closeWindow(self, ask_to_save_images=True):
         """Close the top window."""
         if ask_to_save_images:
-            save_on_exit = tkMessageBox.askyesnocancel(
+            save_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit", "Would you like to save these images?"
             )
             if save_on_exit == None:

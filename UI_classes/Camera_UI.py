@@ -7,7 +7,8 @@ Created on 25 Mar 2016
 import tkinter as tk
 
 # import cv2
-from tkinter import messagebox as tkMessageBox
+from tkinter import messagebox as tk_message_box
+from typing import cast
 
 import numpy as np
 from PIL import Image, ImageTk
@@ -46,6 +47,8 @@ class Camera_UI(tk.LabelFrame):
             self.ic_ic.init_library()
         else:
             self.ic_ic = None
+
+        self.ic_ic = cast(IC_ImagingControl, self.ic_ic)  # type:ignore for type checking
 
         # Calculate the aspect ratio of the requested video dimensions so we keep this when re-sizing the picture.
         self.video_dims = video_dims
@@ -409,7 +412,7 @@ class Camera_configuration_UI(tk.Toplevel):
         Close the top window.
         """
         if ask_to_apply_changes:
-            apply_on_exit = tkMessageBox.askyesnocancel(
+            apply_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit", "Would you like to apply these changes?", parent=self
             )
             if apply_on_exit == None:

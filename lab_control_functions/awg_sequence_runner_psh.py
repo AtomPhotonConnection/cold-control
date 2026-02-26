@@ -6,8 +6,8 @@ import time
 import pyvisa
 from configobj import ConfigObj
 
-from classes.Config import ConfigReader, DaqReader
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.config_readers import ConfigReader, DaqReader
+from classes.experimental_configs import AwgConfiguration, Waveform
 from lab_control_functions.awg_control_functions_psh import run_awg
 from lab_control_functions.awg_control_functions_single_psh import run_awg_single
 
@@ -106,14 +106,14 @@ if __name__ == "__main__":
         )  # gets the name of the config file for the DAQ cards
         daq_controller = DaqReader(
             daq_config_fname
-        ).load_DAQ_controller()  # reads the config file to create a "daq reader" object
+        ).load_daq_controller()  # reads the config file to create a "daq reader" object
 
         # The below lines all control the DAQ cards manually aside from the config file
         daq_controller.continuousOutput = True
-        daq_controller.updateChannelValue(22, 2.6)  # for manual control of amplitude input (in V)
-        daq_controller.updateChannelValue(14, 2.485)
-        daq_controller.updateChannelValue(8, 0.0048)
-        daq_controller.releaseAll()
+        daq_controller.update_channel_value(22, 2.6)  # for manual control of amplitude input (in V)
+        daq_controller.update_channel_value(14, 2.485)
+        daq_controller.update_channel_value(8, 0.0048)
+        daq_controller.release_all()
         time.sleep(1)
 
 """waveform sequence = '[0,1,0,1],[2,5,2], [3], [4]'

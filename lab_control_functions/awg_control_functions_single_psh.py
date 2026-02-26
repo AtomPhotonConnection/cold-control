@@ -12,7 +12,7 @@ from instruments.WX218x.WX218x_DLL import (
     WX218x_TriggerSlope,
 )
 
-from classes.ExperimentalConfigs import AwgConfiguration, Waveform
+from classes.experimental_configs import AwgConfiguration, Waveform
 
 MARKER_LOW = 0.0
 MARKER_HIGH = 1.2
@@ -147,9 +147,9 @@ def stitch_waveforms(channel_list, waveform_stitch_delays, waveforms, sample_rat
     stitched_waveforms = []
     for i, waveform in enumerate(waveforms):
         # Verificar que waveform_stitch_delays es una lista y tiene elementos
-        if isinstance(waveform_stitch_delays, list) and i < len(waveform_stitch_delays):
+        if isinstance(waveform_stitch_delays, (list, tuple)) and i < len(waveform_stitch_delays):
             delay = waveform_stitch_delays[i]
-            if isinstance(delay, list) and len(delay) > 0:
+            if isinstance(delay, (list, tuple)) and len(delay) > 0:
                 delay = delay[0]
             delay = int(delay)
         else:
@@ -280,7 +280,7 @@ def run_awg_single(awg_config: AwgConfiguration):
 
         if len(waveforms) == 1:
             waveform_data[0].extend(
-                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+                [calib_fun(x) for x in waveform.get(sample_rate=awg_config.sample_rate)]
             )
             marker_data += waveform.get_marker_data(
                 marker_positions=marker_pos, marker_levels=MARKER_WF_LEVS, marker_width=marker_wid
@@ -294,7 +294,7 @@ def run_awg_single(awg_config: AwgConfiguration):
                 marker_width=marker_wid,
             )
             waveform_data[0].extend(
-                waveform.get(sample_rate=awg_config.sample_rate, calibration_function=calib_fun)
+                [calib_fun(x) for x in waveform.get(sample_rate=awg_config.sample_rate)]
             )
 
     # Apply channel offset
