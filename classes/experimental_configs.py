@@ -24,8 +24,8 @@ from typing import Any, Optional, cast
 
 import numpy as np
 
+from classes.daq_sequence import DaqSequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
-from classes.sequence import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -582,7 +582,7 @@ class MotFluoresceConfigurationSweep:
     def __init__(
         self,
         base_config: MotFluoresceConfiguration,
-        base_sequence: Sequence,
+        base_sequence: DaqSequence,
         sweep_type: str,
         num_shots: int,
         sweep_params: dict[Any, Any],
@@ -602,7 +602,7 @@ class MotFluoresceConfigurationSweep:
         print(f"[DEBUG] time: {self.current_time}")
 
         self.configs: list[MotFluoresceConfiguration] = []
-        self.sequences: list[Sequence] = []
+        self.sequences: list[DaqSequence] = []
         print("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
@@ -637,7 +637,7 @@ class MotFluoresceConfigurationSweep:
     def from_config_reader(
         cls,
         experiment_config: MotFluoresceConfiguration,
-        sequence: Sequence,
+        sequence: DaqSequence,
         sweep_type: str,
         num_shots: int,
         sweep_params: dict[Any, Any],

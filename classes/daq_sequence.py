@@ -7,7 +7,7 @@ Created on 10 Apr 2016
 import numpy as np
 
 
-class Sequence:
+class DaqSequence:
     """
     A class containing all the information needed to create a sequence for multiple DAQ channel.
 
@@ -140,7 +140,7 @@ class _ChannelSequence:
             v_interval_styles = []
         if tv_pairs is None:
             tv_pairs = [(0.0, 0.0)]
-        self.parent: Sequence = parent_sequence
+        self.parent: DaqSequence = parent_sequence
 
         self.tV_pairs, self.V_interval_styles = map(
             list, zip(*sorted(zip(tv_pairs, v_interval_styles), key=lambda x: x[0][0]))

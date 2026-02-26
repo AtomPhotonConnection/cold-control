@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import messagebox as tk_message_box
 from typing import Any
 
-import classes.styles as styles
+import classes.ui_styles as ui_styles
 from classes.config_readers import ConfigReader, ExperimentConfigReader
 from UI_classes.Camera_UI import CameraUI
 from UI_classes.DAQ_UI import DaqUI
@@ -68,7 +68,7 @@ class ColdControlUI(tk.Frame):
         except KeyError:
             # Fallback: old-style rootConfig with sequence_filename (emits DeprecationWarning)
             self.sequence_fname = self.config_reader.get_sequence_fname()
-            sequence = None  # Sequence_UI will load from fname
+            sequence = None  # Sequence_UI will load from fname  # noqa: F841
 
         self.sequence_ui = DaqSequenceUI(
             self,
@@ -161,6 +161,6 @@ class ColdControlUI(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1600x800")
-    styles.configure_styles()
+    ui_styles.configure_styles()
     ColdControlUI(root).pack(fill="both", expand=True)
     root.mainloop()

@@ -24,11 +24,11 @@ import UI_classes.ToolTip_UI as tooltip
 
 # import wx
 from classes.config_readers import SequenceReader, SequenceWriter
-from classes.sequence import (
+from classes.daq_sequence import (
+    DaqSequence,
     IntervalStyle,
     InvalidSequenceChannelError,
     MultipleInvalidSequenceChannelError,
-    Sequence,
 )
 
 """
@@ -82,7 +82,7 @@ class DaqSequenceUI(tk.Toplevel):
         self.sequence_fname: str = sequence_fname
         print(f"Loading sequence from file: {self.sequence_fname}")
         self.sequence_reader = SequenceReader(self.sequence_fname)
-        self.sequence: Sequence = self.sequence_reader.load_sequence()
+        self.sequence: DaqSequence = self.sequence_reader.load_sequence()
         self.configured_channel_labels: dict = configured_channel_labels
         self.configured_channel_calibrations: dict = configured_channel_calibrations
 
@@ -191,7 +191,7 @@ class DaqSequenceUI(tk.Toplevel):
         # Check for empty filenames (i.e. when the user cancelled the action)
         if fname != "":
             self.sequence_reader = SequenceReader(fname)
-            self.sequence: Sequence = self.sequence_reader.load_sequence()
+            self.sequence: DaqSequence = self.sequence_reader.load_sequence()
 
             self.configure_for_current_sequence()
 
@@ -682,7 +682,7 @@ class SequencePlotUI(tk.LabelFrame):
     def __init__(
         self,
         parent,
-        sequence: Sequence,
+        sequence: DaqSequence,
         sequence_channel_labels: dict,
         text="Sequence preview",
         font=("Helvetica", 16),
@@ -690,7 +690,7 @@ class SequencePlotUI(tk.LabelFrame):
     ):
         tk.LabelFrame.__init__(self, parent, text=text, font=font, **kwargs)
 
-        self.sequence: Sequence = sequence
+        self.sequence: DaqSequence = sequence
 
         self.fig, self.ax = plt.subplots()
         self.t = self.sequence.get_time_steps()
@@ -876,7 +876,7 @@ class ChannelEditorUI(tk.Frame):
     def __init__(
         self,
         parent,
-        sequence: Sequence,
+        sequence: DaqSequence,
         sequence_reader: SequenceReader,
         sequence_channel_labels: dict,
         configured_channel_calibrations,
@@ -885,7 +885,7 @@ class ChannelEditorUI(tk.Frame):
         tk.Frame.__init__(self, parent, **kwargs)
 
         self.parent = parent
-        self.sequence: Sequence = sequence
+        self.sequence: DaqSequence = sequence
         self.sequence_channel_labels = sequence_channel_labels
         self.configured_channel_calibrations = configured_channel_calibrations
 

@@ -39,6 +39,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     awg_manager = None  # type: ignore[assignment]
 from classes.daq import DAQChannel, DAQController
+from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     ExperimentSessionConfig,
@@ -49,7 +50,6 @@ from classes.experimental_configs import (
     SingleExperimentConfig,
     Waveform,
 )
-from classes.sequence import IntervalStyle, Sequence
 
 if TYPE_CHECKING:
     from instruments.pyicic.IC_Camera import IC_Camera
@@ -83,7 +83,7 @@ class GenericExperiment(Generic[T]):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         configuration: T,
         development_mode: bool = False,
     ):
@@ -144,7 +144,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
         ic_imaging_control: IC_ImagingControl,
     ):
@@ -268,8 +268,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         Perform and configuration that has to occur before the experiment can be safely run.
         """
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
-        self.sequences: list[Sequence] = []
-        self.bkg_sequences: list[Sequence] = []
+        self.sequences: list[DaqSequence] = []
+        self.bkg_sequences: list[DaqSequence] = []
         assert isinstance(self.config, AbsorbtionImagingConfiguration)
         c: AbsorbtionImagingConfiguration = self.config
 
@@ -1124,7 +1124,7 @@ class MotFluoresceExperiment(GenericExperiment):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
         ic_imaging_control: Optional[IC_ImagingControl] = None,
         sweep=True,

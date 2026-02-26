@@ -31,6 +31,9 @@ from classes.daq import (
     DAQController,
     DAQDio,
 )
+
+# from instruments.WX218x.WX218x_awg import Channel
+from classes.daq_sequence import DaqSequence
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     AwgConfiguration,
@@ -43,9 +46,6 @@ from classes.experimental_configs import (
     TdcConfiguration,
     Waveform,
 )
-
-# from instruments.WX218x.WX218x_awg import Channel
-from classes.sequence import Sequence
 
 GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
@@ -398,7 +398,7 @@ class SequenceReader:
         self.config = MyConfig(self.fname)
 
     def load_sequence(self):
-        seq = Sequence(*self.get_sequence_init_args())
+        seq = DaqSequence(*self.get_sequence_init_args())
         sequence_channels: dict[str, Any] = {}
         sequence_channels = self.config["sequence channels"]
 
@@ -1042,7 +1042,7 @@ class ExperimentConfigReader:
         else:
             raise ValueError(f"Unknown experiment type: {expt_type}")
 
-    def get_sequence(self) -> Sequence:
+    def get_sequence(self) -> DaqSequence:
         """Load the sequence from the ``sequence_config`` path in this experiment config.
 
         Raises ``KeyError`` if the config file does not contain a ``sequence_config`` key.
