@@ -5,17 +5,15 @@ All tests use pure Python/numpy logic - no hardware required.
 Run with:  pytest tests/test_daq_sequence.py -v
 """
 
-import pytest
 import numpy as np
+import pytest
 
 from classes.daq_sequence import (
     DaqSequence,
     IntervalStyle,
     InvalidSequenceChannelError,
     MultipleInvalidSequenceChannelError,
-    _ChannelSequence,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

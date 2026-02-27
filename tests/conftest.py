@@ -32,7 +32,6 @@ from classes.experimental_configs import (  # noqa: E402
 )
 from instruments.dummy import DummyDAQController  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # DaqSequence fixtures
 # ---------------------------------------------------------------------------

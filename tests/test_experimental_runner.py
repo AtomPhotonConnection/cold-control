@@ -9,11 +9,8 @@ Run with:  pytest tests/test_experimental_runner.py -v
 
 import threading
 
-import pytest
-
 from classes.experimental_runner import MotFluoresceExperiment
 from instruments.dummy import DummyOscilloscopeManager
-
 
 # ===========================================================================
 # Group A – GenericExperiment DAQ control (tested via MotFluoresceExperiment)
