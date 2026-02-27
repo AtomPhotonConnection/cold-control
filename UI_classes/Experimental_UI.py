@@ -261,7 +261,7 @@ class ExperimentalUI(tk.LabelFrame):
 
         self.run_tone_awg = None
         # set channel 3 to DC Voltage
-        self.run_tone_freqs = [107.65 * 10**6, 78.5 * 10**6, 1, 82.5 * 10**6, 2.6]
+        self.run_tone_freqs = [60.8558 * 10**6, 80 * 10**6, 54.8558 * 10**6, 10 * 10**6, 2.6]
         self.run_tone_output_states = [False, False, False, False, False]
         self.run_tone_buttons = []
 
