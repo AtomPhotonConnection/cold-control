@@ -3,7 +3,7 @@ Iterative Feedback Pulse Shape Optimisation
 
 Corrects the AWG waveform by repeatedly:
     1. Running an experiment with the current waveform
-    2. Computing the signed error (measured − theoretical)
+    2. Computing the signed error (measured - theoretical)
     3. Subtracting a fraction (gain) of the error from the waveform
     4. Running again until the error is below threshold or max iterations
 
@@ -16,22 +16,21 @@ Usage::
     python optimise_iterative.py path/to/config.ini  # custom config
 """
 
-import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from marina.pulse_experiment import (
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from pulse_shape_optimisation.pulse_experiment import (
     PulseShapeConfig,
     PulseShapeExperimentResult,
     PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentResult:
@@ -65,7 +64,7 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
 
             # Save plot for this iteration
             result.plot(
-                output_dir=str(cfg.output_dir),
+                output_dir=cfg.output_dir,
                 filename=f"iteration_{iteration:03d}.png",
                 title=(f"Iteration {iteration} — MSE = {result.mse:.4e}"),
             )
@@ -121,9 +120,7 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
 
 def main():
     config_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.path.join(SCRIPT_DIR, "config_pulse_experiment.ini")
+        Path(sys.argv[1]) if len(sys.argv) > 1 else SCRIPT_DIR / "config_pulse_experiment.ini"
     )
     print(f"Loading config: {config_path}")
     cfg = PulseShapeConfig(config_path)

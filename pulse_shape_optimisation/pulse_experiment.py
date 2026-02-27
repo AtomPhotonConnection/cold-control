@@ -151,8 +151,8 @@ class PulseShapeConfig:
         print(cfg.channel, cfg.pulse_type, cfg.amplitude)
     """
 
-    def __init__(self, config_path: str) -> None:
-        self._raw = ConfigObj(config_path)
+    def __init__(self, config_path: Path) -> None:
+        self._raw = ConfigObj(str(config_path))
 
         # --- Hardware --------------------------------------------------------
         hw = _cfg_section(self._raw, "Hardware")
@@ -307,7 +307,7 @@ class PulseShapeExperimentResult:
 
     def plot(
         self,
-        output_dir: Optional[str] = None,
+        output_dir: Optional[Path] = None,
         filename: Optional[str] = None,
         title: Optional[str] = None,
     ) -> None:
@@ -374,7 +374,7 @@ class PulseShapeExperimentResult:
         fig.tight_layout()
 
         if filename and output_dir:
-            save_path = Path(output_dir) / filename
+            save_path = output_dir / filename
             save_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(save_path, dpi=150, bbox_inches="tight")
             logger.info(f"Saved plot: {save_path}")
@@ -383,7 +383,7 @@ class PulseShapeExperimentResult:
         plt.pause(1)
         plt.close(fig)
 
-    def save_to_csv(self, csv_path: str, to_save="measured") -> None:
+    def save_to_csv(self, csv_path: Path, to_save="measured") -> None:
         """Save the measured signal to a headerless CSV file."""
         if to_save == "measured":
             signal_to_save = self.measured_signal
@@ -395,8 +395,8 @@ class PulseShapeExperimentResult:
             raise ValueError(
                 f"Invalid to_save value: {to_save}. Must be 'measured', 'theoretical', or 'sent'."
             )
-        np.savetxt(csv_path, signal_to_save, delimiter=",")
-        logger.info(f"Saved measured signal to CSV: {csv_path}")
+        np.savetxt(str(csv_path), signal_to_save, delimiter=",")
+        logger.info(f"Saved measured signal to CSV: {csv_path!s}")
 
 
 # =========================================================================
