@@ -50,7 +50,7 @@ def test_load_awg_configuration():
     )
 
     # Check waveform sequence: "[2, 3],[0, 4],[1]" -> ((2,3),(0,4),(1,))
-    assert awg_config.waveform_sequence == ((2, 3), (0, 4), (1,)), (
+    assert awg_config.waveform_sequence == [[2, 3], [0, 4], [1]], (
         f"waveform_sequence: {awg_config.waveform_sequence}"
     )
 
