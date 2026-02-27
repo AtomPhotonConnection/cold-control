@@ -52,11 +52,12 @@ from UI_classes.Sequence_UI import DaqSequenceUI
 from UI_classes.ToolTip_UI import ToolTip
 from UI_classes.UI_helpers import ImageButton
 
+AWG_TRIG_BUTTON = False
+
+
 # =======================================================================================
 # MARK: Experimental UI
 # =======================================================================================
-
-
 class ExperimentalUI(tk.LabelFrame):
     def __init__(
         self,
@@ -268,23 +269,13 @@ class ExperimentalUI(tk.LabelFrame):
         self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
 
         def set_run_tone_freq(ch, freq):
-            if ch == 2 or ch == 4:
+            if ch == 4:
                 self.run_tone_freqs[ch] = freq
             else:
                 self.run_tone_freqs[ch] = freq * 10**6
 
-        for i in range(5):
-            # ch3 is set to DC voltage
-            if i == 2:
-                run_tone_freq_frame = ExperimentalParamFrame(
-                    rtf,
-                    f"channel{i + 1} Amplitude (V)",
-                    initial_value=self.run_tone_freqs[i],
-                    data_type=float,
-                    help_text="The run tone amplitude in V.",
-                    action=lambda entry_value, ch=i, f=set_run_tone_freq: f(ch, entry_value),
-                )
-            elif i == 4:
+        for i in range(4):
+            if AWG_TRIG_BUTTON:
                 run_tone_freq_frame = ExperimentalParamFrame(
                     rtf,
                     "AWG trig. Amplitude (V)",
@@ -532,13 +523,13 @@ class ExperimentalUI(tk.LabelFrame):
             daq_controller = self.daq_ui.daq_controller
             daq_controller.update_channel_value(14, 2.485)
             daq_controller.update_channel_value(8, 0.0048)
-            for _i in range(100):
+            for _i in range(10):
                 daq_controller.continuousOutput = True
                 daq_controller.update_channel_value(
                     22, 2.0
                 )  # for manual control of amplitude input (in V)
                 daq_controller.update_channel_value(22, 0)
-                time.sleep(1)
+                time.sleep(0.5)
             return
         else:
             channel = i_ch + 1

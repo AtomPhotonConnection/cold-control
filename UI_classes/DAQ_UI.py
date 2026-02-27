@@ -105,24 +105,25 @@ class DaqUI(tk.Frame):
         #             frame.grid(row=r, column=0, **gridConfig)
         #             r+=1
         #
-        c = 0
-        r = 0
+        # 1. Initialize the frames
         self.dioFrames = [
             DioLineFrame(self.Frame_DIOs, dio)
             for dio in sorted(self.daq_controller.get_dios(), key=lambda dio: dio.dio_num)
         ]
 
-        for row in [self.dioFrames[i : i + c + 1] for i in range(0, len(self.dioFrames), c + 1)]:
-            c = 0
-            for dio_frame in row:
-                dio_frame.grid(row=r, column=c, **grid_config)
-                c += 1
-            r += 1
+        # 2. Grid with wrapping logic
+        max_cols = 3
+        for index, dio_frame in enumerate(self.dioFrames):
+            row = index // max_cols  # Every 3 items, the row increments
+            col = index % max_cols  # The column resets to 0, 1, 2
 
-        cols, _ = self.Frame_DIOs.grid_size()
-        for c in range(0, cols):
-            self.Frame_DIOs.grid_columnconfigure(c, weight=1, pad=3, uniform="cols")
+            dio_frame.grid(row=row, column=col, **grid_config)
 
+        # 3. Configure columns for equal spacing (0 to 2)
+        for c in range(max_cols):
+            self.Frame_DIOs.grid_columnconfigure(c, weight=1, uniform="group1")
+
+        # 4. Final layout
         self.Frame_Channels.pack(side=tk.TOP, fill=tk.X)
         self.Frame_DIOs.pack(side=tk.BOTTOM, fill=tk.X)
 
