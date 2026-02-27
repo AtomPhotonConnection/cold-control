@@ -91,27 +91,27 @@ class ExperimentalUI(tk.LabelFrame):
 
         icon = Image.open("icons/graph_icon.png").resize((30, 30))
         icon = ImageTk.PhotoImage(icon)
-        self.set_seq_button = ImageButton(
+        self.view_sequence_button = ImageButton(
             self,
             image=icon,
             text="View sequence",
-            command=self.open_seq_window,
+            command=self.open_sequence_viewer,
             background="green4",
             **butt_opts,
         )
-        self.set_seq_button.image_ref = icon  # see ImageButton class
+        self.view_sequence_button.image_ref = icon  # see ImageButton class
 
         icon = Image.open("icons/play_icon.png").resize((30, 30))
         icon = ImageTk.PhotoImage(icon)
-        self.run_seq_button = ImageButton(
+        self.execute_experiment_button = ImageButton(
             self,
             image=icon,
-            text="Run experiment",
-            command=self.run_seq,
+            text="Execute experiment",
+            command=self.execute_experiment,
             background="green2",
             **butt_opts,
         )
-        self.run_seq_button.image_ref = icon  # see ImageButton class
+        self.execute_experiment_button.image_ref = icon  # see ImageButton class
 
         icon = Image.open("icons/config_icon.png").resize((30, 30))
         icon = ImageTk.PhotoImage(icon)
@@ -217,8 +217,8 @@ class ExperimentalUI(tk.LabelFrame):
         #     self.config_fluoresce_sweep_btn = tk.Button(self, image=icon, width=25, height=25, command=self.configure_fluoresce_sweep, background='green4')
         #     self.config_fluoresce_sweep_btn.image = icon
 
-        self.set_seq_button.grid(row=0, column=0, **grid_opts)
-        self.run_seq_button.grid(row=1, column=0, **grid_opts)
+        self.view_sequence_button.grid(row=0, column=0, **grid_opts)
+        self.execute_experiment_button.grid(row=1, column=0, **grid_opts)
 
         self.configure_photon_production_button.grid(row=1, column=1, **grid_opts)
         self.total_iterations_frame.grid(row=2, column=0, **grid_opts)
@@ -313,7 +313,7 @@ class ExperimentalUI(tk.LabelFrame):
 
         rtf.grid(row=0, column=4, rowspan=3, **grid_opts)
 
-    def open_seq_window(self):
+    def open_sequence_viewer(self):
         if (
             self.sequence_ui.configured_channel_labels
             != self.daq_ui.daq_controller.get_channel_number_name_dict(only_visible=False)
@@ -371,16 +371,17 @@ class ExperimentalUI(tk.LabelFrame):
             experiment_live_ui.poll_live_data()
             # Wait for the live window to close!
             self.winfo_toplevel().wait_window(experiment_live_ui)
-        # Wait for the experimental thread to finish - though if the window is
-        # shut the photon_production_experiment really should be done!
-        experiment_thread.join()
+            # Wait for the experimental thread to finish - though if the window is
+            # shut the photon_production_experiment really should be done!
+            experiment_thread.join()
+        # If there is no live UI, the experiment thread manages its own lifecycle.
 
     #         photon_production_experiment.close()
     #         experiment_live_ui.closeWindow()
 
-    def run_seq(self, live_ui=True, auto_close_live_ui=False):
+    def execute_experiment(self, live_ui=True, auto_close_live_ui=False):
         """
-        Function to run experimental sequences when the "Run sequence" button is pressed.
+        Function to run experiments when the "Run experiment" button is pressed.
         """
         # If run tone is on, turn it off!
         for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
@@ -428,7 +429,7 @@ class ExperimentalUI(tk.LabelFrame):
                 development_mode=self.development_mode,
             )
             print("Running MOT Fluoresce Sweep experiment")
-            sweep_experiment.run()
+            sweep_experiment.run_in_thread()
             return
         else:
             raise Exception(

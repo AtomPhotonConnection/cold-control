@@ -1478,6 +1478,12 @@ class MotFluoresceSweepExperiment:
         self.daq_controller = daq_controller
         self.development_mode = development_mode
 
+    def run_in_thread(self, start_thread=True):
+        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
+        if start_thread:
+            thread.start()
+        return thread
+
     def run(self):
         """
         This method should create and run a MotFluoresceExperiment for each sweep point
