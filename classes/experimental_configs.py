@@ -278,16 +278,18 @@ class AwgConfiguration:
     Can be read from a filepath using the AwgConfigReader class in config_readers.py.
 
     Structure of the AWG configuration file:
-    waveform sequence: A list of lists. Each inner list corresponds to a channel and
+    waveform_sequence: A list of lists. Each inner list corresponds to a channel and
         contains the indices of the waveforms to play on that channel.
+    waveforms: A dictionary mapping waveform indices to Waveform objects
+    sample_rate: Sample rate for the AWG output in samples per second.
+    burst_count: Number of times to repeat the waveform sequence in a single trigger.
+    waveform_output_channels: Channels on the AWG that will be used for outputting waveforms.
+    waveform_output_channel_lags: Timing lags for each output channel to synchronize them.
+    marker_width_samps: Width of the marker pulse in samples.
+
+    marked channels: DEPRECATED
     waveform stitch delays: DEPRECATED
     interleave waveforms: DEPRECATED
-    sample rate: Sample rate for the AWG output in samples per second.
-    burst count: Number of times to repeat the waveform sequence in a single trigger.
-    waveform output channels: Channels on the AWG that will be used for outputting waveforms.
-    waveform output channel lags: Timing lags for each output channel to synchronize them.
-    marked channels: DEPRECATED
-    marker width: Width of the marker pulse in us. TODO switch to samples.
 
     waveforms:
     A list of waveform configurations, each containing:

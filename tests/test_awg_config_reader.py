@@ -60,15 +60,15 @@ def test_load_awg_configuration():
     # Check each waveform's modulation frequency
     expected_freqs = [74000000, 54855800, 0, 60855800, 80000000]
     expected_modulated = [True, True, False, True, True]
-    for i, (wf, expected_f, expected_m) in enumerate(
-        zip(awg_config.waveforms, expected_freqs, expected_modulated)
+    for (wf_idx, wf), expected_f, expected_m in zip(
+        awg_config.waveforms.items(), expected_freqs, expected_modulated
     ):
-        assert isinstance(wf, Waveform), f"Waveform {i} type: {type(wf)}"
+        assert isinstance(wf, Waveform), f"Waveform {wf_idx} type: {type(wf)}"
         assert wf.mod_frequency == expected_f, (
-            f"Waveform {i} mod_frequency: {wf.mod_frequency}, expected {expected_f}"
+            f"Waveform {wf_idx} mod_frequency: {wf.mod_frequency}, expected {expected_f}"
         )
         assert wf.modulated == expected_m, (
-            f"Waveform {i} modulated: {wf.modulated}, expected {expected_m}"
+            f"Waveform {wf_idx} modulated: {wf.modulated}, expected {expected_m}"
         )
 
     # Check that phases default to empty list for empty "phases = ,"
