@@ -487,7 +487,7 @@ class AwgConfigReader:
 
     def load_awg_configuration(self) -> AwgConfiguration:
         """Parse the config file and return a fully-populated ``AwgConfiguration``."""
-        waveforms = self._parse_waveforms()
+        waveforms: dict[int, Waveform] = self._parse_waveforms()
         output_channels = self._parse_output_channels(
             raw_channels=self.config["waveform output channels"]
         )
@@ -499,7 +499,7 @@ class AwgConfigReader:
 
         awg_config = AwgConfiguration(
             waveform_sequence=waveform_sequence,
-            waveforms=tuple(waveforms),
+            waveforms=waveforms,
             sample_rate=float(cfg["sample rate"]),
             burst_count=int(cfg["burst count"]),
             waveform_output_channels=tuple(output_channels),
@@ -527,8 +527,8 @@ class AwgConfigReader:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _parse_waveforms(self) -> tuple[Waveform, ...]:
-        """Read the ``[waveforms]`` section and return a tuple of ``Waveform`` objects.
+    def _parse_waveforms(self) -> dict[int, Waveform]:
+        """Read the ``[waveforms]`` section and return a dict of ``Waveform`` objects.
 
         Each waveform sub-section supports the following keys:
 
@@ -543,26 +543,26 @@ class AwgConfigReader:
         ``phases`` (optional)
             Mid-waveform phase-jump specification.  Defaults to ``[]``.
         """
-        waveforms: list[Waveform] = []
-        for _key, v in self.config["waveforms"].items():
-            phases = self._parse_phases(v.get("phases"))
-            fname = resolve_config_path(v["filename"])
+        waveforms: dict[int, Waveform] = {}
+        for idx, wform in self.config["waveforms"].items():
+            phases = self._parse_phases(wform.get("phases"))
+            fname = resolve_config_path(wform["filename"])
 
             # Parse modulation frequency (optional, defaults to 0.0)
-            mod_frequency = float(v["modulation frequency"]) if "modulation frequency" in v else 0.0
+            mod_frequency = (
+                float(wform["modulation frequency"]) if "modulation frequency" in wform else 0.0
+            )
 
             # Parse modulated flag (optional, inferred from mod_frequency if absent)
-            modulated = to_bool(v["modulated"]) if "modulated" in v else None
+            modulated = to_bool(wform["modulated"]) if "modulated" in wform else None
 
-            waveforms.append(
-                Waveform(
-                    fname=fname,
-                    modulated=modulated,
-                    mod_frequency=mod_frequency,
-                    phases=phases,
-                )
+            waveforms[int(idx)] = Waveform(
+                fname=fname,
+                modulated=modulated,
+                mod_frequency=mod_frequency,
+                phases=phases,
             )
-        return tuple(waveforms)
+        return waveforms
 
     @staticmethod
     def _parse_phases(raw_phases) -> list[tuple[float, int]]:

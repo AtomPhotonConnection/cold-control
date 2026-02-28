@@ -104,7 +104,7 @@ class AWGManager:
     # ========================================================================
     @staticmethod
     def process_waveforms(
-        _outp_channels, _channel_lags, _waveform_sequence, _waveforms_list, _sample_rate
+        _outp_channels, _channel_lags, _waveform_sequence, _waveforms_dict, _sample_rate
     ) -> dict[int, np.ndarray]:
         """
         Helper function to process waveforms from the AwgConfiguration object and prepare them for upload.
@@ -121,7 +121,7 @@ class AWGManager:
 
             # build full waveform from sequence
             ch_wf_ids = _waveform_sequence[i]
-            ch_waveforms: list[Waveform] = [_waveforms_list[wf_id] for wf_id in ch_wf_ids]
+            ch_waveforms: list[Waveform] = [_waveforms_dict[wf_id] for wf_id in ch_wf_ids]
             raw_chunks = [np.array(w.get(sample_rate=_sample_rate)) for w in ch_waveforms]
             full_wf = np.concatenate(raw_chunks)
 
@@ -812,7 +812,7 @@ class AWGManager:
         ch_amplitudes = [1.0 for _ in outp_channels]  # TODO: get from config
         ch_offsets = [0.0 for _ in outp_channels]  # TODO: get from config
 
-        waveforms_list = awg_cfg.waveforms  # TODO: make a dict rather than list
+        waveforms_dict: dict[int, Waveform] = awg_cfg.waveforms
 
         no_err = self.check_errors()
         print(
@@ -827,7 +827,7 @@ class AWGManager:
 
         # --- Process waveforms ---
         all_ch_data = self.process_waveforms(
-            outp_channels, channel_lags, waveform_sequence, waveforms_list, sample_rate
+            outp_channels, channel_lags, waveform_sequence, waveforms_dict, sample_rate
         )
         self._log.info(f"self.check_errors(): {self.check_errors()}")
         self._log.info("Waveforms processed and ready for upload.")

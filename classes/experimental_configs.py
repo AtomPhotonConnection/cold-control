@@ -307,7 +307,7 @@ class AwgConfiguration:
     def __init__(
         self,
         waveform_sequence: list[list[int]],
-        waveforms: tuple[Waveform, ...],
+        waveforms: dict[int, Waveform],
         sample_rate: float,
         burst_count: int,
         waveform_output_channels: tuple[int, ...],
@@ -829,7 +829,7 @@ class MotFluoresceConfigurationSweep:
     ) -> AwgConfiguration:
         new_config = deepcopy(base_config)
 
-        for idx, wf in enumerate(new_config.waveforms):
+        for idx, wf in new_config.waveforms.items():
             if idx in waveform_csvs:
                 wf.fname = waveform_csvs[idx]
             if idx in mod_freqs:
@@ -878,7 +878,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
         super().__init__(save_location, mot_reload, iterations)
 
         self._waveform_sequence = waveform_sequence
-        self.waveforms: tuple[Waveform, ...] = waveforms
+        self.waveforms: dict[int, Waveform] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
