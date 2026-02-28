@@ -32,7 +32,7 @@ def make_flat_seq(n_samples=100, t_step=10, voltage=0.0, ch_num=0):
 
 
 # ===========================================================================
-# Group A – DaqSequence basics
+# Group A - DaqSequence basics
 # ===========================================================================
 
 
@@ -86,7 +86,7 @@ class TestDaqSequenceBasics:
 
 
 # ===========================================================================
-# Group B – _ChannelSequence interpolation
+# Group B - _ChannelSequence interpolation
 # ===========================================================================
 
 
@@ -164,7 +164,7 @@ class TestChannelSequenceInterpolation:
 
 
 # ===========================================================================
-# Group C – get_channel_values_at_time
+# Group C - get_channel_values_at_time
 # ===========================================================================
 
 
@@ -209,7 +209,7 @@ class TestGetChannelValuesAtTime:
 
 
 # ===========================================================================
-# Group D – Validation and error handling
+# Group D - Validation and error handling
 # ===========================================================================
 
 
@@ -318,7 +318,7 @@ class TestValidationAndErrors:
 
 
 # ===========================================================================
-# Group E – IntervalStyle helpers
+# Group E - IntervalStyle helpers
 # ===========================================================================
 
 
