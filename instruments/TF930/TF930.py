@@ -30,7 +30,7 @@ class TF930(serial.Serial):
 
     def query_frequency(self, read_delay=0.5):
 
-        output = self.query("N?", delay=0.5)
+        output = self.query("N?", delay=read_delay)
         # Parse the output, once for units and once for values
         r = r"([\d|\.|e|\+]+)([a-zA-Z]*)\r\n"
         freq, units = r"N/A", r"N/A"
@@ -55,7 +55,7 @@ class TF930(serial.Serial):
             out += serial.Serial.read(self, size=size)
         return out
 
-    def query(self, string, delay=1):
+    def query(self, string, delay: float = 1.0):
         """Write a query and return the result after a designated delay (1s by default)."""
         self.write(string)
         time.sleep(delay)

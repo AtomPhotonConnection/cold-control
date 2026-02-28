@@ -211,8 +211,8 @@ if __name__ == "__main__":
     if pm_target is None or pm_flip is None:
         raise Exception("One of the power meters was not found, cannot continue.")
 
-    configure_power_meter(pm_flip, nMeasurmentCounts=3)
-    configure_power_meter(pm_target, nMeasurmentCounts=3)
+    configure_power_meter(pm_flip, n_measurement_counts=3)
+    configure_power_meter(pm_target, n_measurement_counts=3)
 
     # Create hardware callables (replace daq, amp_channel, flip_channel with your objects/IDs)
     set_v = lambda v: daq.update_channel_value(int(amp_channel), float(v))

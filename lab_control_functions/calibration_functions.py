@@ -6,27 +6,28 @@ Refactored 09/12/2024
 @author: Matt King, Marina
 """
 
-import os
 import re
 import time
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import serial
 
+from classes.daq import DAQController
 from instruments.TF930 import TF930
 from instruments.ThorlabsPM100 import ThorlabsPM100
-
-"""
-Load required classes for awg driven AOM calibration
-"""
-from classes.DAQ import DAQController
 from instruments.WX218x import awg_manager
+from lab_control_functions.calibration_helper_functions import (
+    configure_power_meter,
+    create_file,
+    default_v_step,
+    get_power_meter,
+    save_plot,
+)
 
-# helper functions in a separate file
-from lab_control_functions.calibration_helper_functions import *
-
-CALIB_CSV = r"calibrations\miscellaneous\flip_mirror_calib.csv"
+CALIB_CSV = Path("calibrations") / "miscellaneous" / "flip_mirror_calib.csv"
 
 
 def daq_driven_aom_response(
@@ -35,7 +36,7 @@ def daq_driven_aom_response(
     amp_channel: int,
     frequency_voltage_pairs: dict,
     v_range,
-    v_step=default_v_step(),
+    v_step=None,
     delay=0.1,
     repeats=3,
     save_folder="unfiled_data",
@@ -57,12 +58,15 @@ def daq_driven_aom_response(
                           (note 1 measurement is about 3ms).
     """
 
-    file_path = os.path.join(os.getcwd(), "calibrations", save_folder)
+    if v_step is None:
+        v_step = default_v_step()
+
+    file_path = Path.cwd() / "calibrations" / save_folder
 
     # Find and configure a power meter connected to the computer
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
-    configure_power_meter(power_meter, nMeasurmentCounts=repeats)
+    configure_power_meter(power_meter, n_measurement_counts=repeats)
 
     # loop through the different frequencies (and their associated voltages)
     for freq, v in frequency_voltage_pairs.items():
@@ -78,10 +82,10 @@ def daq_driven_aom_response(
             print(voltage_data[i])
             daq_controller.update_channel_value(amp_channel, voltage_data[i])
             time.sleep(delay)
-            amp_data[i] = float(power_meter.read)
+            amp_data[i] = float(power_meter.read)  # pyright: ignore[reportArgumentType]
         print("...finished!")
 
-        units = str(power_meter.sense.power.dc.unit.split("\n")[0])
+        units = str(power_meter.sense.power.dc.unit.split("\n")[0])  # pyright: ignore[reportAttributeAccessIssue]
         # print(type(units), repr(units))
         # Just a hack to convert W to uW as it's nicer.
         if units == "W":
@@ -89,16 +93,16 @@ def daq_driven_aom_response(
             units = "uW"
 
         # save the data and the plot
-        create_file(os.path.join(file_path, calib_name), voltage_data, amp_data, units)
+        create_file(file_path / calib_name, voltage_data, amp_data, units)
         save_plot(
-            os.path.join(file_path, f"{calib_name}_plot.png"),
+            file_path / f"{calib_name}_plot.png",
             voltage_data,
             amp_data,
             units,
             f"freq = {freq}MHz",
         )
-
-    inst.close()
+    if inst is not None:
+        inst.close()
 
 
 def awg_driven_aom_response(
@@ -127,7 +131,7 @@ def awg_driven_aom_response(
     """
 
     # get complete path to folder to save data in
-    save_location = os.path.join(os.getcwd(), "calibrations", save_folder)
+    save_location = Path.cwd() / "calibrations" / save_folder
 
     # Open and configure the AWG
     sample_rate = 1.25 * 10**9
@@ -138,51 +142,51 @@ def awg_driven_aom_response(
     for ch in [1, 2, 3, 4]:
         awg.disable_channel(ch)
 
-    awg.configure_sample_rate(sample_rate)
+    awg.set_sample_rate(sample_rate, (1, 2, 3, 4))
+
     awg.set_continuous(True)
 
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
-    configure_power_meter(power_meter, nMeasurmentCounts=repeats)
+    configure_power_meter(power_meter, n_measurement_counts=repeats)
 
     for freq in freqs:
         # Run through the voltages and record the TF930 output
-        levelData = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
-        calData = np.empty(n_steps)
+        level_data = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
+        cal_data = np.empty(n_steps)
         print("Running through awg levels...might take a while...")
 
-        for i, level in enumerate(levelData):
+        for i, level in enumerate(level_data):
             print("Level:", level)
 
             awg.play_sine_wave(awg_channel, frequency=freq, amplitude=level)
 
             awg.enable_channel(awg_channel)
             time.sleep(delay)
-            calData[i] = power_meter.read
+            cal_data[i] = power_meter.read
 
-            print(calData[i])
+            print(cal_data[i])
 
             awg.disable_channel(awg_channel)
 
         print("...finished taking data")
 
-        save_plot_location = os.path.join(save_location, "plots")
-        if not os.path.isdir(save_plot_location):
-            os.makedirs(save_plot_location)
+        save_plot_location = save_location / "plots"
+        save_plot_location.mkdir(parents=True, exist_ok=True)
 
         # save microWatts
-        calData = calData * 10**6  # [x*10**6 for x in calData]
+        cal_data = cal_data * 10**6  # [x*10**6 for x in calData]
         save_plot(
-            os.path.join(save_plot_location, f"{freq}MHz_abs_power.png"),
-            levelData,
-            calData,
+            save_plot_location / f"{freq}MHz_abs_power.png",
+            level_data,
+            cal_data,
             "uW",
             f"{freq}MHz: Power vs level",
         )
         create_file(
-            os.path.join(save_location, f"{name}_{awg_channel}_{freq}MHz_abs"),
-            levelData,
-            calData,
+            save_location / f"{name}_{awg_channel}_{freq}MHz_abs",
+            level_data,
+            cal_data,
             "uW",
             level_units="level",
         )
@@ -190,21 +194,23 @@ def awg_driven_aom_response(
         end_on_max = False
         while not end_on_max:
             #         indexMin, indexMax = calData.index(min(calData)), calData.index(max(calData))
-            indexMin = min(
-                range(len(calData)),
-                key=lambda i: abs(calData[i] - (min(calData) + calibration_lims[0] * max(calData))),
+            index_min = min(
+                range(len(cal_data)),
+                key=lambda i: abs(
+                    cal_data[i] - (min(cal_data) + calibration_lims[0] * max(cal_data))
+                ),
             )
-            indexMax = min(
-                range(len(calData)),
-                key=lambda i: abs(calData[i] - (max(calData) * calibration_lims[1])),
-            )
-
-            levelData, calData = (
-                levelData[indexMin : indexMax + 1],
-                calData[indexMin : indexMax + 1],
+            index_max = min(
+                range(len(cal_data)),
+                key=lambda i: abs(cal_data[i] - (max(cal_data) * calibration_lims[1])),
             )
 
-            if np.argmax(calData) != len(calData) - 1:
+            level_data, cal_data = (
+                level_data[index_min : index_max + 1],
+                cal_data[index_min : index_max + 1],
+            )
+
+            if np.argmax(cal_data) != len(cal_data) - 1:
                 calibration_lims = (calibration_lims[0], calibration_lims[1] - 0.1)
             else:
                 end_on_max = True
@@ -217,19 +223,19 @@ def awg_driven_aom_response(
             mi, ma = np.min(values), np.max(values)
             return (values - mi) / (ma - mi)
 
-        calData = 100 * normalise(calData)
+        cal_data = 100 * normalise(cal_data)
 
         save_plot(
-            os.path.join(save_location, f"{name}_{awg_channel}_{freq}MHz_rel_power_plot.png"),
-            levelData,
-            calData,
+            save_location / f"{name}_{awg_channel}_{freq}MHz_rel_power_plot.png",
+            level_data,
+            cal_data,
             "%",
             f"{freq}MHz: Rel Power vs level",
         )
         create_file(
-            os.path.join(save_location, f"{name}_{awg_channel}_{freq}MHz_rel"),
-            levelData,
-            calData,
+            save_location / f"{name}_{awg_channel}_{freq}MHz_rel",
+            level_data,
+            cal_data,
             "%",
             level_units="level",
         )
@@ -241,16 +247,17 @@ def awg_driven_aom_response(
     print("calibration finished.")
     awg.close()
 
-    inst.close()
+    if inst is not None:
+        inst.close()
 
 
 def calibrate_frequency(
     daq_controller,
-    chNum_to_calibrate,
-    calibration_V_range=(0, 10),
-    calibration_V_step=default_v_step(),
-    writeToQueryDelay=0.1,
-    queryToReadDelay=0.3,
+    ch_num_to_calibrate,
+    calibration_v_range=(0, 10),
+    calibration_v_step=None,
+    write_to_query_delay=0.1,
+    query_to_read_delay=0.3,
 ):
     """
     NOT YET FIXED
@@ -266,57 +273,60 @@ def calibrate_frequency(
                            NOTE: the shortest measurement time on the TF930 is 0.3s
     """
 
+    if calibration_v_step is None:
+        calibration_v_step = default_v_step()
+
     try:
         counter = TF930.TF930(port="COM5")
-    except serial.serialutil.SerialException as err:
+    except serial.SerialException as err:
         print("Calibration failed - frequency counter could not be found")
         raise err
 
     # Run through the voltages and record the TF930 output
-    vData, calData = [], []
+    v_data, cal_data = [], []
     print("Running through voltages...might take a while...")
     for v in np.arange(
-        calibration_V_range[0], calibration_V_range[1] + calibration_V_step, calibration_V_step
+        calibration_v_range[0], calibration_v_range[1] + calibration_v_step, calibration_v_step
     ):
-        daq_controller.update_channel_value(chNum_to_calibrate, v)
-        time.sleep(writeToQueryDelay)
-        vData.append(v)
-        calData.append(counter.query("N?", delay=queryToReadDelay))
+        daq_controller.update_channel_value(ch_num_to_calibrate, v)
+        time.sleep(write_to_query_delay)
+        v_data.append(v)
+        cal_data.append(counter.query("N?", delay=query_to_read_delay))
     print("...finished!")
     # Parse the output, once for units and once for values
     r = r"([\d|\.|e|\+]+)([a-zA-Z]*)\r\n"
 
     units = ""
     while units == "":
-        for i in range(0, len(calData)):
-            match = re.match(r, calData[i])
+        for i in range(0, len(cal_data)):
+            match = re.match(r, cal_data[i])
             if match:
                 units = match.group(2)
                 break
 
-    parsedData = []
-    nBadPoints = 0
-    for i in range(0, len(calData)):
-        match = re.match(r, calData[i])
+    parsed_data = []
+    n_bad_points = 0
+    for i in range(0, len(cal_data)):
+        match = re.match(r, cal_data[i])
         if match:
-            parsedData.append(match.group(1))
+            parsed_data.append(match.group(1))
         else:
             # If there was unexpected output (e.g. when the delays before reading are wrong)
             # then remove the corresponding data point from vData
-            nBadPoints += 1
-            vData.pop(i - nBadPoints)
+            n_bad_points += 1
+            v_data.pop(i - n_bad_points)
 
-    print(f"Removed {nBadPoints} bad data points")
+    print(f"Removed {n_bad_points} bad data points")
 
     # Just a hack to convert Hz to MHz as it's nicer.
     if units == "Hz":
-        parsedData = map(lambda x: float(x) / 10**6, parsedData)
+        parsed_data = map(lambda x: float(x) / 10**6, parsed_data)
         units = "MHz"
 
-    return vData, parsedData, units
+    return v_data, parsed_data, units
 
 
-def frequency_timeseries_mx(t_max, writeToQueryDelay=0.1, queryToReadDelay=0.3):
+def frequency_timeseries_mx(t_max, write_to_query_delay=0.1, query_to_read_delay=0.3):
     """
     NOT YET FIXED
 
@@ -331,31 +341,31 @@ def frequency_timeseries_mx(t_max, writeToQueryDelay=0.1, queryToReadDelay=0.3):
 
     try:
         counter = TF930.TF930(port="COM5")
-    except serial.serialutil.SerialException as err:
+    except serial.SerialException as err:
         print("Calibration failed - frequency counter could not be found")
         raise err
 
     # record the TF930 output
-    t_data, calData = [], []
+    t_data, cal_data = [], []
     print("Running through the measurements...")
-    for t_step in np.arange(0, t_max, writeToQueryDelay + queryToReadDelay):
+    for t_step in np.arange(0, t_max, write_to_query_delay + query_to_read_delay):
         print(t_step)
-        time.sleep(writeToQueryDelay)
+        time.sleep(write_to_query_delay)
         t_data.append(t_step)
-        calData.append(counter.query("N?", delay=queryToReadDelay))
+        cal_data.append(counter.query("N?", delay=query_to_read_delay))
     print("...finished!")
     # Parse the output, once for units and once for values
     r = r"([\d|\.|e|\+]+)([a-zA-Z]*)\r\n"
 
     units = ""
     while units == "":
-        for i in range(0, len(calData)):
-            match = re.match(r, calData[i])
+        for i in range(0, len(cal_data)):
+            match = re.match(r, cal_data[i])
             if match:
                 units = match.group(2)
                 break
 
-    parsedData = calData
+    parsed_data = cal_data
     # parsedData = []
     # nBadPoints = 0
     # for i in range(0, len(calData)):
@@ -372,20 +382,20 @@ def frequency_timeseries_mx(t_max, writeToQueryDelay=0.1, queryToReadDelay=0.3):
 
     # Just a hack to convert Hz to MHz as it's nicer.
     if units == "Hz":
-        parsedData = map(lambda x: float(x) / 10**6, parsedData)
+        parsed_data = map(lambda x: float(x) / 10**6, parsed_data)
         units = "MHz"
 
-    return t_data, parsedData, units
+    return t_data, parsed_data, units
 
 
 def percentage_power(
     daq_controller,
-    chNum_to_calibrate,
-    calibration_V_range=(0, 7),
+    ch_num_to_calibrate,
+    calibration_v_range=(0, 7),
     calibration_perc_lims=(0, 0.9),
-    calibration_V_step=default_v_step(),
-    writeToQueryDelay=0.1,
-    nMeasurmentCounts=3,
+    calibration_v_step=None,
+    write_to_query_delay=0.1,
+    n_measurement_counts=3,
 ):
     """
     NOT YET FIXED
@@ -406,108 +416,126 @@ def percentage_power(
     nMeasurementCounts  - How many measurements to take and average over when reading a value from the power meter
                           (note 1 measurement is about 3ms).
     """
+    if calibration_v_step is None:
+        calibration_v_step = default_v_step()
+
     # Find and configure a power meter connected to the computer
     inst, power_meter = get_power_meter()
-    configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
+    configure_power_meter(power_meter, n_measurement_counts=n_measurement_counts)
 
     # Run through the voltages and record the TF930 output
-    vData, calData = [], []
+    v_data, cal_data = [], []
     print("Running through voltages...might take a while...")
     for v in np.arange(
-        calibration_V_range[0], calibration_V_range[1] + calibration_V_step, calibration_V_step
+        calibration_v_range[0], calibration_v_range[1] + calibration_v_step, calibration_v_step
     ):
         print(v)
-        daq_controller.update_channel_value(chNum_to_calibrate, v)
-        time.sleep(writeToQueryDelay)
-        vData.append(v)
-        calData.append(power_meter.read)
+        daq_controller.update_channel_value(ch_num_to_calibrate, v)
+        time.sleep(write_to_query_delay)
+        v_data.append(v)
+        cal_data.append(power_meter.read)
     print("...finished!")
 
-    absMinIndex, absMaxIndex = calData.index(min(calData)), calData.index(max(calData))
+    _, abs_max_index = cal_data.index(min(cal_data)), cal_data.index(max(cal_data))
 
-    calData = calData[: absMaxIndex + 1]
+    cal_data = cal_data[: abs_max_index + 1]
 
-    indexMin = min(
-        range(len(calData)),
-        key=lambda i: abs(calData[i] - (min(calData) + calibration_perc_lims[0] * max(calData))),
+    index_min = min(
+        range(len(cal_data)),
+        key=lambda i: abs(cal_data[i] - (min(cal_data) + calibration_perc_lims[0] * max(cal_data))),
     )
-    indexMax = min(
-        range(len(calData)),
-        key=lambda i: abs(calData[i] - (max(calData) * calibration_perc_lims[1])),
+    index_max = min(
+        range(len(cal_data)),
+        key=lambda i: abs(cal_data[i] - (max(cal_data) * calibration_perc_lims[1])),
     )
 
-    vData, calData = vData[indexMin : indexMax + 1], calData[indexMin : indexMax + 1]
+    v_data, cal_data = v_data[index_min : index_max + 1], cal_data[index_min : index_max + 1]
 
     def normalise(values):
         mi, ma = min(values), max(values)
         ran = ma - mi
-        return [(l - mi) / ran for l in values]
+        return [(v - mi) / ran for v in values]
 
-    calData = [100 * x for x in normalise(calData)]
+    cal_data = [100 * x for x in normalise(cal_data)]
 
     units = "%"
 
-    inst.close()
+    if inst is not None:
+        inst.close()
 
-    return vData, calData, units
+    return v_data, cal_data, units
 
 
 def test_stirap_aom_freq_response(
-    level=0.5, freqs=range(60, 90, 1), nMeasurmentCounts=3, writeToQueryDelay=0.2
+    level=0.5,
+    freqs=None,
+    awg_channel=1,
+    repeats=3,
+    delay=0.2,
 ):
     """
-    NOT YET FIXED
-    """
+    Measures the AOM power response as a function of the AWG drive frequency
+    at a fixed amplitude level.
 
-    # Open and configure the AWG
+    Inputs:
+        level (float) - AWG output amplitude in volts.
+        freqs (iterable) - Drive frequencies in MHz to sweep over.
+        awg_channel (int) - AWG channel that drives the AOM (1-4).
+        repeats (int) - How many measurements to average per power meter reading.
+        delay (float) - Seconds to wait after enabling the channel before reading.
+    """
+    if freqs is None:
+        freqs = range(60, 90, 1)
+
+    # Convert MHz values to Hz for the AWG
+    freqs_hz = [f * 10**6 for f in freqs]
+
     sample_rate = 1.25 * 10**9
 
     print("Creating AWG instance")
-    awg = WX218x_awg()
+    awg = awg_manager.AWGManager()
     print("Connecting...")
-    awg.open(reset=False)
 
-    awg.configure_operation_mode(Channel.CHANNEL_1, WX218x_OperationMode.CONTINUOUS)
-    awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
-    awg.configure_sample_rate(sample_rate)
-    awg.configure_arb_gain(Channel.CHANNEL_1, 2)
-    awg.configure_arb_gain(Channel.CHANNEL_2, 2)
+    for ch in [1, 2, 3, 4]:
+        awg.disable_channel(ch)
+
+    awg.set_sample_rate(sample_rate, (1, 2, 3, 4))
+    awg.set_continuous(True)
 
     inst, power_meter = get_power_meter()
-    configure_power_meter(power_meter, nMeasurmentCounts=nMeasurmentCounts)
+    power_meter: ThorlabsPM100 = power_meter
+    configure_power_meter(power_meter, n_measurement_counts=repeats)
 
-    calData = []
+    cal_data = []
 
-    for freq in freqs:
-        # Run through the voltages and record the TF930 output
+    for freq_mhz, freq_hz in zip(freqs, freqs_hz):
+        print("freq:", freq_mhz, "MHz")
 
-        print("freq:", freq)
+        awg.play_sine_wave(awg_channel, frequency=freq_hz, amplitude=level)
+        awg.enable_channel(awg_channel)
+        time.sleep(delay)
 
-        wf = testWaveform(sample_rate, level=level, mod_freq=freq * 10**6)
-        awg.create_custom_adv(wf.get(sample_rate), wf.get(sample_rate))
+        reading = float(power_meter.read)  # type: ignore
+        cal_data.append(reading)
+        print(f"  power = {reading}")
 
-        awg.enable_channel(Channel.CHANNEL_1)
-        time.sleep(writeToQueryDelay)
-        calData.append(power_meter.read)
+        awg.disable_channel(awg_channel)
 
-        print(calData[-1])
-
-        awg.disable_channel(Channel.CHANNEL_1)
-
+    print("Resetting awg...")
     awg.reset()
     awg.close()
 
-    inst.close()
+    if inst is not None:
+        inst.close()
 
     fig = plt.figure()
-
     ax = fig.add_subplot(111)
     fig.subplots_adjust(top=0.85)
-
-    ax.set_xlabel("freq")
-    ax.set_ylabel("W")
-
-    ax.plot(freqs, calData)
+    ax.set_title("STIRAP AOM frequency response")
+    ax.set_xlabel("Frequency (MHz)")
+    ax.set_ylabel("Power (W)")
+    ax.plot(list(freqs), cal_data)
+    plt.show()
 
 
 def finding_amplitude_from_power(
@@ -554,7 +582,9 @@ def finding_amplitude_from_power(
 
             return a * power + b
     else:
-        compensate_for_flip = lambda power: power
+
+        def compensate_for_flip(power):
+            return power
 
     sample_rate = 1.25 * 10**9
     print("Creating AWG instance")
@@ -563,15 +593,14 @@ def finding_amplitude_from_power(
     for i in [1, 2, 3, 4]:
         awg.disable_channel(i)
 
-    awg.configure_sample_rate(sample_rate)
+    awg.set_sample_rate(sample_rate, (1, 2, 3, 4))
 
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing
-    configure_power_meter(power_meter, nMeasurmentCounts=repeats)
+    configure_power_meter(power_meter, n_measurement_counts=repeats)
 
     closest_level = None
     closest_diff = float("inf")
-    last_read_Value = None
 
     if save_all and results_dict is not None:
         results_dict["level"] = []
@@ -579,11 +608,11 @@ def finding_amplitude_from_power(
         results_dict["rabi"] = []
 
     for freq in freqs:
-        levelData = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
-        calData = np.empty(n_steps)
+        level_data = np.linspace(calibration_lims[0], calibration_lims[1], n_steps)
+        cal_data = np.empty(n_steps)
         print("Running through awg levels...might take a while...")
 
-        for i, level in enumerate(levelData):
+        for i, level in enumerate(level_data):
             awg.play_sine_wave(awg_channel, frequency=freq, amplitude=level)
             awg.set_continuous(True)
             awg.enable_channel(awg_channel)
@@ -591,13 +620,10 @@ def finding_amplitude_from_power(
 
             time.sleep(delay)
             raw_value = float(power_meter.read)  # type: ignore
-            if flip_mirror:
-                value = compensate_for_flip(raw_value)
-            else:
-                value = raw_value
+            value = compensate_for_flip(raw_value) if flip_mirror else raw_value
             print(f"{level}V, {value * 1e3}mW (raw value: {raw_value * 1e3}mW)")
 
-            calData[i] = value
+            cal_data[i] = value
 
             awg.disable_channel(awg_channel)
 
@@ -605,7 +631,6 @@ def finding_amplitude_from_power(
             if diff < closest_diff:
                 closest_diff = diff
                 closest_level = level
-                last_read_value = value
 
             if save_all and results_dict is not None:
                 results_dict["level"].append(level)
@@ -618,7 +643,8 @@ def finding_amplitude_from_power(
     print("Calibration finished.")
     awg.close()
 
-    inst.close()
+    if inst is not None:
+        inst.close()
     print(f"Closest level found: {closest_level}V with difference: {closest_diff * 10**3}mW")
     return (
         closest_level,
