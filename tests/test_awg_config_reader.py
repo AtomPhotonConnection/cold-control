@@ -72,7 +72,7 @@ def test_load_awg_configuration():
         )
 
     # Check that phases default to empty list for empty "phases = ,"
-    for i, wf in enumerate(awg_config.waveforms):
+    for i, wf in awg_config.waveforms.items():
         assert wf.phases == [], f"Waveform {i} phases should be empty, got {wf.phases}"
 
     # Check that deprecated/optional fields are not stored as attributes

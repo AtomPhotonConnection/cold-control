@@ -13,7 +13,7 @@ from classes.experimental_runner import MotFluoresceExperiment
 from instruments.dummy import DummyOscilloscopeManager
 
 # ===========================================================================
-# Group A – GenericExperiment DAQ control (tested via MotFluoresceExperiment)
+# Group A - GenericExperiment DAQ control (tested via MotFluoresceExperiment)
 # ===========================================================================
 
 
@@ -54,7 +54,7 @@ class TestGenericExperimentDaqControl:
 
 
 # ===========================================================================
-# Group B – MotFluoresceExperiment hardware flags
+# Group B - MotFluoresceExperiment hardware flags
 # ===========================================================================
 
 
@@ -87,7 +87,7 @@ class TestMotFluoresceExperimentFlags:
 
 
 # ===========================================================================
-# Group C – configure() without and with scope (development_mode)
+# Group C - configure() without and with scope (development_mode)
 # ===========================================================================
 
 
@@ -127,7 +127,7 @@ class TestMotFluoresceExperimentConfigure:
 
 
 # ===========================================================================
-# Group D – run() thread execution
+# Group D - run() thread execution
 # ===========================================================================
 
 

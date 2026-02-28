@@ -1,4 +1,5 @@
 import csv
+from pathlib import Path
 
 # def gaussian_rise_fall(t, t_rise, t_flat, amplitude):
 #     sigma = t_rise / (2 * np.sqrt(2 * np.log(10)))
@@ -231,7 +232,7 @@ end = [
 
 final = start + x + end
 
-with open(f"flatg_{amplitude}_ch4_50us.csv", "w", newline="") as csvfile:
+with Path(f"flatg_{amplitude}_ch4_50us.csv").open("w", newline="") as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(final)
 
