@@ -640,7 +640,7 @@ class PhotonProductionExperiment(GenericExperiment):
         self.awg = self.__configure_awg()
         self.tdc = self.__configure_tdc()
         #         try:
-        #             self.counter = TF930.TF930(port='COM5')
+        #             self.counter = tf930_manager.TF930(port='COM5')
         #         except SerialException:
         #             print 'Cannot find counter. Ignoring and carrying on.'
         #             self.counter = None

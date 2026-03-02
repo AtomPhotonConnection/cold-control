@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import serial
 
-from instruments.TF930 import TF930
+from instruments.TF930 import tf930_manager
 
 # from sympy.physics.quantum.circuitplot import matplotlib
 
@@ -18,7 +18,7 @@ def frequency_timeseries_mx(t_max, write_to_query_delay=0.1, query_to_read_delay
                        NOTE: the shortest measurement time on the TF930 is 0.3s"""
 
     try:
-        counter = TF930.TF930(port="COM5")
+        counter = tf930_manager.TF930(port="COM5")
     except serial.SerialException as err:
         print("Calibration failed - frequency counter could not be found")
         raise err

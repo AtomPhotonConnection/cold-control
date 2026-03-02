@@ -16,7 +16,7 @@ import pandas as pd
 import serial
 
 from classes.daq import DAQController
-from instruments.TF930 import TF930
+from instruments.TF930 import tf930_manager
 from instruments.ThorlabsPM100 import ThorlabsPM100
 from instruments.WX218x import awg_manager
 from lab_control_functions.calibration_helper_functions import (
@@ -277,7 +277,7 @@ def calibrate_frequency(
         calibration_v_step = default_v_step()
 
     try:
-        counter = TF930.TF930(port="COM5")
+        counter = tf930_manager.TF930(port="COM5")
     except serial.SerialException as err:
         print("Calibration failed - frequency counter could not be found")
         raise err
@@ -340,7 +340,7 @@ def frequency_timeseries_mx(t_max, write_to_query_delay=0.1, query_to_read_delay
     """
 
     try:
-        counter = TF930.TF930(port="COM5")
+        counter = tf930_manager.TF930(port="COM5")
     except serial.SerialException as err:
         print("Calibration failed - frequency counter could not be found")
         raise err
