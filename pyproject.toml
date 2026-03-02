@@ -38,3 +38,30 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
+
+[tool.pyright]
+include = ["."] # Adjust "src" to your actual source folder name
+exclude = ["**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    "**/.*",
+    "**/dlls",
+    "**/icons",
+    "**/labbook",
+    "**/measurements",
+    "**/temp"]
+
+venvPath = "C:\\Users\\kingm\\.conda\\envs"
+venv = "cold-control"
+
+pythonVersion = "3.9"
+typeCheckingMode = "standard" # Options: "off", "basic", "standard", "strict"
+
+# Specific Rule Overrides
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+
+# Diagnostic settings to match your Ruff style
+reportUnusedImport = "warning"
+reportUnusedVariable = "warning"
