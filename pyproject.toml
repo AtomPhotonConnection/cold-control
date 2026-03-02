@@ -33,6 +33,9 @@ ignore = [
 
 fixable = ["ALL"]
 
+[tool.ruff.lint.per-file-ignores]
+"instruments/ThorlabsPM100/ThorlabsPM100.py" = ["N801", "N999"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

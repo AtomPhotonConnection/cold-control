@@ -23,10 +23,10 @@ class USBTMC:
     def ask_for_value(self, command):
         return eval(self.query(command).strip())
 
-    def getName(self):
+    def get_name(self):
         return self.query("*IDN?")
 
-    def sendReset(self):
+    def send_reset(self):
         self.write("*RST")
 
 

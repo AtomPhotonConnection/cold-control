@@ -25,17 +25,17 @@ class Generic:
 
     def _write(self, cmd):
         if self._verbose:
-            print("Write command %s" % cmd)
+            print(f"Write command {cmd}")
         self._inst.write(cmd)
 
     def _ask(self, cmd):
         if self._verbose:
             print(
-                "Ask command %s ..." % cmd,
+                f"Ask command {cmd} ...",
             )
         out = self._inst.query(cmd)
         if self._verbose:
-            print("recieve %s" % out)
+            print(f"recieve {out}")
         return out
 
 

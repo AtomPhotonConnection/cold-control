@@ -1,5 +1,7 @@
 import sys
 
+__all__ = ["USBTMC", "ThorlabsPM100"]
+
 __version__ = "1.2.2"
 
 __long_description__ = """\
@@ -71,6 +73,6 @@ Vesrion History
 .. _Pierre Cladé: mailto:pierre.clade@spectro.jussieu.fr
 """
 
-if "setuptools" not in sys.modules.keys():
+if "setuptools" not in sys.modules:
     from .ThorlabsPM100 import ThorlabsPM100
     from .usbtmc import USBTMC

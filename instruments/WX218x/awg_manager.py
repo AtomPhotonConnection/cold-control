@@ -686,7 +686,7 @@ class AWGManager:
         if width < 0:
             width = 0
 
-        high_level = 1.2  # noqa: F841, not currently used because default value is fine
+        high_level = 1.2  # pyright: ignore[reportUnusedVariable] # noqa: F841, not currently used because default value is fine
         mark_source = "WAVE"
 
         self._write(f":MARK:SEL {marker}")
