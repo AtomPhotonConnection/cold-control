@@ -1,4 +1,4 @@
-from .VISA_wrapper_metaclass import (
+from .visa_wrapper_metaclass import (
     Argument,
     GenericCommandClass,
     GenericGetCommandClass,
