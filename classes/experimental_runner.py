@@ -61,18 +61,18 @@ except (ImportError, ModuleNotFoundError):
 from instruments.quTAU.tdc_enums import TdcDevTypeEnum, TdcSignalCondEnum
 
 if TYPE_CHECKING:
-    from instruments.pyicic.IC_Camera import IC_Camera
-    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+    from instruments.pyicic.ic_camera import ICCamera
+    from instruments.pyicic.ic_imaging_control import ICImagingControl
 else:
     try:
-        from instruments.pyicic.IC_Camera import IC_Camera
-        from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+        from instruments.pyicic.ic_camera import ICCamera
+        from instruments.pyicic.ic_imaging_control import ICImagingControl
     except (OSError, FileNotFoundError, ImportError):
-        IC_Camera = None
-        IC_ImagingControl = None
+        ICCamera = None
+        ICImagingControl = None
 import contextlib
 
-from instruments.pyicic.IC_Exception import IC_Exception
+from instruments.pyicic.ic_exception import ICError
 
 
 def make_property(attr_name):
@@ -157,7 +157,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         daq_controller: DAQController,
         sequence: DaqSequence,
         absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
-        ic_imaging_control: IC_ImagingControl,
+        ic_imaging_control: ICImagingControl,
     ):
         """
         Runs an absorbtion imaging experiment. Takes a number of parameters, namely:
@@ -174,7 +174,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         c: AbsorbtionImagingConfiguration = self.config
         self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
-        # Use the externally provided IC_ImagingControl instances if one is provided
+        # Use the externally provided ICImagingControl instances if one is provided
         if ic_imaging_control is not None:
             self.ic_ic = ic_imaging_control
             if not self.ic_ic.initialised:
@@ -182,7 +182,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.external_ic_ic_provided = True
         # Otherwise create and initialise one of our own, setting a flag so it is closed again later.
         else:
-            self.ic_ic = IC_ImagingControl()
+            self.ic_ic = ICImagingControl()
             self.ic_ic.init_library()
             self.external_ic_ic_provided = False
 
@@ -384,8 +384,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __configure_camera(self):
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: IC_Camera
-        cam: IC_Camera
+        self.cam: ICCamera
+        cam: ICCamera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
         #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
@@ -415,8 +415,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         try:
             cam.wait_til_frame_ready(self.cam_frame_timeout)
             cam.get_image_data()
-        except IC_Exception as err:
-            print(f"Caught IC_Exception with error: {err.message}")
+        except ICError as err:
+            print(f"Caught ICError with error: {err.message}")
         cam.reset_frame_ready()
 
     def __take_images(self, save_raw_images):
@@ -850,7 +850,7 @@ class MotFluoresceExperiment(GenericExperiment):
         daq_controller: DAQController,
         sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
-        ic_imaging_control: Optional[IC_ImagingControl] = None,
+        ic_imaging_control: Optional[ICImagingControl] = None,
         sweep=True,
         development_mode: bool = False,
     ):
@@ -884,7 +884,7 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_cam:
             if ic_imaging_control is None:
                 # if no imaging control object is provided, create a new one
-                self.ic_ic = IC_ImagingControl()
+                self.ic_ic = ICImagingControl()
                 self.external_ic_ic_provided = False
                 self.ic_ic.init_library()
             else:
@@ -912,8 +912,8 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: IC_Camera
-        cam: IC_Camera
+        self.cam: ICCamera
+        cam: ICCamera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
         #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         # is this in milliseconds? and does it match the MOT reload time? I think so
@@ -944,8 +944,8 @@ class MotFluoresceExperiment(GenericExperiment):
         try:
             cam.wait_til_frame_ready(self.cam_frame_timeout)
             cam.get_image_data()
-        except IC_Exception as err:
-            print(f"Caught IC_Exception with error: {cast(IC_Exception, err).message}")
+        except ICError as err:
+            print(f"Caught ICError with error: {cast(ICError, err).message}")
         cam.reset_frame_ready()
 
     def configure(self):

@@ -2,7 +2,7 @@
 from typing import ClassVar
 
 
-class IC_Exception(Exception):
+class ICError(Exception):
     """
     An exception for the IC imaging control software. It contains a message
     property which is a string indicating what went wrong.

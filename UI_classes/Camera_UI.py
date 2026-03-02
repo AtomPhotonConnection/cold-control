@@ -14,9 +14,9 @@ import numpy as np
 from PIL import Image, ImageTk
 
 try:
-    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+    from instruments.pyicic.ic_imaging_control import ICImagingControl
 except (OSError, FileNotFoundError, ImportError):
-    IC_ImagingControl = None  # type: ignore[assignment, misc]
+    ICImagingControl = None  # type: ignore[assignment, misc]
 from UI_classes.UI_helpers import ImageButton
 
 
@@ -42,13 +42,13 @@ class CameraUI(tk.LabelFrame):
             self.ic_ic = ic_imaging_control
             if not self.ic_ic.initialised:
                 self.ic_ic.init_library()
-        elif IC_ImagingControl is not None:
-            self.ic_ic = IC_ImagingControl()
+        elif ICImagingControl is not None:
+            self.ic_ic = ICImagingControl()
             self.ic_ic.init_library()
         else:
             self.ic_ic = None
 
-        self.ic_ic = cast(IC_ImagingControl, self.ic_ic)  # type:ignore for type checking
+        self.ic_ic = cast(ICImagingControl, self.ic_ic)  # type:ignore for type checking
 
         # Calculate the aspect ratio of the requested video dimensions so we keep this when re-sizing the picture.
         self.video_dims = video_dims
