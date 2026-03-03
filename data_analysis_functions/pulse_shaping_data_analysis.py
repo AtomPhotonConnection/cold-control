@@ -54,7 +54,7 @@ class ExperimentalDataProcessor:
                     df = self.apply_rolling_average(df, self.rolling_window)
                 dataframes.append(df)
             except Exception as e:
-                warnings.warn(f"Could not load {csv_file}: {e}")
+                warnings.warn(f"Could not load {csv_file}: {e}", stacklevel=2)
 
         return dataframes
 
@@ -72,7 +72,7 @@ class ExperimentalDataProcessor:
         df_smooth = df.copy()
 
         # Apply rolling average to all voltage channels
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in df_smooth.columns:
                 df_smooth[col_name] = (
                     df_smooth[col_name].rolling(window=window, center=True, min_periods=1).mean()
@@ -173,7 +173,7 @@ class ExperimentalDataProcessor:
         averaged_df = valid_dfs[0].copy()
 
         # Average all voltage columns
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in averaged_df.columns:
                 values = np.array([df[col_name].values for df in valid_dfs])
                 averaged_df[col_name] = np.mean(values, axis=0)
@@ -251,7 +251,7 @@ class ExperimentalDataProcessor:
         interpolated_data = {}
         interpolated_data[self.time_col] = aligned_time
 
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in valid_dfs[0].columns:
                 interpolated_data[col_name] = []
 
@@ -262,7 +262,7 @@ class ExperimentalDataProcessor:
             # print(f"Relative time axis: {relative_time[0]} to {relative_time[-1]} seconds")
 
             # Interpolate each channel
-            for channel_num, col_name in self.channel_cols.items():
+            for _, col_name in self.channel_cols.items():
                 if col_name not in df.columns:
                     continue
 
@@ -283,7 +283,7 @@ class ExperimentalDataProcessor:
 
         # Average the interpolated data
         averaged_data = {self.time_col: aligned_time}
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in interpolated_data and len(interpolated_data[col_name]) > 0:
                 channel_stack = np.array(interpolated_data[col_name])
                 # Use nanmean to handle any NaN values from interpolation
@@ -326,11 +326,12 @@ class ExperimentalDataProcessor:
         channel4_data = np.asarray(df[channel4_col].values)
 
         # Calculate background average and std
+        bg_mask = None
         if not subtract_int_from_background:
             bg_mask = (time_data >= background_time_range[0]) & (
                 time_data <= background_time_range[1]
             )
-        elif subtract_int_from_background:
+        else:
             bg_mask = (
                 (time_data >= background_time_range[0])
                 & (time_data <= background_time_range[1])
@@ -340,6 +341,8 @@ class ExperimentalDataProcessor:
                 )
             )
 
+        if bg_mask is None or not bg_mask.any():
+            raise ValueError("No data points found in background time range")
         background_data = channel4_data[bg_mask]
         bg_average = np.mean(background_data)
         bg_std = np.std(background_data)

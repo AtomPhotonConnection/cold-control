@@ -1,16 +1,14 @@
-import os
+from pathlib import Path
 
 import pandas as pd
 
-root_path = r"\data\2025-05-30\18-41-21"
+root_path = Path(r"\data\2025-05-30\18-41-21")
 
 # List all files in the directory
-all_files = os.listdir(root_path)
+all_files = list(root_path.iterdir())
 
 # Filter to only include CSV files (optional, if you only care about CSVs)
-filenames = [f for f in all_files if f.endswith(".csv")]
-
-csv_files = [f"{root_path}\\{name}" for name in filenames]
+csv_files = [f for f in all_files if f.suffix == ".csv"]
 
 # Read CSVs
 dfs = [pd.read_csv(f) for f in csv_files]

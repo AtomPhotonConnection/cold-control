@@ -1,6 +1,7 @@
 import datetime
 import os
 import re
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,17 +32,17 @@ def get_folder_paths(directory_path):
     """
     folder_paths = []
     # Check if the provided path is a valid directory
-    if not os.path.isdir(directory_path):
+    dir_path = Path(directory_path)
+    if not dir_path.is_dir():
         print(f"Error: '{directory_path}' is not a valid directory.")
         return []
 
     # Iterate through all entries in the directory
-    for entry_name in os.listdir(directory_path):
-        full_path = os.path.join(directory_path, entry_name)
+    for entry in dir_path.iterdir():
         # Check if the entry is a directory (folder)
-        if os.path.isdir(full_path):
+        if entry.is_dir():
             # Add the raw string representation of the path
-            folder_paths.append(rf"{full_path}")
+            folder_paths.append(str(entry))
     return folder_paths
 
 
@@ -52,14 +53,14 @@ def calculate_integrals_single_trace(data, i=0):
 
     processed_df = pd.DataFrame()
     # imaging beam on
-    ch4 = data["Channel 3 Voltage (V)"]
+    _ch4 = data["Channel 3 Voltage (V)"]
     ch2 = data["Channel 2 Voltage (V)"]
     time = data["Time (s)"]
 
     # Step 1: Find the first index where ch2 drops below 7.45
     below = ch2 < MARKER_DROP
     if not below.any():
-        print("Channel 2 never drops below {MARKER_DROP} V")
+        print(f"Channel 2 never drops below {MARKER_DROP} V")
         drop_time = None
     else:
         drop_index = below.idxmax()
@@ -76,8 +77,6 @@ def calculate_integrals_single_trace(data, i=0):
             rise_time = time[rise_index]
             print(f"Channel 2 drops below {MARKER_DROP} V at {drop_time} s")
             print(f"Channel 2 goes back above {MARKER_DROP} V at {rise_time} s")
-
-    ch4_smooth = ch4  # .rolling(window=144, center=True, min_periods=1).mean()
 
     # big increase when imaging start
     # mask_rise = (time >= 1.77e-3) & (time <= 2.0e-3)  # imaging starts at 2ms
@@ -109,21 +108,18 @@ def calculate_integrals_single_trace(data, i=0):
     )
 
     # only consider the result if the timing of the awg marker is correct
-    if drop_time is not None:
-        if abs(drop_time - TARGET_TIME) <= TOLERANCE:
-            print("The drop time is close enough to the expected time")
+    if drop_time is not None and abs(drop_time - TARGET_TIME) <= TOLERANCE:
+        print("The drop time is close enough to the expected time")
 
-            if area is not None and not np.isnan(area):
-                processed_df[f"Time (s) {i}"] = data["Time (s)"]
-                processed_df[f"Channel 1 Voltage (V) {i}"] = data["Channel 1 Voltage (V)"]
-                processed_df[f"Channel 3 Voltage (V) {i}"] = data["Channel 3 Voltage (V)"]
-                processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
+        if area is not None and not np.isnan(area):
+            processed_df[f"Time (s) {i}"] = data["Time (s)"]
+            processed_df[f"Channel 1 Voltage (V) {i}"] = data["Channel 1 Voltage (V)"]
+            processed_df[f"Channel 3 Voltage (V) {i}"] = data["Channel 3 Voltage (V)"]
+            processed_df[f"Channel 2 Voltage (V) {i}"] = data["Channel 2 Voltage (V)"]
 
-            print(f"Average background: {average}, Integrated area: {area}\n")
+        print(f"Average background: {average}, Integrated area: {area}\n")
 
-            return (area, average, processed_df)
-        else:
-            return (area, average, None)
+        return (area, average, processed_df)
     else:
         return (area, average, None)
 
@@ -135,14 +131,14 @@ def single_trace_int_based_on_marker(data, i=0):
 
     processed_df = pd.DataFrame()
     # imaging beam on
-    ch4 = data["Channel 3 Voltage (V)"]
     ch2 = data["Channel 2 Voltage (V)"]
     time = data["Time (s)"]
 
     # Step 1: Find the first index where ch2 drops below 7.45
+    drop_time = None
     below = ch2 < MARKER_DROP
     if not below.any():
-        print("Channel 2 never drops below {MARKER_DROP} V")
+        print(f"Channel 2 never drops below {MARKER_DROP} V")
     else:
         drop_index = below.idxmax()
         drop_time = time[drop_index]
@@ -161,6 +157,9 @@ def single_trace_int_based_on_marker(data, i=0):
 
     # big decrease when imaging stops
     # assume imaging starts at the awg marker time
+    if drop_time is None:
+        raise ValueError("AWG marker drop time not found, cannot calculate fluorescence.")
+
     t_rise = drop_time
     t_drop = t_rise + IMG_WIDTH
 
@@ -199,10 +198,9 @@ def single_trace_int_based_on_marker(data, i=0):
 
 def plot_shot_results(folder_path):
     pattern = re.compile(r"^iteration_\d+_data\.csv$")
+    folder = Path(folder_path)
     files = [
-        os.path.join(folder_path, filename)
-        for filename in os.listdir(folder_path)
-        if pattern.match(filename)
+        str(entry) for entry in folder.iterdir() if entry.is_file() and pattern.match(entry.name)
     ]
     all_measurements = []
 
@@ -223,7 +221,6 @@ def plot_shot_results(folder_path):
     valid_meas = pd.DataFrame()
 
     ref_0 = []
-    fluor = []
     integrals_fl = []
 
     for i, data in enumerate(all_measurements):
@@ -238,7 +235,7 @@ def plot_shot_results(folder_path):
         measurements[f"Channel 3 Voltage (V) {i}"] = ch4
 
         idx_sorted = (ch1 - 1).abs().sort_values().index
-        idx_ch1_1 = idx_sorted[0]  # ch1 crosses 1V (trigger value)
+        _idx_ch1_1 = idx_sorted[0]  # ch1 crosses 1V (trigger value)
 
         (area, average, processed_df) = calculate_integrals_single_trace(data, i)
 
@@ -247,7 +244,7 @@ def plot_shot_results(folder_path):
             ref_0.append(average)
             valid_meas = pd.concat([valid_meas, processed_df], axis=1)
 
-        fig, ax1 = plt.subplots(figsize=(15, 8))
+        _fig, ax1 = plt.subplots(figsize=(15, 8))
 
         ax1.plot(time, ch4, label="CH4 raw", alpha=0.5, color="tab:blue")
         ax1.plot(time, ch4, label="CH4 smooth", linewidth=2, color="tab:cyan")
@@ -270,7 +267,7 @@ def plot_shot_results(folder_path):
         ax3.tick_params(axis="y", labelcolor="green")
 
         # Combinar leyendas de ambos ejes
-        lines1, labels1 = ax1.get_legend_handles_labels()
+        # lines1, labels1 = ax1.get_legend_handles_labels()
         # lines2, labels2 = ax2.get_legend_handles_labels()
         # ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
@@ -284,8 +281,6 @@ def plot_shot_results(folder_path):
 
     average_int = np.mean(valid_integrals)
     std_int = np.std(valid_integrals)
-    max_int = np.max(valid_integrals)
-    min_int = np.min(valid_integrals)
     print(f"Average integrated area: {average_int}, ")
     print(f"Standard deviation of area: {std_int}")
     print(
@@ -345,13 +340,13 @@ def plot_shot_results(folder_path):
         "Only data where the AWG marker is at the right time, and the integral is a number"
     )
     fig2.tight_layout()
-    fig2.savefig(os.path.join(folder_path, "results_plot.png"))
+    fig2.savefig(Path(folder_path) / "results_plot.png")
 
     plt.show()
 
 
 def calculate_integrals(
-    root_directory, shots_to_include=[], window_size=32, folders_to_process=None
+    root_directory, shots_to_include=None, window_size=32, folders_to_process=None
 ):
     """
     Calculate integrals of fluorescence data from multiple folders. Saves the summary of
@@ -364,6 +359,8 @@ def calculate_integrals(
         folders_to_process (list): List of folder paths to process. If None,
         it will automatically get all top-level subfolders in the root directory.
     """
+    if shots_to_include is None:
+        shots_to_include = []
     if folders_to_process is None:
         # Get all top-level subfolders in the root directory
         folders_to_process = get_folder_paths(root_directory)
@@ -372,32 +369,33 @@ def calculate_integrals(
             print(f"No subfolders found in {root_directory}.")
             return
 
-    today = datetime.datetime.now().strftime("%d-%m")
+    _today = datetime.datetime.now().strftime("%d-%m")
     output_data = []
 
     for folder_path in folders_to_process:
-        folder_name = os.path.basename(folder_path)
+        folder_name = Path(folder_path).name
         print(f"Procesando carpeta: {folder_name}")
 
         pattern = re.compile(r"^iteration_(\d+)_data\.csv$")
 
         files = []
         for root, _, file_list in os.walk(folder_path):
-            if shots_to_include:
-                if not any(shot in root for shot in shots_to_include):
-                    continue
+            if shots_to_include and not any(shot in root for shot in shots_to_include):
+                continue
             for f in file_list:
                 if pattern.match(f):
-                    full_path = os.path.join(root, f)
+                    full_path = str(Path(root) / f)
                     files.append(full_path)
 
         integrals_fl = []
         ref_0 = []
 
         for file_path in files:
-            file_name = os.path.basename(file_path)
+            file_name = Path(file_path).name
             match = pattern.match(file_name)
-            iteration_number = match.group(1)
+            if match is None:
+                continue
+            _iteration_number = match.group(1)
 
             data = pd.read_csv(file_path)
             data["Channel 1 Voltage (V)"] = (
@@ -413,9 +411,9 @@ def calculate_integrals(
 
             ch1 = data["Channel 1 Voltage (V)"]
             idx_sorted = (ch1 - 1).abs().sort_values().index
-            idx_ch1_1 = idx_sorted[0]
+            _idx_ch1_1 = idx_sorted[0]
 
-            (area, average, processed_df) = calculate_integrals_single_trace(data)
+            (area, average, _processed_df) = calculate_integrals_single_trace(data)
 
             integrals_fl.append(area)
             ref_0.append(average)
@@ -456,7 +454,7 @@ def calculate_integrals(
     summary_df = pd.DataFrame(output_data)
     # summary_output_dir = rf'\data\integrals_data_analysis\{today}'
     # os.makedirs(summary_output_dir, exist_ok=True)
-    summary_output_path = os.path.join(root_directory, "summary_integrals.csv")
+    summary_output_path = str(Path(root_directory) / "summary_integrals.csv")
     summary_df.to_csv(summary_output_path, index=False)
 
     print(f"\nResumen guardado en: {summary_output_path}")
