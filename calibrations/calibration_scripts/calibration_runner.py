@@ -6,9 +6,7 @@ Refactored 09/12/2024
 @author: Matt King
 """
 
-import os
-
-from instruments.WX218x.WX218x_awg import Channel
+from pathlib import Path
 
 import lab_control_functions.calibration_functions as calibrate
 from classes.config_readers import ConfigReader, DaqReader
@@ -52,7 +50,7 @@ if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
     # FREQ_V = [4.141,5.089,6.017,6.383]
     # AOM_FREQS = [90,95,100,102]
 
-    config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
+    config_reader = ConfigReader(str(Path.cwd() / "configs" / "rootConfig.ini"))
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_controller = DaqReader(daq_config_fname).load_daq_controller()
     daq_controller.continuousOutput = True
@@ -78,16 +76,10 @@ elif __name__ == "__main__" and CALIB_TYPE == "stirap_aom_response":
     AWG_CHAN = 1
     # AWG_CHAN_2_FREQS = [76, 78.5, 80]
 
-    awg_channels_dict = {
-        1: Channel.CHANNEL_1,
-        2: Channel.CHANNEL_2,
-        3: Channel.CHANNEL_3,
-        4: Channel.CHANNEL_4,
-    }
     calibrate.awg_driven_aom_response(
         AWG_CHAN_1_FREQS,
         "stirap_elysa",
-        awg_channels_dict[AWG_CHAN],
+        AWG_CHAN,
         n_steps=50,
         delay=0.3,
         save_folder="jan/awg_driven",

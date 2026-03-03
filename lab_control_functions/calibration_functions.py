@@ -121,7 +121,7 @@ def awg_driven_aom_response(
     Inputs:
         freqs (list) - frequencies at which the awg should drive the aom
         name (str) - name of the laser producing the beam
-        awg_channel (Channel) - awg channel that drives the aom
+        awg_channel (int) - awg channel that drives the aom
         n_steps (int) -
         repeats (int) - How many measurements to take and average over when reading a value from the power meter
                           (note 1 measurement is about 3ms).
