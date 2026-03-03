@@ -2000,7 +2000,7 @@ class PhotonProductionLiveUI(tk.Toplevel):
         self.photon_production_experiment = photon_production_experiment
         #         self.data_hander = Photon_production_live_analysis(t_stirap_length=photon_production_experiment.waveform_length*10**6)
         self.data_hander = PhotonProductionBufferedDataHandler(
-            t_stirap_length=0.5 * photon_production_experiment.waveform_length * 10**6
+            t_stirap_length=0.5 * photon_production_experiment.get_total_wfm_time() * 10**6
         )
 
         # Configure the push function in the experimental runner so we can get data on the fly.

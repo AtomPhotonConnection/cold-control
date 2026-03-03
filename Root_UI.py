@@ -74,12 +74,12 @@ class ColdControlUI(tk.Frame):
         self.experiment_config_fname = self.config_reader.get_experiment_config_fname()
         self.expt_config_reader = ExperimentConfigReader(self.experiment_config_fname)
         try:
-            sequence = self.expt_config_reader.get_sequence()
+            _sequence = self.expt_config_reader.get_sequence()
             self.sequence_fname = self.expt_config_reader.config["sequence_config"]
         except KeyError:
             # Fallback: old-style rootConfig with sequence_filename (emits DeprecationWarning)
             self.sequence_fname = self.config_reader.get_sequence_fname()
-            sequence = None  # Sequence_UI will load from fname  # noqa: F841
+            _sequence = None  # Sequence_UI will load from fname
 
         self.sequence_ui = DaqSequenceUI(
             self,

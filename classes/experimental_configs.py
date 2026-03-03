@@ -386,6 +386,15 @@ class AwgConfiguration:
         """Ensures the marker width in samples is valid (even and greater than zero)."""
         return marker_width_samps > 0 and marker_width_samps % 2 == 0
 
+    def get_total_time(self) -> float:
+        """Calculates the total time of all waveforms in the sequence on the longest channel."""
+        channel_times = np.zeros(len(self.waveform_output_channels))
+        for i, channel in enumerate(self.waveform_output_channels):
+            channel_waveforms = [self.waveforms[idx] for idx in self.waveform_sequence[channel]]
+            channel_time = sum(wf.get_t_length(self.sample_rate) for wf in channel_waveforms)
+            channel_times[i] = channel_time
+        return max(channel_times) if channel_times else 0.0
+
 
 class ScopeConfiguration:
     """

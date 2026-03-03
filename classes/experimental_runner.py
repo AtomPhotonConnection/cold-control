@@ -42,6 +42,7 @@ from classes.daq import DAQChannel, DAQController
 from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
+    AwgConfiguration,
     ExperimentSessionConfig,
     GenericConfiguration,
     MotFluoresceConfiguration,
@@ -619,12 +620,14 @@ class PhotonProductionExperiment(GenericExperiment):
         daq_controller: DAQController,
         sequence: DaqSequence,
         photon_production_configuration: PhotonProductionConfiguration,
+        development_mode: bool = False,
     ):
         super().__init__(daq_controller, sequence, photon_production_configuration)
         # the configuration object is a PhotonProductionConfiguration object and called self.config
         self.photon_production_cfg: PhotonProductionConfiguration = self.config
         self.tdc_config: TdcConfiguration = self.photon_production_cfg.tdc_configuration
-        self.awg_config = self.photon_production_cfg.awg_configuration
+        self.awg_config: AwgConfiguration = self.photon_production_cfg.awg_configuration
+        self.development_mode = development_mode
 
         self.iterations = self.photon_production_cfg.iterations
         self.mot_reload_time = self.photon_production_cfg.mot_reload  # in ms
@@ -662,6 +665,12 @@ class PhotonProductionExperiment(GenericExperiment):
             self.data_saver.data_queue = self.data_queue
 
     def run(self):
+        if self.development_mode:
+            print("This experiment is not currently set up to be run in development mode.")
+            raise NotImplementedError(
+                "This experiment is not currently set up to be run in development mode."
+            )
+        self.configure()
         self.tdc.enable_tdc_input(True)
         self.tdc.freeze_buffers(True)
         self.tdc.clear_buffer()
@@ -815,6 +824,15 @@ class PhotonProductionExperiment(GenericExperiment):
         """
         print(f"Setting reload_time to {reload_time}ms")
         self.mot_reload_time = reload_time
+
+    def get_total_wfm_time(self):
+        """
+        Calculates the total time of all the waveforms loaded onto the AWG in seconds.
+        """
+        if self.awg_config is None:
+            raise Exception("AWG configuration is not set. Cannot calculate total waveform time.")
+        else:
+            return self.awg_config.get_total_time()
 
 
 class MotFluoresceExperiment(GenericExperiment):
