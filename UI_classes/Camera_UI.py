@@ -327,7 +327,7 @@ class CameraConfigurationUI(tk.Toplevel):
 
                 def update_wids(property, entry_wid, slider_wid):
                     # What is this function doing? Value is assigned but not used
-                    value = property.value  # noqa: F841
+                    _value = property.value
 
                 # Update the state and values of the entry and slider widgets depending on if auto is enabled or disabled.
                 user_wid_state = tk.DISABLED if auto_enabled else tk.NORMAL

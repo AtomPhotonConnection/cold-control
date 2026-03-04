@@ -51,9 +51,10 @@ class RabiFreqVoltageConverter:
 
         # Interpolation: rabi -> voltage — must sort and deduplicate
         df_clean = pd.DataFrame({"rabi_v": self.y, "amp": self.x})
-        df_clean = df_clean.groupby(
-            "rabi_v", as_index=False
-        ).mean()  # remove duplicates by averaging
+        df_clean = cast(
+            pd.DataFrame,
+            df_clean.groupby("rabi_v", as_index=False).mean(),
+        )  # remove duplicates by averaging
         df_clean = df_clean.sort_values(by="rabi_v")  # ensure sorted for interp1d
 
         self.sorted_y = df_clean["rabi_v"].values

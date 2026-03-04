@@ -83,7 +83,7 @@ def measure_loop(
             data.append([v, p1, p2, ts])
 
     # create dataframe and save once
-    df = pd.DataFrame(data, columns=header)
+    df = pd.DataFrame(data, columns=pd.Index(header))
     df.to_csv(output_csv, index=False)
     print(f"Saved {len(df)} measurements to {output_csv}")
 
@@ -114,7 +114,7 @@ def measure_loop_test(
             data.append([v, p1, ts])
 
     # create dataframe and save once
-    df = pd.DataFrame(data, columns=header)
+    df = pd.DataFrame(data, columns=pd.Index(header))
     df.to_csv(output_csv, index=False)
     print(f"Saved {len(df)} measurements to {output_csv}")
 

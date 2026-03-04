@@ -14,7 +14,7 @@ csv_files = [f for f in all_files if f.suffix == ".csv"]
 dfs = [pd.read_csv(f) for f in csv_files]
 
 # Use pandas hashing for comparison
-hashes = [pd.util.hash_pandas_object(df, index=True).sum() for df in dfs]
+hashes = [pd.util.hash_pandas_object(df, index=True).sum() for df in dfs]  # type: ignore[attr-defined]
 
 # Count unique hashes
 unique_hashes = set(hashes)

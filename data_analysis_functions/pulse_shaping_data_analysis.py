@@ -1,7 +1,7 @@
 import re
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -103,7 +103,7 @@ class ExperimentalDataProcessor:
         if marker_time_range and self.channel_cols[self.marker_channel] in df.columns:
             marker_data = df[self.channel_cols[self.marker_channel]]
             # Find minimum of marker pulse (voltage drop)
-            marker_min_idx = int(marker_data.idxmin())
+            marker_min_idx = int(cast(int, marker_data.idxmin()))
             marker_min_time = df.iloc[marker_min_idx][self.time_col]
 
             if not (marker_time_range[0] <= marker_min_time <= marker_time_range[1]):
