@@ -8,9 +8,10 @@ Generated CSV format: time, Omega_P_norm, Omega_S_norm
 - Omega values are normalized so max(Omega_P) = max(Omega_S) = 1 for each file separately.
 """
 
+from __future__ import annotations
+
 import math
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -114,7 +115,7 @@ def export_to_csv(array, filepath, filename):
 
 
 def generate_rabi(
-    big_t, shape="standard", sample_rate=1000, output_dir=".", options: Optional[dict] = None
+    big_t, shape="standard", sample_rate=1000, output_dir=".", options: dict | None = None
 ):
 
     # time axis

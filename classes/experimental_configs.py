@@ -20,7 +20,7 @@ from copy import deepcopy
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 
@@ -313,11 +313,11 @@ class AwgConfiguration:
         sample_rate: float,
         burst_count: int,
         waveform_output_channels: tuple[int, ...],
-        marker_width_samps: Optional[int],
-        waveform_output_channel_lags: Optional[tuple[float, ...]] = None,
-        waveform_stitch_delays: Optional[tuple[tuple[Any, ...], ...]] = None,
-        interleave_waveforms: Optional[bool] = None,
-        marked_channels: Optional[tuple[int, ...]] = None,
+        marker_width_samps: int | None,
+        waveform_output_channel_lags: tuple[float, ...] | None = None,
+        waveform_stitch_delays: tuple[tuple[Any, ...], ...] | None = None,
+        interleave_waveforms: bool | None = None,
+        marked_channels: tuple[int, ...] | None = None,
     ):
 
         self._waveform_sequence = waveform_sequence

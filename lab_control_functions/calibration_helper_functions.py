@@ -4,8 +4,10 @@ Helper functions for the calibration functions.
 @author: Matt King
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Union, cast
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -77,7 +79,7 @@ def get_power_meter(debug_mode=False):
     rm = visa.ResourceManager()
     all_res = rm.list_resources()
     power_meter = None
-    inst: Optional[MessageBasedResource] = None
+    inst: MessageBasedResource | None = None
     # the VISA addresses of the 3 thorlabs powermeters we have are in the list below:
     pm_addresses = [
         "USB0::0x1313::0x8079::P1002563::0::INSTR",
@@ -141,9 +143,7 @@ def create_file_txt(fname, level_data, parsed_data, units):
     print("written: ", fname)
 
 
-def create_file(
-    fname: Union[str, Path], level_data, parsed_data, calib_units, level_units="Voltage (V)"
-):
+def create_file(fname: str | Path, level_data, parsed_data, calib_units, level_units="Voltage (V)"):
     """
     Saves data to a CSV file using pandas.
 
@@ -175,7 +175,7 @@ def create_file(
     print(f"created: {out_path}")
 
 
-def save_plot(fname: Union[str, Path], v_data, cal_data, units, title, level_units="Voltage (V)"):
+def save_plot(fname: str | Path, v_data, cal_data, units, title, level_units="Voltage (V)"):
     """
     Saves a plot of voltage against calibration data.
     """

@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import re
 import warnings
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -83,9 +85,9 @@ class ExperimentalDataProcessor:
     def validate_data(
         self,
         df: pd.DataFrame,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
     ) -> bool:
         """
         Validate that data meets experimental conditions.
@@ -134,10 +136,10 @@ class ExperimentalDataProcessor:
     def average_shot_data(
         self,
         shot_folder: str,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
-        output_path: Optional[Path] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
+        output_path: Path | None = None,
         validate_data: bool = True,
     ) -> pd.DataFrame:
         """
@@ -188,12 +190,12 @@ class ExperimentalDataProcessor:
         self,
         shot_folder: str,
         fluor_drop_voltage: float,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         time_before_drop: float = 1.1e-3,
         time_after_drop: float = 4e-3,
         num_points: int = 50000,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
     ) -> pd.DataFrame:
         """
         Average CSV files after aligning them based on fluorescence drop timing.
@@ -374,14 +376,14 @@ class ExperimentalDataProcessor:
     def process_all_experiments(
         self,
         root_folder: Path,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         background_time_range: tuple[float, float] = (0, 1),
         integration_time_range: tuple[float, float] = (2, 3),
         save_averaged_csvs: bool = True,
         use_alignment: bool = False,
-        alignment_params: Optional[dict] = None,
+        alignment_params: dict | None = None,
         _validate_data: bool = True,
     ) -> pd.DataFrame:
         """
@@ -488,12 +490,12 @@ class ExperimentalDataProcessor:
     def process_img_sweep_expts(
         self,
         root_folder: Path,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         save_averaged_csvs: bool = True,
         use_alignment: bool = True,
-        alignment_params: Optional[dict] = None,
+        alignment_params: dict | None = None,
     ) -> pd.DataFrame:
         """
         Process all experiments in the root folder.

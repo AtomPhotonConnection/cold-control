@@ -16,9 +16,10 @@ Usage::
     python optimise_iterative.py path/to/config.ini  # custom config
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -45,7 +46,7 @@ def run_iterative_optimisation(cfg: PulseShapeConfig) -> PulseShapeExperimentRes
     waveform = theoretical.copy()
     runner = PulseShapeExperimentRunner(cfg, waveform)
 
-    best_result: Optional[PulseShapeExperimentResult] = None
+    best_result: PulseShapeExperimentResult | None = None
     best_mse = float("inf")
 
     try:

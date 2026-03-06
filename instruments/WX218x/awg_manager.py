@@ -28,7 +28,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
-from typing import Optional, cast
+from typing import cast
 
 import numpy as np
 import pyvisa as visa
@@ -242,7 +242,7 @@ class AWGManager:
 
     def _write(self, cmd: str, retries: int = DEFAULT_WRITE_QUERY_RETRIES) -> None:
         """Send a SCPI command with retries."""
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(retries):
             try:
                 self.inst.write(cmd)
@@ -257,7 +257,7 @@ class AWGManager:
 
     def _query(self, cmd: str, retries: int = DEFAULT_WRITE_QUERY_RETRIES) -> str:
         """Send a SCPI query with retries and return the response string."""
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(retries):
             try:
                 resp = self.inst.query(cmd)
@@ -411,7 +411,7 @@ class AWGManager:
         return float(self._query(":FREQ:RAST?"))
 
     def set_sample_rate(
-        self, sample_rate: float, channels: Optional[tuple[int, ...]] = None
+        self, sample_rate: float, channels: tuple[int, ...] | None = None
     ) -> None:
         for ch in (1, 2, 3, 4):
             if channels is None or ch in channels:
@@ -419,7 +419,7 @@ class AWGManager:
                 self._write(f":FREQ:RAST {sample_rate}")
 
     # ----- output mode -------------------------------------------------------
-    def set_output_mode(self, mode: str, channels: Optional[tuple[int, ...]] = None) -> None:
+    def set_output_mode(self, mode: str, channels: tuple[int, ...] | None = None) -> None:
         """Typical modes include ``"FIX"`` (standard waveform), ``"USER"`` (arbitrary waveform from memory)"""
         for ch in (1, 2, 3, 4):
             if channels is None or ch in channels:
@@ -539,7 +539,7 @@ class AWGManager:
         self,
         waveform_data: np.ndarray,
         segment: int = 1,
-        channel: Optional[int] = None,
+        channel: int | None = None,
     ) -> bool:
         """
         Upload waveform data to the AWG.
@@ -704,7 +704,7 @@ class AWGManager:
             width,
         )
 
-    def disable_marker(self, marker: int = 1, channel: Optional[int] = None) -> None:
+    def disable_marker(self, marker: int = 1, channel: int | None = None) -> None:
         """Turn off a marker."""
         if channel is not None:
             self.select_channel(channel)

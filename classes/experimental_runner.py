@@ -15,6 +15,8 @@ from the GenericExperiment class.
 
 """
 
+from __future__ import annotations
+
 import _tkinter
 import collections.abc
 import copy
@@ -24,7 +26,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -868,7 +870,7 @@ class MotFluoresceExperiment(GenericExperiment):
         daq_controller: DAQController,
         sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
-        ic_imaging_control: Optional[ICImagingControl] = None,
+        ic_imaging_control: ICImagingControl | None = None,
         sweep=True,
         development_mode: bool = False,
     ):

@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -56,7 +57,7 @@ def plot_averaged_shot(shot_folder: str, suffix="_averaged.csv", save=True):
     plt.close()
 
 
-def plot_experiment_summary(summary_path: Path, save_path: Optional[Path] = None):
+def plot_experiment_summary(summary_path: Path, save_path: Path | None = None):
     """
     Plot integrated_value vs shot number for each parameter folder.
 

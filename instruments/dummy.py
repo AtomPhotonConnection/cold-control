@@ -12,7 +12,6 @@ Created Feb 2026 for cold-control development mode.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -377,7 +376,7 @@ class DummyAWGManager:
     # -- clock / sample rate --
 
     def set_sample_rate(
-        self, sample_rate: float, channels: Optional[tuple[int, ...]] = None
+        self, sample_rate: float, channels: tuple[int, ...] | None = None
     ) -> None:
         self._sample_rate = sample_rate
         self._log.info(
@@ -390,7 +389,7 @@ class DummyAWGManager:
     # -- output mode --
 
     def set_output_mode(
-        self, mode: str = "USER", channels: Optional[tuple[int, ...]] = None
+        self, mode: str = "USER", channels: tuple[int, ...] | None = None
     ) -> None:
         self._log.info("[DummyAWG] set_output_mode %s on channels %s", mode, channels or "all")
 
@@ -456,7 +455,7 @@ class DummyAWGManager:
         self,
         waveform_data: np.ndarray,
         segment: int = 1,
-        channel: Optional[int] = None,
+        channel: int | None = None,
     ) -> bool:
         self._log.info(
             "[DummyAWG] upload_waveform seg=%d ch=%s len=%d",
@@ -474,11 +473,11 @@ class DummyAWGManager:
         position: int = 0,
         width: int = 4,
         delay: float = 0.0,
-        channel: Optional[int] = None,
+        channel: int | None = None,
     ) -> None:
         self._log.info("[DummyAWG] configure_marker m=%d pos=%d w=%d", marker, position, width)
 
-    def disable_marker(self, marker: int = 1, channel: Optional[int] = None) -> None:
+    def disable_marker(self, marker: int = 1, channel: int | None = None) -> None:
         self._log.info("[DummyAWG] disable_marker %d", marker)
 
     # -- sequence --

@@ -5,9 +5,10 @@ Reads an AWG + photon-production config file, builds the necessary
 configuration objects, and uploads waveforms via AWGManager.
 """
 
+from __future__ import annotations
+
 import time
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -89,7 +90,7 @@ def get_waveform_calib_fnc(calib_fname: str, max_eff: float = 0.9):
 
 def run_awg(
     awg_config: AwgConfiguration,
-    photon_config: Optional[PhotonProductionConfiguration] = None,
+    photon_config: PhotonProductionConfiguration | None = None,
 ) -> tuple[AWGManager, float]:
     """Configure the AWG for an experiment using :class:`AWGManager`.
 

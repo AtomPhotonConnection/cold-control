@@ -4,12 +4,13 @@ Created on 25 Mar 2016
 @author: tombarrett
 """
 
+from __future__ import annotations
+
 import re
 import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import scrolledtext, ttk
-from typing import Optional
 
 from PIL import Image, ImageTk
 
@@ -74,7 +75,7 @@ class LabbookUI(tk.LabelFrame):
         self.textWid.pack(expand=1)
 
     def configure_for_current_date(self):
-        self.fname: Optional[Path] = None
+        self.fname: Path | None = None
         for fname in [time.strftime("%d-%m-%y") + self.fExt, time.strftime("%d-%m-%Y") + self.fExt]:
             if fname in self.dropdownOptions:
                 self.dropdownVar.set(fname)

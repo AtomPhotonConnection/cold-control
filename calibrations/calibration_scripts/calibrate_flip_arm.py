@@ -12,12 +12,13 @@ Two main functions:
 Minimal and editable — intended for occasional use.
 """
 
+from __future__ import annotations
+
 import contextlib
 import sys
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -123,7 +124,7 @@ def measure_loop_test(
 # Fit and interpolate
 # -------------------------
 def fit_and_interpolate(
-    calib_csv: str, out_png: Optional[str] = None
+    calib_csv: str, out_png: str | None = None
 ) -> tuple[Callable[[float], float], dict]:
     df: pd.DataFrame = pd.read_csv(calib_csv)
     if "power1" not in df.columns or "power2" not in df.columns:
@@ -190,8 +191,8 @@ if __name__ == "__main__":
     pm_address_target = "USB0::0x1313::0x8079::P1002347::0::INSTR"
     pm_address_flip = "USB0::0x1313::0x8079::P1002563::0::INSTR"
 
-    pm_target: Optional[ThorlabsPM100] = None
-    pm_flip: Optional[ThorlabsPM100] = None
+    pm_target: ThorlabsPM100 | None = None
+    pm_flip: ThorlabsPM100 | None = None
     pm_target_res = None
     pm_flip_res = None
 

@@ -15,11 +15,12 @@ Normalized fluorescence formula:
           F_low = fluorescence when MOT is off (after sequence)
 """
 
+from __future__ import annotations
+
 import pickle
 import re
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -126,10 +127,10 @@ class UnifiedFluorescenceProcessor:
     def align_and_average(
         self,
         dataframes: list[pd.DataFrame],
-        fluor_drop_voltage: Optional[float] = None,
-        time_before_drop: Optional[float] = None,
-        time_after_drop: Optional[float] = None,
-        num_points: Optional[int] = None,
+        fluor_drop_voltage: float | None = None,
+        time_before_drop: float | None = None,
+        time_after_drop: float | None = None,
+        num_points: int | None = None,
     ) -> tuple[pd.DataFrame, list[float]]:
         """
         Align multiple traces based on fluorescence drop timing and average them.
@@ -238,9 +239,9 @@ class UnifiedFluorescenceProcessor:
     def calculate_normalized_fluorescence(
         self,
         averaged_df: pd.DataFrame,
-        mot_on_window: Optional[tuple[float, float]] = None,
-        mot_off_window: Optional[tuple[float, float]] = None,
-        img_window: Optional[tuple[float, float]] = None,
+        mot_on_window: tuple[float, float] | None = None,
+        mot_off_window: tuple[float, float] | None = None,
+        img_window: tuple[float, float] | None = None,
     ) -> dict:
         """
         Calculate normalized fluorescence with scaling.
@@ -351,11 +352,11 @@ class UnifiedFluorescenceProcessor:
     def process_single_shot(
         self,
         shot_folder: Path,
-        fluor_drop_voltage: Optional[float] = None,
-        background_window: Optional[tuple[float, float]] = None,
-        final_window: Optional[tuple[float, float]] = None,
-        img_window: Optional[tuple[float, float]] = None,
-        _cache_key: Optional[str] = None,
+        fluor_drop_voltage: float | None = None,
+        background_window: tuple[float, float] | None = None,
+        final_window: tuple[float, float] | None = None,
+        img_window: tuple[float, float] | None = None,
+        _cache_key: str | None = None,
     ) -> dict:
         """
         Process a single shot folder.
@@ -422,10 +423,10 @@ class UnifiedFluorescenceProcessor:
 
     def process_all_experiments(
         self,
-        fluor_drop_voltage: Optional[float] = None,
-        background_window: Optional[tuple[float, float]] = None,
-        final_window: Optional[tuple[float, float]] = None,
-        img_window: Optional[tuple[float, float]] = None,
+        fluor_drop_voltage: float | None = None,
+        background_window: tuple[float, float] | None = None,
+        final_window: tuple[float, float] | None = None,
+        img_window: tuple[float, float] | None = None,
         save_summary: bool = True,
     ) -> pd.DataFrame:
         """
@@ -692,7 +693,7 @@ class UnifiedFluorescenceProcessor:
 
     def plot_averaged_traces(
         self,
-        shots: Optional[list[str]] = None,
+        shots: list[str] | None = None,
         figsize: tuple[int, int] = (14, 6),
         save: bool = True,
     ):

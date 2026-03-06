@@ -9,12 +9,14 @@ DLL-dependent code (DAQ2502, dll prototypes) has been moved to DAQ_dll.py.
 This module can be imported safely on machines without the D2K-Dask64 DLL.
 """
 
+from __future__ import annotations
+
 import functools
 import operator
 import re
 from ctypes import c_double, c_float, c_long, c_short, c_ubyte, c_ulong, c_ushort
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -978,7 +980,7 @@ class DAQController:
     this interface."""
 
     def __init__(
-        self, master: DAQCard, slaves: Optional[list[DAQCard]] = None, continuous_output=False
+        self, master: DAQCard, slaves: list[DAQCard] | None = None, continuous_output=False
     ):
         """Initialise the DAQ_controller with:
         master : a DAQ2502/DAQCard instance

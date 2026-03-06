@@ -4,6 +4,8 @@ Created on 22 Apr 2016
 @author: Tom Barrett, Jan Ole Ernst
 """
 
+from __future__ import annotations
+
 import ast
 import functools
 import operator
@@ -13,7 +15,7 @@ import time
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 from configobj import ConfigObj
@@ -56,7 +58,7 @@ def get_config_root() -> str:
     return os.environ.get("COLD_CONTROL_CONFIG_ROOT", str(Path.cwd()))
 
 
-def resolve_config_path(path: str, base: Optional[str] = None) -> str:
+def resolve_config_path(path: str, base: str | None = None) -> str:
     """Resolve a config path. If path is relative, join with base (default get_config_root())."""
     if path is None or path == "":
         return path
@@ -617,7 +619,7 @@ class AwgConfigReader:
             return tuple(map(float, cfg["waveform output channel lags"]))
 
     @staticmethod
-    def _extract_marker_width(cfg: MyConfig) -> Optional[int]:
+    def _extract_marker_width(cfg: MyConfig) -> int | None:
         if "marker width samples" in cfg:
             return int(cfg["marker width samples"])
         elif "marker width samps" in cfg:
@@ -824,7 +826,7 @@ class ExperimentConfigReader:
             use_camera = "camera_settings" in self.config
 
         # --- Scope ---
-        scope_config: Optional[ScopeConfiguration] = None
+        scope_config: ScopeConfiguration | None = None
         if has_new_scope:
             scope_path = resolve_config_path(self.config["scope_config"], get_config_root())
             scope_config = ScopeConfigReader(scope_path).load_scope_configuration()
@@ -839,8 +841,8 @@ class ExperimentConfigReader:
             scope_config = ScopeConfigReader._parse_scope_config(scope_section)
 
         # --- AWG ---
-        awg_config: Optional[AwgConfiguration] = None
-        awg_config_path: Optional[str] = None
+        awg_config: AwgConfiguration | None = None
+        awg_config_path: str | None = None
         if has_new_awg:
             awg_config_path = resolve_config_path(self.config["awg_config"], get_config_root())
             awg_reader = AwgConfigReader(awg_config_path)
@@ -858,7 +860,7 @@ class ExperimentConfigReader:
             awg_config = awg_reader.load_awg_configuration()
 
         # --- Camera (unchanged — kept as dict for now) ---
-        camera_settings_dict: Optional[dict] = None
+        camera_settings_dict: dict | None = None
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
@@ -871,7 +873,7 @@ class ExperimentConfigReader:
             }
 
         # --- Sequence (new format only) ---
-        sequence_config_path: Optional[str] = None
+        sequence_config_path: str | None = None
         if "sequence_config" in self.config:
             sequence_config_path = resolve_config_path(
                 self.config["sequence_config"], get_config_root()

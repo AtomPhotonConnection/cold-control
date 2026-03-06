@@ -1,13 +1,13 @@
 [project]
 name = "cold-control"
 version = "0.1.0"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py312"
 line-length = 100
 fix = true
 
@@ -27,8 +27,6 @@ select = [
 
 ignore = [
     "E501",  # Line too long (handled by formatter)
-    "UP007", # Allow Union for 3.9 compatibility
-    "UP045", # Allow Optional for 3.9 compatibility
 ]
 
 fixable = ["ALL"]
@@ -57,7 +55,7 @@ exclude = ["**/node_modules",
 venvPath = "C:\\Users\\kingm\\.conda\\envs"
 venv = "cold-control"
 
-pythonVersion = "3.9"
+pythonVersion = "3.12"
 typeCheckingMode = "standard" # Options: "off", "basic", "standard", "strict"
 
 # Specific Rule Overrides

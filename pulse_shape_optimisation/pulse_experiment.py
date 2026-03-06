@@ -28,13 +28,15 @@ Usage example::
     runner.close()
 """
 
+from __future__ import annotations
+
 import contextlib
 import csv
 import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -77,7 +79,7 @@ def load_signal_from_path(csv_path: str, amplitude: float) -> np.ndarray:
 def compute_error_metrics(
     measured: np.ndarray,
     theoretical: np.ndarray,
-    time_array: Optional[np.ndarray] = None,
+    time_array: np.ndarray | None = None,
 ) -> dict[str, float]:
     """
     Compute error metrics between *measured* and *theoretical* signals.
@@ -232,7 +234,7 @@ class PulseShapeConfig:
         )
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.awg_config_path: str = paths["config_awg_path"]
-        self.save_optimized_to: Optional[str] = paths.get("save_optimized_to")
+        self.save_optimized_to: str | None = paths.get("save_optimized_to")
 
     # ----- convenience -------------------------------------------------------
 
@@ -272,7 +274,7 @@ class PulseShapeExperimentResult:
         measured_signal: np.ndarray,
         theoretical_signal: np.ndarray,
         time_array: np.ndarray,
-        measured_std: Optional[np.ndarray],
+        measured_std: np.ndarray | None,
         metrics: dict[str, float],
     ) -> None:
         # Keep raw copies for optimisation maths
@@ -307,9 +309,9 @@ class PulseShapeExperimentResult:
 
     def plot(
         self,
-        output_dir: Optional[Path] = None,
-        filename: Optional[str] = None,
-        title: Optional[str] = None,
+        output_dir: Path | None = None,
+        filename: str | None = None,
+        title: str | None = None,
     ) -> None:
         """
         Plot the AWG-sent signal, scope-measured signal, and theoretical
@@ -418,10 +420,10 @@ class PulseShapeExperimentRunner:
         self.config = config
         self.waveform = waveform
 
-        self.scope: Optional[OscilloscopeManager] = None
+        self.scope: OscilloscopeManager | None = None
         self._owns_scope: bool = False
-        self.awg: Optional[AWGManager] = None
-        self.awg_config_obj: Optional[AwgConfiguration] = None
+        self.awg: AWGManager | None = None
+        self.awg_config_obj: AwgConfiguration | None = None
         self.waveform_duration_s: float = 0.0
 
     # ----- hardware helpers --------------------------------------------------
@@ -523,9 +525,9 @@ class PulseShapeExperimentRunner:
     def _timebase_align(
         self,
         measured_voltage: np.ndarray,
-        measured_std: Optional[np.ndarray],
+        measured_std: np.ndarray | None,
         theoretical_signal: np.ndarray,
-    ) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray, np.ndarray | None]:
 
         start_time = time.time()
         # begin by interpolating so scope and AWG have the same sample rate
@@ -610,7 +612,7 @@ class PulseShapeExperimentRunner:
 
     # ----- public API --------------------------------------------------------
 
-    def run(self, scope: Optional[OscilloscopeManager] = None) -> PulseShapeExperimentResult:
+    def run(self, scope: OscilloscopeManager | None = None) -> PulseShapeExperimentResult:
         """
         Execute the physical experiment.
 
