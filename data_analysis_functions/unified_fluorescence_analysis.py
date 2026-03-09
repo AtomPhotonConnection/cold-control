@@ -685,7 +685,7 @@ class UnifiedFluorescenceProcessor:
 
     def plot_averaged_traces(
         self,
-        shots: Optional[List[str]] = None,
+        # shots: Optional[List[str]] = None,
         figsize: tuple[int, int] = (14, 6),
         save: bool = True,
     ):

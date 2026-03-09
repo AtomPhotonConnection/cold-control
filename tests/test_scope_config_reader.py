@@ -15,7 +15,9 @@ os.environ["COLD_CONTROL_CONFIG_ROOT"] = str(PROJECT_ROOT)
 from classes.config_readers import ScopeConfigReader  # noqa: E402
 from classes.experimental_configs import ScopeConfiguration  # noqa: E402
 
-SCOPE_CONFIG_PATH = str(PROJECT_ROOT / "configs" / "scope" / "keysight_feb26.ini")
+SCOPE_CONFIG_PATH = str(
+    PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "scope" / "keysight_feb26.ini"
+)
 
 
 def test_load_scope_configuration():
@@ -30,18 +32,10 @@ def test_load_scope_configuration():
     )
 
     # Check scalar fields
-    assert scope_config.trigger_channel == 1, (
-        f"trigger_channel: {scope_config.trigger_channel}"
-    )
-    assert scope_config.trigger_level == 1.0, (
-        f"trigger_level: {scope_config.trigger_level}"
-    )
-    assert scope_config.sample_rate == 50e6, (
-        f"sample_rate: {scope_config.sample_rate}"
-    )
-    assert scope_config.time_range == (-100e-6, 4.1e-3), (
-        f"time_range: {scope_config.time_range}"
-    )
+    assert scope_config.trigger_channel == 1, f"trigger_channel: {scope_config.trigger_channel}"
+    assert scope_config.trigger_level == 1.0, f"trigger_level: {scope_config.trigger_level}"
+    assert scope_config.sample_rate == 50e6, f"sample_rate: {scope_config.sample_rate}"
+    assert scope_config.time_range == (-100e-6, 4.1e-3), f"time_range: {scope_config.time_range}"
 
 
 def test_scope_data_channels():

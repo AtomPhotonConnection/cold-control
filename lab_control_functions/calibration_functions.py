@@ -563,7 +563,7 @@ def finding_amplitude_from_power(
     for i in [1, 2, 3, 4]:
         awg.disable_channel(i)
 
-    awg.configure_sample_rate(sample_rate)
+    # awg.configure_sample_rate(sample_rate)
 
     inst, power_meter = get_power_meter()
     power_meter: ThorlabsPM100 = power_meter  # declare the type for easier editing

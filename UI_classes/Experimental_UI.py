@@ -622,22 +622,17 @@ class ExperimentalUI(tk.LabelFrame):
         #     config_reader = None
         #     expt_config = config_UI.photon_production_config
 
-        if isinstance(self.loaded_experiment_config, GenericConfiguration):
-            config_UI = GenericExperimentConfigUi(
-                self,
-                expt_config=self.loaded_experiment_config,
-                expt_config_reader=self.expt_config_reader,
-            )
-            self.winfo_toplevel().wait_window(config_UI.top)
-            config_reader = config_UI.conf_reader
-            expt_config = config_UI.experiment_config
-
-        else:
-            tk_message_box.showwarning("Error", "Invalid photon production configuration type.")
-            return
+        config_ui = GenericExperimentConfigUi(
+            self,
+            expt_config=self.loaded_experiment_config,
+            expt_config_reader=self.expt_config_reader,
+        )
+        self.winfo_toplevel().wait_window(config_ui.top)
+        config_reader = config_ui.conf_reader
+        expt_config = config_ui.experiment_config
 
         # If the user asked for their changes to be applied, set the config accordingly.
-        if config_UI.apply_changes:
+        if config_ui.apply_changes:
             self.loaded_experiment_config = expt_config
             if config_reader is not None:
                 self.expt_config_reader = config_reader
@@ -1869,9 +1864,7 @@ class Absorbtion_imaging_configuration_UI:
 
 
 class GenericExperimentConfigUi:
-    def __init__(
-        self, parent, expt_config: GenericConfiguration, expt_config_reader: ExperimentConfigReader
-    ):
+    def __init__(self, parent, expt_config, expt_config_reader: ExperimentConfigReader):
         """
         This class provides a UI for allowing a generic experiment configuration to be
         changed by loading a different config file. There are no options to modify the
