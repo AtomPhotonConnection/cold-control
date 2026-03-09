@@ -15,23 +15,14 @@ from UI_classes.Labbook_UI import LabbookUI
 from UI_classes.Sequence_UI import DaqSequenceUI
 
 # For logging on ALWE61 lab PC
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     filename=r"C:\pulse_shaping_data\logging\cold_control.log",
-#     filemode="a",
-#     format="%(asctime)s - %(levelname)s - %(message)s",
-# )
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename=r"C:\pulse_shaping_data\logging\cold_control.log",
+    filemode="a",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
-# For logging on development machines
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# For logging on numbercruncher
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     filename=r"C:\Users\kingm\Documents\Python Scripts\logging\cold_control.log",
-#     filemode="a",
-#     format="%(asctime)s - %(levelname)s - %(message)s",
-# )
 # Suppress noisy third-party debug output
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
