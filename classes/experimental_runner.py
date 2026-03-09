@@ -882,11 +882,27 @@ class MotFluoresceExperiment(GenericExperiment):
         assert isinstance(self.config, MotFluoresceConfiguration), (
             "mot_fluoresce_configuration must be a MotFluoresceConfiguration object."
         )
+        self.config: MotFluoresceConfiguration = self.config
         self.mot_fluoresce_config: MotFluoresceConfiguration = self.config
+        self.background_mode = self.mot_fluoresce_config.background_mode
         self.save_location = Path(self.mot_fluoresce_config.save_location)
         self.iterations = self.mot_fluoresce_config.iterations
         self.mot_reload = self.mot_fluoresce_config.mot_reload  # in ms
         print("MOT reload time (ms)", self.mot_reload)
+
+        # Background mode: override iterations and modify save path
+        if self.background_mode:
+            if self.mot_fluoresce_config.background_iterations is not None:
+                self.iterations = self.mot_fluoresce_config.background_iterations
+            else:
+                print(
+                    "WARNING: background_iterations is not set in the configuration."
+                    + "Defaulting to using the same number of iterations as in normal mode."
+                )
+            print(
+                f"BACKGROUND MODE: repump channel will be zeroed. "
+                f"Running {self.iterations} background iterations."
+            )
 
         self.with_cam = self.mot_fluoresce_config.use_cam
         self.with_scope = self.mot_fluoresce_config.use_scope
@@ -971,7 +987,22 @@ class MotFluoresceExperiment(GenericExperiment):
     def configure(self):
         """
         Configures the experiment.
+
+        If background_mode is enabled, the MOT repumping channel is zeroed out
+        for the entire sequence so that no MOT forms and only scattered light
+        from the MOT beams is detected. This provides a background measurement.
         """
+        # In background mode, zero out the repump channel so no MOT loads
+        if self.background_mode:
+            # Channel number for the MOT repumping
+            repump_channel = self.config.repump_channel
+            print(
+                f"Background mode: zeroing channel {repump_channel} "
+                f"(MOT Repumping) for background measurement."
+            )
+            self.sequence = copy.deepcopy(self.sequence)
+            self.sequence.update_channel(repump_channel, [(0, 0)], [IntervalStyle.FLAT])
+
         super().daq_cards_on()
         self.daq_controller.load(self.sequence.get_array())
 

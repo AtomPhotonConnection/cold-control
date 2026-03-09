@@ -533,6 +533,9 @@ class MotFluoresceConfiguration(GenericConfiguration):
         awg_config_path: str | None = None,
         cam_dict: dict | None = None,
         sequence_config_path: str | None = None,
+        background_mode: bool = False,
+        background_iterations: int | None = None,
+        repump_channel: int | None = None,
     ):
         super().__init__(save_location, mot_reload, iterations)
 
@@ -540,6 +543,13 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.awg_config = awg_config
         self.awg_config_path = awg_config_path
         self.sequence_config_path = sequence_config_path
+        self.background_mode = background_mode
+        self.background_iterations = background_iterations
+
+        if self.repump_channel is not None:
+            self.repump_channel = repump_channel
+        else:
+            self.repump_channel = 20  # default channel for MOT repumping
 
         self.use_scope = scope_config is not None
         self.use_awg = awg_config is not None
