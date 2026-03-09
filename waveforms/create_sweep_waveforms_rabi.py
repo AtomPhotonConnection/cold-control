@@ -1,7 +1,8 @@
-import os
+from pathlib import Path
 
 import numpy as np
-from calibrate_power import RabiFreqVoltageConverter
+
+from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 rabi_start = 55 * 2 * np.pi
 rabi_finish = 55 * 2 * np.pi
@@ -31,10 +32,10 @@ print(f"The range of Rabi frequencies for the pump beam: {pump_lims}")
 for rabi_freq in rabi_sweep:
     rounded_rabi = np.round((rabi_freq) / (2 * np.pi), 1)
     # full_save_dir = os.path.join(save_dir, f"{rounded_rabi}")
-    full_save_dir = save_dir
-    os.makedirs(full_save_dir, exist_ok=True)
-    stokes_save_path = os.path.join(full_save_dir, "2_stokes.csv")
-    pump_save_path = os.path.join(full_save_dir, "1_pump.csv")
+    full_save_dir = Path(save_dir)
+    full_save_dir.mkdir(parents=True, exist_ok=True)
+    stokes_save_path = full_save_dir / "2_stokes.csv"
+    pump_save_path = full_save_dir / "1_pump.csv"
 
     RabiClassStokes.rescale_csv(rabi_freq, stokes_pulse_loc, stokes_save_path)
     RabiClassPump.rescale_csv(rabi_freq, pump_pulse_loc, pump_save_path)

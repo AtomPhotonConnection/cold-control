@@ -12,23 +12,26 @@ Two main functions:
 Minimal and editable — intended for occasional use.
 """
 
-import os
+from __future__ import annotations
+
+import contextlib
 import sys
 import time
-from collections.abc import Iterable
-from typing import Callable, Optional
+from collections.abc import Callable, Iterable
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyvisa as visa
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 
 from classes.config_readers import ConfigReader, DaqReader
-from classes.DAQ import DAQController
+from classes.daq import DAQController
 from instruments.ThorlabsPM100 import ThorlabsPM100
-from lab_control_functions.calibration_helper_functions import *
+from lab_control_functions.calibration_helper_functions import configure_power_meter
 
 
 # -------------------------
@@ -81,7 +84,7 @@ def measure_loop(
             data.append([v, p1, p2, ts])
 
     # create dataframe and save once
-    df = pd.DataFrame(data, columns=header)
+    df = pd.DataFrame(data, columns=pd.Index(header))
     df.to_csv(output_csv, index=False)
     print(f"Saved {len(df)} measurements to {output_csv}")
 
@@ -112,7 +115,7 @@ def measure_loop_test(
             data.append([v, p1, ts])
 
     # create dataframe and save once
-    df = pd.DataFrame(data, columns=header)
+    df = pd.DataFrame(data, columns=pd.Index(header))
     df.to_csv(output_csv, index=False)
     print(f"Saved {len(df)} measurements to {output_csv}")
 
@@ -121,12 +124,12 @@ def measure_loop_test(
 # Fit and interpolate
 # -------------------------
 def fit_and_interpolate(
-    calib_csv: str, out_png: Optional[str] = None
+    calib_csv: str, out_png: str | None = None
 ) -> tuple[Callable[[float], float], dict]:
     df: pd.DataFrame = pd.read_csv(calib_csv)
     if "power1" not in df.columns or "power2" not in df.columns:
-        df = df.iloc[:, :3]
-        df.columns = ["voltage", "power1", "power2"]
+        df = pd.DataFrame(df.iloc[:, :3])
+        df.columns = pd.Index(["voltage", "power1", "power2"])
 
     x = df["power1"].values.astype(float)
     y = df["power2"].values.astype(float)
@@ -170,7 +173,7 @@ def fit_and_interpolate(
 
 
 if __name__ == "__main__":
-    config_reader = ConfigReader(os.getcwd() + "/configs/rootConfig.ini")
+    config_reader = ConfigReader(str(Path.cwd() / "configs" / "rootConfig.ini"))
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_reader = DaqReader(daq_config_fname)
     daq: DAQController = daq_reader.load_daq_controller()
@@ -187,6 +190,11 @@ if __name__ == "__main__":
 
     pm_address_target = "USB0::0x1313::0x8079::P1002347::0::INSTR"
     pm_address_flip = "USB0::0x1313::0x8079::P1002563::0::INSTR"
+
+    pm_target: ThorlabsPM100 | None = None
+    pm_flip: ThorlabsPM100 | None = None
+    pm_target_res = None
+    pm_flip_res = None
 
     try:
         pm_target_res = rm.open_resource(pm_address_target)
@@ -211,13 +219,14 @@ if __name__ == "__main__":
     if pm_target is None or pm_flip is None:
         raise Exception("One of the power meters was not found, cannot continue.")
 
-    configure_power_meter(pm_flip, nMeasurmentCounts=3)
-    configure_power_meter(pm_target, nMeasurmentCounts=3)
+    configure_power_meter(pm_flip, n_measurement_counts=3)
+    configure_power_meter(pm_target, n_measurement_counts=3)
 
     # Create hardware callables (replace daq, amp_channel, flip_channel with your objects/IDs)
-    set_v = lambda v: daq.update_channel_value(int(amp_channel), float(v))
+    def set_v(v: float) -> None:
+        daq.update_channel_value(int(amp_channel), float(v))
 
-    def flip_fn(pos: str):
+    def flip_fn(pos: str) -> None:
         if pos == "up":
             daq.update_dio(flip_channel, True)
         elif pos == "down":
@@ -225,8 +234,11 @@ if __name__ == "__main__":
         else:
             raise ValueError("flip position must be 'up' or 'down'")
 
-    read_fn_target = lambda: float(pm_target.read)  # type: ignore
-    read_fn_flip = lambda: float(pm_flip.read)  # type: ignore
+    def read_fn_target() -> float:
+        return float(pm_target.read)  # type: ignore[union-attr]
+
+    def read_fn_flip() -> float:
+        return float(pm_flip.read)  # type: ignore[union-attr]
 
     # Now call measure_loop with your real functions:
     measure_loop(
@@ -247,15 +259,11 @@ if __name__ == "__main__":
     print(info)
 
     if pm_target_res is not None:
-        try:
+        with contextlib.suppress(Exception):
             pm_target_res.close()
-        except Exception:
-            pass
 
     if pm_flip_res is not None:
-        try:
+        with contextlib.suppress(Exception):
             pm_flip_res.close()
-        except Exception:
-            pass
 
     daq.release_all()

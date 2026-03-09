@@ -11,6 +11,7 @@
         }
     },
     "ruff.lint.enable": true,
-    "python.analysis.typeCheckingMode": "standard",
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": true,
+    "python.defaultInterpreterPath": "C:\\Users\\kingm\\.conda\\envs\\cold-control\\python.exe",
+    "python.terminal.activateEnvironment": true,
 }

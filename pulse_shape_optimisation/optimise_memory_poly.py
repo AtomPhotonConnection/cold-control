@@ -18,21 +18,21 @@ Usage::
     python optimise_memory_poly.py path/to/config.ini  # custom config
 """
 
-import os
 import sys
+from pathlib import Path
 
 import numpy as np
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from marina.pulse_experiment import (
+from pulse_shape_optimisation.pulse_experiment import (
     PulseShapeConfig,
     PulseShapeExperimentResult,
     PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ def build_memory_poly_matrix(
     Returns:
         Φ matrix of shape (N, num_coefficients).
     """
-    N = len(signal)
+    big_n = len(signal)
     columns = []
 
     for q in range(mem_depth + 1):
@@ -67,7 +67,7 @@ def build_memory_poly_matrix(
         if q == 0:
             x_delayed = signal.copy()
         else:
-            x_delayed = np.zeros(N)
+            x_delayed = np.zeros(big_n)
             x_delayed[q:] = signal[:-q]
 
         for k in range(poly_degree + 1):
@@ -96,9 +96,9 @@ def fit_memory_poly(
     Returns:
         Coefficient vector a of shape ((K+1)*(Q+1),).
     """
-    Phi = build_memory_poly_matrix(input_signal, poly_degree, mem_depth)
+    phi = build_memory_poly_matrix(input_signal, poly_degree, mem_depth)
     # Least-squares solve: Phi @ a ≈ output_signal
-    coeffs, _, _, _ = np.linalg.lstsq(Phi, output_signal, rcond=None)
+    coeffs, _, _, _ = np.linalg.lstsq(phi, output_signal, rcond=None)
     return coeffs
 
 
@@ -109,8 +109,8 @@ def apply_memory_poly(
     mem_depth: int,
 ) -> np.ndarray:
     """Apply the memory polynomial model with the given coefficients."""
-    Phi = build_memory_poly_matrix(signal, poly_degree, mem_depth)
-    return Phi @ coeffs
+    phi = build_memory_poly_matrix(signal, poly_degree, mem_depth)
+    return phi @ coeffs
 
 
 def invert_memory_poly(
@@ -195,7 +195,7 @@ def run_memory_poly_optimisation(
         print(f"  Baseline MSE: {baseline.mse:.6e}")
 
         baseline.plot(
-            output_dir=str(cfg.output_dir),
+            output_dir=cfg.output_dir,
             filename="mempoly_01_baseline.png",
             title=f"Baseline — MSE = {baseline.mse:.4e}",
         )
@@ -262,7 +262,7 @@ def run_memory_poly_optimisation(
         )
 
         validation.plot(
-            output_dir=str(cfg.output_dir),
+            output_dir=cfg.output_dir,
             filename="mempoly_02_validation.png",
             title=(f"Memory Polynomial — MSE = {validation.mse:.4e} (was {baseline.mse:.4e})"),
         )
@@ -283,10 +283,9 @@ def run_memory_poly_optimisation(
 
 def main():
     config_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.path.join(SCRIPT_DIR, "config_pulse_experiment.ini")
+        Path(sys.argv[1]) if len(sys.argv) > 1 else SCRIPT_DIR / "config_pulse_experiment.ini"
     )
+
     print(f"Loading config: {config_path}")
     cfg = PulseShapeConfig(config_path)
     print(f"Output directory: {cfg.output_dir}")

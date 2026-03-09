@@ -4,19 +4,20 @@ Created on 10 Apr 2016
 @author: Tom Barrett
 """
 
+import contextlib
 import tkinter as tk
 
 
 class ToolTip:
-    def __init__(self, widget, text, openDelay=2000):
+    def __init__(self, widget, text, open_delay=2000):
         self.widget = widget
         self.tipwindow = None
         self.id = None
         self.text = text
-        self.openDelay = openDelay
+        self.openDelay = open_delay
         self.x = self.y = 0
 
-    def updateText(self, text):
+    def update_text(self, text):
         self.text = text
 
     def spawntip(self):
@@ -26,14 +27,14 @@ class ToolTip:
         """Display text in tooltip window"""
         if self.tipwindow or not self.text:
             return
-        x, y, cx, cy = self.widget.bbox("insert")
+        x, y, _cx, cy = self.widget.bbox("insert")
         x = x + self.widget.winfo_rootx() + 27
         y = y + cy + self.widget.winfo_rooty() + 27
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
-        tw.wm_geometry("+%d+%d" % (x, y))
-        try:
-            # For Mac OS
+        tw.wm_geometry(f"+{x}+{y}")
+        # For Mac OS
+        with contextlib.suppress(tk.TclError):
             tw.tk.call(
                 "::tk::unsupported::MacWindowStyle",
                 "style",
@@ -41,8 +42,6 @@ class ToolTip:
                 "help",
                 "noActivates",
             )
-        except tk.TclError:
-            pass
         label = tk.Label(
             tw,
             text=self.text,
@@ -57,7 +56,7 @@ class ToolTip:
     def hidetip(self):
         try:
             self.widget.after_cancel(self.id)
-        except:
+        except Exception:
             pass
         finally:
             tw = self.tipwindow
@@ -66,15 +65,15 @@ class ToolTip:
                 tw.destroy()
 
 
-def createToolTip(widget, text, openDelay=1000):
-    toolTip = ToolTip(widget, text, openDelay)
+def create_tool_tip(widget, text, open_delay=1000):
+    tool_tip = ToolTip(widget, text, open_delay)
 
     def enter(event):
-        toolTip.spawntip()
+        tool_tip.spawntip()
 
     def leave(event):
-        toolTip.hidetip()
+        tool_tip.hidetip()
 
     widget.bind("<Enter>", enter)
     widget.bind("<Leave>", leave)
-    return toolTip
+    return tool_tip

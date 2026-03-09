@@ -8,7 +8,10 @@ Generated CSV format: time, Omega_P_norm, Omega_S_norm
 - Omega values are normalized so max(Omega_P) = max(Omega_S) = 1 for each file separately.
 """
 
+from __future__ import annotations
+
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -46,21 +49,21 @@ OPTIONS = {"tau": 1e-7}
 #     return np.exp(-x)
 
 
-def stokes2(t, T):
+def stokes2(t, big_t):
     a = 10
     n = 4
-    c = T / 3
-    return np.exp(-(((t - (T / 2)) / c) ** (2 * n))) * np.cos(
-        np.pi / 2 * (1 / (1 + np.exp((-a * (t - T / 2)) / T)))
+    c = big_t / 3
+    return np.exp(-(((t - (big_t / 2)) / c) ** (2 * n))) * np.cos(
+        np.pi / 2 * (1 / (1 + np.exp((-a * (t - big_t / 2)) / big_t)))
     )
 
 
-def pump2(t, T):
+def pump2(t, big_t):
     a = 10
     n = 4
-    c = T / 3
-    return np.exp(-(((t - (T / 2)) / c) ** (2 * n))) * np.sin(
-        np.pi / 2 * (1 / (1 + np.exp((-a * (t - T / 2)) / T)))
+    c = big_t / 3
+    return np.exp(-(((t - (big_t / 2)) / c) ** (2 * n))) * np.sin(
+        np.pi / 2 * (1 / (1 + np.exp((-a * (t - big_t / 2)) / big_t)))
     )
 
 
@@ -83,6 +86,7 @@ def pump2(t, T):
 
 
 def export_to_csv(array, filepath, filename):
+    full_path = None
     try:
         full_path = f"{filepath}/{filename}"
 
@@ -95,14 +99,14 @@ def export_to_csv(array, filepath, filename):
 
         np.savetxt(full_path, rescaled_arr, delimiter=",", newline=",", fmt="%.10f")
         # Remove trailing comma from the file
-        with open(full_path, "r+") as f:
+        with Path(full_path).open("r+") as f:
             f.seek(0, 2)  # Move the cursor to the end of the file
             f.seek(f.tell() - 1, 0)  # Move one character back from the end
             if f.read(1) == ",":  # Check if the last character is a comma
                 f.seek(f.tell() - 1, 0)  # Move one character back from the end again
                 f.truncate()  # Remove the trailing comma
         # Append a newline at the end of the file
-        with open(full_path, "a") as f:
+        with Path(full_path).open("a") as f:
             f.write("\n")
 
         print(f"Data successfully exported to {full_path}")
@@ -110,23 +114,27 @@ def export_to_csv(array, filepath, filename):
         print(f"Error exporting data to {full_path}: {e}")
 
 
-def generate_rabi(T, shape="standard", sample_rate=1000, output_dir=".", options: dict = {}):
+def generate_rabi(
+    big_t, shape="standard", sample_rate=1000, output_dir=".", options: dict | None = None
+):
 
     # time axis
-    N = int(T * sample_rate)
-    t = np.linspace(0, T, N)
+    if options is None:
+        options = {}
+    big_n = int(big_t * sample_rate)
+    t = np.linspace(0, big_t, big_n)
 
     if shape == "standard":
-        Omega_S = stokes2(t, T)
-        Omega_P = pump2(t, T)
+        omega_s = stokes2(t, big_t)
+        omega_p = pump2(t, big_t)
 
     elif shape == "sin":
-        Omega_P = np.zeros_like(t)
-        Omega_S = np.zeros_like(t)
+        omega_p = np.zeros_like(t)
+        omega_s = np.zeros_like(t)
         for i, ti in enumerate(t):
-            s = math.sin(math.pi * ti / T)
-            Omega_P[i] = s
-            Omega_S[i] = s
+            s = math.sin(math.pi * ti / big_t)
+            omega_p[i] = s
+            omega_s[i] = s
     # elif shape == 'gaussian':
     #     Omega_S = gaussian(t, options["t_s"], T, options["sigma_factor"])
     #     Omega_P = gaussian(t, options["t_p"], T, options["sigma_factor"])
@@ -144,24 +152,28 @@ def generate_rabi(T, shape="standard", sample_rate=1000, output_dir=".", options
         raise ValueError("Unsupported shape for STIRAP pulses: " + str(shape))
 
     # Normalize separately so each has max = 1
-    maxP = np.max(np.abs(Omega_P)) if np.max(np.abs(Omega_P)) != 0 else 1.0
-    maxS = np.max(np.abs(Omega_S)) if np.max(np.abs(Omega_S)) != 0 else 1.0
-    Omega_P_norm = Omega_P / maxP
-    Omega_S_norm = Omega_S / maxS
+    max_p = np.max(np.abs(omega_p)) if np.max(np.abs(omega_p)) != 0 else 1.0
+    max_s = np.max(np.abs(omega_s)) if np.max(np.abs(omega_s)) != 0 else 1.0
+    omega_p_norm = omega_p / max_p
+    omega_s_norm = omega_s / max_s
 
-    filename_prefix = f"{shape}_{T * 1000:.0f}ns"
+    filename_prefix = f"{shape}_{big_t * 1000:.0f}ns"
 
-    export_to_csv(Omega_P_norm, output_dir, filename_prefix + "_pump.csv")
-    export_to_csv(Omega_S_norm, output_dir, filename_prefix + "_stokes.csv")
+    export_to_csv(omega_p_norm, output_dir, filename_prefix + "_pump.csv")
+    export_to_csv(omega_s_norm, output_dir, filename_prefix + "_stokes.csv")
 
     return str(filename_prefix)
 
 
 def main():
     files = []
-    for T in PULSE_LENGTHS:
+    for big_t in PULSE_LENGTHS:
         fname = generate_rabi(
-            T, shape=PULSE_SHAPE, sample_rate=SAMPLE_RATE, output_dir=OUTPUT_DIR, options=OPTIONS
+            big_t,
+            shape=PULSE_SHAPE,
+            sample_rate=SAMPLE_RATE,
+            output_dir=OUTPUT_DIR,
+            options=OPTIONS,
         )
         files.append(fname)
     print("Done. Generated files:\n" + "\n".join(files))

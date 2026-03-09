@@ -7,8 +7,8 @@ Created on 25 Mar 2016
 import copy
 import math
 import tkinter as tk
-from tkinter import filedialog as tkFileDialog
-from tkinter import messagebox as tkMessageBox
+from tkinter import filedialog as tk_file_dialog
+from tkinter import messagebox as tk_message_box
 from typing import Any
 
 import numpy as np
@@ -16,11 +16,11 @@ from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
 from classes.config_readers import DaqReader
-from classes.DAQ import DAQChannel, DAQController
+from classes.daq import DAQChannel, DAQController
 from UI_classes.UI_helpers import ImageButton
 
 
-class DAQ_UI(tk.Frame):
+class DaqUI(tk.Frame):
     def __init__(
         self, parent, config_fname, font=("Helvetica", 16), development_mode=False, **kwargs
     ):
@@ -37,43 +37,43 @@ class DAQ_UI(tk.Frame):
         self.Frame_Channels = tk.LabelFrame(self, text="DAQ channels", font=font)
         self.Frame_DIOs = tk.LabelFrame(self, text="Digital outputs", font=font)
 
-        self.channelFrames = []
+        self.channelFrames: list[FrameDAQChannel] = []
 
         for channel in self.daq_controller.get_channels(only_visible=True):
             self.channelFrames.append(
-                Frame_DAQchannel(self.Frame_Channels, channel, self.daq_controller)
+                FrameDAQChannel(self.Frame_Channels, channel, self.daq_controller)
             )
 
         # Lay out all the tk obects created
-        numCols = np.ceil(len(self.channelFrames) / 8.0)
+        num_cols = np.ceil(len(self.channelFrames) / 8.0)
 
-        gridConfig: dict[str, Any] = {"padx": 5, "pady": 2}
+        grid_config: dict[str, Any] = {"padx": 5, "pady": 2}
 
-        c = 0
-        for column in [
-            self.channelFrames[i : i + int(len(self.channelFrames) / int(numCols))]
-            for i in range(
-                0, int(len(self.channelFrames) + 1), int(np.ceil(len(self.channelFrames) / numCols))
-            )
-        ]:
-            r = 0
-            for ch in column:
-                ch.grid(row=r, column=c, **gridConfig)
-                r += 1
-            c += 1
+        for c, column in enumerate(
+            [
+                self.channelFrames[i : i + int(len(self.channelFrames) / int(num_cols))]
+                for i in range(
+                    0,
+                    int(len(self.channelFrames) + 1),
+                    int(np.ceil(len(self.channelFrames) / num_cols)),
+                )
+            ]
+        ):
+            for r, ch in enumerate(column):
+                ch.grid(row=r, column=c, **grid_config)
 
-        gridSize = self.Frame_Channels.grid_size()
+        grid_size = self.Frame_Channels.grid_size()
 
         icon = Image.open("icons/config_icon.png").resize((20, 20))
         icon = ImageTk.PhotoImage(icon)
         self.configButton = ImageButton(
-            self.Frame_Channels, image=icon, command=self.daqConfigButton, height=20, width=20
+            self.Frame_Channels, image=icon, command=self.daq_config_button, height=20, width=20
         )
         self.configButton.image_ref = icon
         self.configButton.grid(
-            row=gridSize[1], column=gridSize[0] - 1, sticky=tk.E + tk.S, **gridConfig
+            row=grid_size[1], column=grid_size[0] - 1, sticky=tk.E + tk.S, **grid_config
         )
-        tooltip.createToolTip(self.configButton, "Configure DAQ channels", openDelay=2000)
+        tooltip.create_tool_tip(self.configButton, "Configure DAQ channels", open_delay=2000)
 
         icon = Image.open("icons/power_icon.png").resize((20, 20))
         icon = ImageTk.PhotoImage(icon)
@@ -81,15 +81,15 @@ class DAQ_UI(tk.Frame):
             self.Frame_Channels,
             image=icon,
             bg="red",
-            command=self.toggleDAQbutton,
+            command=self.toggle_daq_button,
             height=20,
             width=20,
         )
         self.daqOutputButton.image_ref = (
             icon  # store the image as a variable in the widget to prevent garbage collection.
         )
-        self.daqOutputButton.grid(row=gridSize[1], column=0, sticky=tk.W + tk.S, **gridConfig)
-        tooltip.createToolTip(self.daqOutputButton, "Start/stop DAQ channels", openDelay=2000)
+        self.daqOutputButton.grid(row=grid_size[1], column=0, sticky=tk.W + tk.S, **grid_config)
+        tooltip.create_tool_tip(self.daqOutputButton, "Start/stop DAQ channels", open_delay=2000)
 
         cols, rows = self.Frame_Channels.grid_size()
         for c in range(0, cols):
@@ -105,72 +105,75 @@ class DAQ_UI(tk.Frame):
         #             frame.grid(row=r, column=0, **gridConfig)
         #             r+=1
         #
-        #         c = 0
-        r = 0
+        # 1. Initialize the frames
         self.dioFrames = [
-            Frame_DIOline(self.Frame_DIOs, dio)
+            DioLineFrame(self.Frame_DIOs, dio)
             for dio in sorted(self.daq_controller.get_dios(), key=lambda dio: dio.dio_num)
         ]
 
-        for row in [self.dioFrames[i : i + c + 1] for i in range(0, len(self.dioFrames), c + 1)]:
-            c = 0
-            for dioFrame in row:
-                dioFrame.grid(row=r, column=c, **gridConfig)
-                c += 1
-            r += 1
+        # 2. Grid with wrapping logic
+        max_cols = 3
+        for index, dio_frame in enumerate(self.dioFrames):
+            row = index // max_cols  # Every 3 items, the row increments
+            col = index % max_cols  # The column resets to 0, 1, 2
 
-        cols, _ = self.Frame_DIOs.grid_size()
-        for c in range(0, cols):
-            self.Frame_DIOs.grid_columnconfigure(c, weight=1, pad=3, uniform="cols")
+            dio_frame.grid(row=row, column=col, **grid_config)
 
+        # 3. Configure columns for equal spacing (0 to 2)
+        for c in range(max_cols):
+            self.Frame_DIOs.grid_columnconfigure(c, weight=1, uniform="group1")
+
+        # 4. Final layout
         self.Frame_Channels.pack(side=tk.TOP, fill=tk.X)
         self.Frame_DIOs.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def updateForNewDaqConfig(self):
-        for chFrame in self.channelFrames:
-            chFrame.reload()
+    def update_for_new_daq_config(self):
+        for ch_frame in self.channelFrames:
+            ch_frame.reload()
 
-    def toggleDAQbutton(self):
+    def toggle_daq_button(self):
         self.daq_controller.toggle_continuous_output()
         if self.daq_controller.continuousOutput:
             self.daqOutputButton.configure(bg="green")
         else:
             self.daqOutputButton.configure(bg="red")
 
-    def daqConfigButton(self):
-        daqConfigurationUI = DAQ_configuration_UI(self, self.daq_controller)
-        self.winfo_toplevel().wait_window(daqConfigurationUI.top)
-        self.daq_controller = daqConfigurationUI.controller
-        if daqConfigurationUI.triggerDAQUpdates:
-            self.updateForNewDaqConfig()
+    def daq_config_button(self):
+        daq_config_ui = DaqConfigUI(self, self.daq_controller)
+        self.winfo_toplevel().wait_window(daq_config_ui.top)
+        self.daq_controller = daq_config_ui.controller
+        if daq_config_ui.triggerDAQUpdates:
+            self.update_for_new_daq_config()
             """TODO : NOT WORKING"""
             if self.daq_controller.continuousOutput:
                 self.daq_controller.write_channel_values()
 
 
-class Frame_DAQchannel(tk.Frame):
+class FrameDAQChannel(tk.Frame):
     """
     A sub-class of a Tkinter.Frame to create entry widgets and decorations for setting DAQ channels.
     """
 
-    def __init__(self, parent, DAQChannel: DAQChannel, DAQ_controller):
+    def __init__(self, parent, daq_channel: DAQChannel, daq_controller):
         """
         Constructor
         """
         tk.Frame.__init__(self, parent)
 
-        self.DAQchannel = DAQChannel
-        self.DAQcontroller = DAQ_controller
+        self.DAQchannel = daq_channel
+        self.DAQcontroller = daq_controller
         self.frame = tk.Frame(self)
 
-        self.addEntry()
+        self.add_entry()
 
         self.frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.tooltip = tooltip.createToolTip(self, self.DAQchannel.get_help_text(), openDelay=2000)
+        self.tooltip = tooltip.create_tool_tip(
+            self, self.DAQchannel.get_help_text(), open_delay=2000
+        )
 
-    def addEntry(self):
-        self.entry = Entry_DAQchannel(self.frame, self.DAQcontroller, self.DAQchannel)
+    def add_entry(self):
+        self.entry = DaqChannelEntry(self.frame, self.DAQcontroller, self.DAQchannel)
         self.lab = tk.Label(self.frame, width=20, text=self.DAQchannel.chName, anchor="w")
         self.entry.pack(side=tk.RIGHT, fill=tk.X)
         self.lab.pack(side=tk.LEFT)
@@ -178,38 +181,38 @@ class Frame_DAQchannel(tk.Frame):
     def reload(self):
         self.entry.destroy()
         self.lab.destroy()
-        self.addEntry()
+        self.add_entry()
         self.tooltip.text = self.DAQchannel.get_help_text()
 
 
-class Frame_DIOline(tk.Frame):
+class DioLineFrame(tk.Frame):
     """
     A sub-class of a Tkinter.Frame to create entry widgets and decorations for setting Digital IO lines.
     """
 
-    def __init__(self, parent, DAQDio):
+    def __init__(self, parent, daq_dio):
         """
         Constructor
         """
         tk.Frame.__init__(self, parent)
 
-        self.daq_dio = DAQDio
+        self.daq_dio = daq_dio
 
         self.lab = tk.Label(self, width=22, text=self.daq_dio.dio_name, anchor="w")
 
         self.on_icon = ImageTk.PhotoImage(Image.open("icons/toggle_on_icon.png").resize((25, 20)))
         self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
 
-        self.button = tk.Button(self, command=self.toggleButton, height=20, width=30)
+        self.button = tk.Button(self, command=self.toggle_button, height=20, width=30)
         self.daq_dio.write(not self.daq_dio.enabled_state)
         self.update_button_icon(self.daq_dio.read())
 
         self.button.pack(side=tk.RIGHT)
         self.lab.pack(side=tk.LEFT, fill=tk.X)
 
-        self.tooltip = tooltip.createToolTip(self, self.daq_dio.get_help_text(), openDelay=2000)
+        self.tooltip = tooltip.create_tool_tip(self, self.daq_dio.get_help_text(), open_delay=2000)
 
-    def toggleButton(self):
+    def toggle_button(self):
         new_state = self.daq_dio.toggle_state(return_state=True)
         self.update_button_icon(new_state)
 
@@ -220,19 +223,19 @@ class Frame_DIOline(tk.Frame):
             self.button.configure(image=self.off_icon, bg="red", relief=tk.RAISED)
 
 
-class Entry_DAQchannel(tk.Entry):
+class DaqChannelEntry(tk.Entry):
     """
     A sub-class of a Tkinter.Entry to create entry widgets for setting DAQ channels.
     """
 
-    def __init__(self, parent, DAQ_controller, DAQchannel):
+    def __init__(self, parent, daq_controller, daq_channel):
         """
         Constructor
         """
         tk.Entry.__init__(self, parent)
 
-        self.controller = DAQ_controller
-        self.channel = DAQchannel
+        self.controller = daq_controller
+        self.channel = daq_channel
 
         self.chLimits = (
             self.channel.chLimits
@@ -258,10 +261,10 @@ class Entry_DAQchannel(tk.Entry):
         self.widget = tk.Entry(self, justify=tk.CENTER)
 
         self.widget.insert(0, str(self.chValue))
-        self.widget.bind("<FocusOut>", self.focusOut)
-        self.widget.bind("<Return>", self.focusOut)
-        self.widget.bind("<Up>", self.arrowKey)
-        self.widget.bind("<Down>", self.arrowKey)
+        self.widget.bind("<FocusOut>", self.focus_out)
+        self.widget.bind("<Return>", self.focus_out)
+        self.widget.bind("<Up>", self.arrow_key)
+        self.widget.bind("<Down>", self.arrow_key)
         self.widget.pack()
 
     def flash(self, col, length=500):
@@ -272,7 +275,7 @@ class Entry_DAQchannel(tk.Entry):
         self.widget.config(bg=col)
         self.widget.after(length, lambda: self.widget.configure(bg="white"))
 
-    def arrowKey(self, event):
+    def arrow_key(self, event):
         """
         Called when the Up or Down arrow key is pressed.
         Increments the value on the DAQ channel accordingly.
@@ -280,48 +283,48 @@ class Entry_DAQchannel(tk.Entry):
 
         #       Count the number of places between the decimal place in the float and the cursor index
         #       to calculate the order of the incrementation, i.e 0.01,0.1,1,10,...ect
-        decimalIndex = self.widget.get().index(".")
-        cursorIndex = self.widget.index(tk.INSERT)
-        incrementOrder = decimalIndex - cursorIndex
+        decimal_index = self.widget.get().index(".")
+        cursor_index = self.widget.index(tk.INSERT)
+        increment_order = decimal_index - cursor_index
 
         # If the increment order is -1 the cursor is on the decimal point so do nothing.
-        if incrementOrder != -1:
-            if incrementOrder < -1:
-                incrementOrder += 1
+        if increment_order != -1:
+            if increment_order < -1:
+                increment_order += 1
             # Caculate the amount to change the value by.  The sign is determined by the key pressed.
             iterator = (
-                math.pow(10, incrementOrder)
+                math.pow(10, increment_order)
                 if event.keysym == "Up"
-                else -1 * math.pow(10, incrementOrder)
+                else -1 * math.pow(10, increment_order)
             )
 
-            currentValue = self.widget.get()
+            current_value = self.widget.get()
             # We have to count the number of decimal points of the number and found the iterated
             # value back to this level due to Python's imprecision with floats.
-            ndp = currentValue[::-1].find(".")
+            ndp = current_value[::-1].find(".")
 
             self.widget.delete(0, tk.END)
-            self.widget.insert(0, str(round(float(currentValue) + iterator, ndp)))
-            self.focusOut(event)
-            self.widget.icursor(cursorIndex)
+            self.widget.insert(0, str(round(float(current_value) + iterator, ndp)))
+            self.focus_out(event)
+            self.widget.icursor(cursor_index)
 
-    def focusOut(self, params):
-        flashCol = None
+    def focus_out(self, params):
+        flash_col = None
         try:
             if self.chLimits[0] <= float(self.widget.get()) <= self.chLimits[1]:
                 if self.chValue != float(self.widget.get()):
                     self.chValue = float(self.widget.get())
-                    flashCol = "green"
+                    flash_col = "green"
             else:
-                flashCol = "red"
+                flash_col = "red"
         except ValueError:
-            flashCol = "red"
+            flash_col = "red"
         finally:
             self.widget.delete(0, tk.END)
             self.widget.insert(0, str(self.chValue))
 
-        if flashCol:
-            self.flash(flashCol)
+        if flash_col:
+            self.flash(flash_col)
         # Update channel value (after converting it to a voltage if the channel is calibrated)
         self.controller.update_channel_value(
             self.channel.chNum,
@@ -331,7 +334,7 @@ class Entry_DAQchannel(tk.Entry):
         )
 
 
-class DAQ_configuration_UI:
+class DaqConfigUI:
     def __init__(self, parent, daq_control: DAQController):
         """This object creates a copy of the DAQ controller as backup and then a top level window to edit the origional.
         On exit from the top level window the changes are either kept or we revert to the original controller.  The
@@ -345,14 +348,14 @@ class DAQ_configuration_UI:
         self.top.wm_title("DAQ configuration")
         self.top.columnconfigure(0, weight=1)
 
-        self.configureForCurrentController()
+        self.configure_for_current_controller()
 
         # Changes the close button to call my close function.
-        self.top.protocol("WM_DELETE_WINDOW", self.closeWindow)
+        self.top.protocol("WM_DELETE_WINDOW", self.close_window)
 
         self.top.grab_set()
 
-    def configureForCurrentController(self):
+    def configure_for_current_controller(self):
         """This method creates, configures and draws all the elements of the UI that are dependent on the currently loaded DAQ controller
         Primarily it is just an extension of the __init__ for the class however this section of code needs to be run to re-configure the
         UI for a new DAQ config if one is loaded."""
@@ -360,12 +363,12 @@ class DAQ_configuration_UI:
         for wid in self.top.winfo_children():
             wid.destroy()
 
-        frameConfig = {"font": ("Helvetica", 16)}
-        labelConfig = {"font": ("Helvetica", 10, "bold"), "padx": 5}
+        frame_config = {"font": ("Helvetica", 16)}
+        label_config = {"font": ("Helvetica", 10, "bold"), "padx": 5}
 
-        self.cardsFrame = self.getCardsFrame(frameConfig, labelConfig)
-        self.channelsFrame, self.channels = self.getChannelsFrame(frameConfig, labelConfig)
-        self.buttonsFrame = self.getButtonsFrame()
+        self.cardsFrame = self.get_cards_frame(frame_config, label_config)
+        self.channelsFrame, self.channels = self.get_channels_frame(frame_config, label_config)
+        self.buttonsFrame = self.get_buttons_frame()
 
         self.cardsFrame.grid(row=0, column=0, sticky=tk.N + tk.E + tk.S + tk.W)
         self.channelsFrame.grid(row=1, column=0, sticky=tk.N + tk.E + tk.S + tk.W)
@@ -373,24 +376,28 @@ class DAQ_configuration_UI:
 
         self.top.grid_columnconfigure(0, weight=1, pad=5)
 
-    def getCardsFrame(self, frameConfig={}, labelConfig={}):
-        cardFrame = tk.LabelFrame(self.top, text="DAQ cards", **frameConfig)
+    def get_cards_frame(self, frame_config=None, label_config=None):
+        if label_config is None:
+            label_config = {}
+        if frame_config is None:
+            frame_config = {}
+        card_frame = tk.LabelFrame(self.top, text="DAQ cards", **frame_config)
 
-        tk.Label(cardFrame, text="Card Number", **labelConfig).grid(row=0, column=0)
-        tk.Label(cardFrame, text="Master", **labelConfig).grid(row=0, column=1)
-        tk.Label(cardFrame, text="Channels", **labelConfig).grid(row=0, column=2)
+        tk.Label(card_frame, text="Card Number", **label_config).grid(row=0, column=0)
+        tk.Label(card_frame, text="Master", **label_config).grid(row=0, column=1)
+        tk.Label(card_frame, text="Channels", **label_config).grid(row=0, column=2)
 
-        for card in [self.controller.master] + self.controller.slaves:
-            r = cardFrame.grid_size()[1]
-            tk.Label(cardFrame, text=card.card).grid(row=r, column=0)
+        for card in [self.controller.master, *self.controller.slaves]:
+            r = card_frame.grid_size()[1]
+            tk.Label(card_frame, text=card.card).grid(row=r, column=0)
 
             # It's worth noting these checkbuttons are currently not coded to do anything.
             # They display which card is the master and offer the possibility of changing
             # this if I decided that's relevant at some point...
             var = tk.IntVar()
-            checkbutton = tk.Checkbutton(cardFrame, variable=var)
+            checkbutton = tk.Checkbutton(card_frame, variable=var)
             checkbutton.configure(
-                command=lambda wid=checkbutton, num=card.card, var=var: self.masterSelected(
+                command=lambda wid=checkbutton, num=card.card, var=var: self.master_selected(
                     wid, num, var
                 )
             )
@@ -401,193 +408,201 @@ class DAQ_configuration_UI:
             checkbutton.configure(state=tk.DISABLED)
 
             tk.Label(
-                cardFrame, text=str([ch.chNum for ch in card.channels]), font=("Helvetica", 10)
+                card_frame, text=str([ch.chNum for ch in card.channels]), font=("Helvetica", 10)
             ).grid(row=r, column=2)
 
         #         cardFrame.grid_configure(ipadx=20)
 
-        return cardFrame
+        return card_frame
 
-    def getChannelsFrame(self, frameConfig={}, labelConfig={}):
-        channelsFrame = tk.LabelFrame(self.top, text="Channels", **frameConfig)
+    def get_channels_frame(self, frame_config=None, label_config=None):
+        if label_config is None:
+            label_config = {}
+        if frame_config is None:
+            frame_config = {}
+        channels_frame = tk.LabelFrame(self.top, text="Channels", **frame_config)
 
-        controllerChannels: list[DAQChannel] = self.controller.get_channels()
+        controller_channels: list[DAQChannel] = self.controller.get_channels()
 
-        channelOptions = [
-            self.getChannelDropdownLabel(ch.chNum, ch.chName)
-            for ch in sorted(controllerChannels, key=lambda x: x.chNum)
+        channel_options = [
+            self.get_channel_dropdown_label(ch.chNum, ch.chName)
+            for ch in sorted(controller_channels, key=lambda x: x.chNum)
         ]
         self.dropdownVar = tk.StringVar()
-        self.dropdownVar.set(channelOptions[0])
+        self.dropdownVar.set(channel_options[0])
         self.dropdown = tk.OptionMenu(
-            channelsFrame,
+            channels_frame,
             self.dropdownVar,
-            *channelOptions,
-            command=lambda var=self.dropdownVar: self.channelSelected(var),
+            *channel_options,
+            command=lambda var=self.dropdownVar: self.channel_selected(var),
         )
 
         channels = {}
-        chLabGridOpts: dict[str, Any] = {"sticky": tk.W}
-        chWidGridOpts: dict[str, Any] = {"sticky": tk.E + tk.W}
+        ch_lab_grid_opts: dict[str, Any] = {"sticky": tk.W}
+        ch_wid_grid_opts: dict[str, Any] = {"sticky": tk.E + tk.W}
 
-        for ch in controllerChannels:
-            frame = tk.Frame(channelsFrame)
+        for ch in controller_channels:
+            frame = tk.Frame(channels_frame)
 
-            channels[self.getChannelDropdownLabel(ch.chNum, ch.chName)] = frame
+            channels[self.get_channel_dropdown_label(ch.chNum, ch.chName)] = frame
 
             r = 0
 
-            tk.Label(frame, text="Channel number:", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="Channel number:", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
-            chNumWid = tk.Label(frame, text=ch.chNum).grid(row=r, column=1, **chWidGridOpts)
+            # ch_num_wid = tk.Label(frame, text=ch.chNum).grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
 
-            tk.Label(frame, text="Channel name:", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="Channel name:", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
-            chNameWid = e = tk.Entry(frame)
+            ch_name_wid = e = tk.Entry(frame)
             e.insert(0, ch.chName)
-            e.grid(row=r, column=1, **chWidGridOpts)
+            e.grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
 
-            tk.Label(frame, text="Lower limit (V):", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="Lower limit (V):", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
-            chLowLimWid = e = tk.Entry(frame)
+            ch_low_lim_wid = e = tk.Entry(frame)
             e.insert(0, ch.chLimits[0])
-            e.grid(row=r, column=1, **chWidGridOpts)
+            e.grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
 
-            tk.Label(frame, text="Upper limit (V):", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="Upper limit (V):", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
-            chUppLimWid = e = tk.Entry(frame)
+            ch_up_lim_wid = e = tk.Entry(frame)
             e.insert(0, ch.chLimits[1])
-            e.grid(row=r, column=1, **chWidGridOpts)
+            e.grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
 
-            chDefValLab = tk.Label(
+            ch_def_val_lab = tk.Label(
                 frame,
-                text="Default value ({0}):".format(
+                text="Default value ({}):".format(
                     "V" if not ch.isCalibrated else ch.calibrationUnits
                 ),
-                **labelConfig,
+                **label_config,
             )
-            chDefValLab.grid(row=r, column=0, **chLabGridOpts)
-            chDefValWid = e = tk.Entry(frame)
+            ch_def_val_lab.grid(row=r, column=0, **ch_lab_grid_opts)
+            ch_def_val_wid = e = tk.Entry(frame)
             value = ""
             if ch.calibrationFromVFunc is not None:
                 value = str(ch.calibrationFromVFunc(ch.defaultValue))
             e.insert(0, str(ch.defaultValue) if not ch.isCalibrated else value)
-            e.grid(row=r, column=1, **chWidGridOpts)
+            e.grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
 
-            tk.Label(frame, text="UI visable:", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="UI visable:", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
-            cbVar = tk.IntVar()
+            cb_var = tk.IntVar()
             c = tk.Checkbutton(
-                frame, variable=cbVar, command=lambda ch=ch, var=cbVar: self.chUIVisUpdated(ch, var)
+                frame,
+                variable=cb_var,
+                command=lambda ch=ch, var=cb_var: self.ch_ui_v_is_updated(ch, var),
             )
             if ch.isUIVisible:
                 c.select()
-            c.grid(row=r, column=1, **chWidGridOpts)
+            c.grid(row=r, column=1, **ch_wid_grid_opts)
 
-            tk.Label(frame, text="Calibration file:", **labelConfig).grid(
-                row=r, column=0, **chLabGridOpts
+            tk.Label(frame, text="Calibration file:", **label_config).grid(
+                row=r, column=0, **ch_lab_grid_opts
             )
 
-            calibFrame = tk.Frame(frame)
+            calib_frame = tk.Frame(frame)
 
-            calibFnameWid = e = tk.Entry(calibFrame)
+            calib_fname_wid = e = tk.Entry(calib_frame)
             e.insert(0, ch.calibrationFname if ch.isCalibrated else "None")
             e.pack(side=tk.LEFT)
 
             icon = Image.open("icons/delete_icon.png").resize((20, 20))
             icon = ImageTk.PhotoImage(icon)
-            removeCalibButton = ImageButton(
-                calibFrame,
+            remove_calib_button = ImageButton(
+                calib_frame,
                 image=icon,
-                command=lambda ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid: (
-                    self.removeCalibFileButton(ch, wid, defValLab, defValWid)
+                command=lambda ch=ch, wid=calib_fname_wid, def_val_lab=ch_def_val_lab, def_val_wid=ch_def_val_wid: (
+                    self.remove_calib_file_button(ch, wid, def_val_lab, def_val_wid)
                 ),
                 height=16,
                 width=16,
             )
-            removeCalibButton.image_ref = icon
-            removeCalibButton.pack(side=tk.RIGHT)
+            remove_calib_button.image_ref = icon
+            remove_calib_button.pack(side=tk.RIGHT)
 
             icon = Image.open("icons/folder_icon.png").resize((20, 20))
             icon = ImageTk.PhotoImage(icon)
-            addCalibButton = ImageButton(
-                calibFrame,
+            add_calib_button = ImageButton(
+                calib_frame,
                 image=icon,
-                command=lambda ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid: (
-                    self.selectCalibFileButton(ch, wid, defValLab, defValWid)
+                command=lambda ch=ch, wid=calib_fname_wid, def_val_lab=ch_def_val_lab, def_val_wid=ch_def_val_wid: (
+                    self.select_calibration_file_button(ch, wid, def_val_lab, def_val_wid)
                 ),
                 height=16,
                 width=16,
             )
-            addCalibButton.image_ref = (
+            add_calib_button.image_ref = (
                 icon  # store the image as a variable in the widget to prevent garbage collection.
             )
-            addCalibButton.pack(side=tk.RIGHT)
+            add_calib_button.pack(side=tk.RIGHT)
 
-            calibFrame.grid(row=r, column=1, **chWidGridOpts)
+            calib_frame.grid(row=r, column=1, **ch_wid_grid_opts)
 
-            chNameWid.bind(
-                "<FocusOut>", lambda event, ch=ch, wid=chNameWid: self.chNameUpdated(event, ch, wid)
-            )
-            chNameWid.bind(
-                "<Return>", lambda event, ch=ch, wid=chNameWid: self.chNameUpdated(event, ch, wid)
-            )
-
-            chLowLimWid.bind(
+            ch_name_wid.bind(
                 "<FocusOut>",
-                lambda event, ch=ch, limWids=[chLowLimWid, chUppLimWid], dVwid=chDefValWid: (
-                    self.chLimitsUpdated(event, ch, limWids, dVwid)
+                lambda event, ch=ch, wid=ch_name_wid: self.ch_name_updated(event, ch, wid),
+            )
+            ch_name_wid.bind(
+                "<Return>",
+                lambda event, ch=ch, wid=ch_name_wid: self.ch_name_updated(event, ch, wid),
+            )
+
+            ch_low_lim_wid.bind(
+                "<FocusOut>",
+                lambda event, ch=ch, lim_wids=[ch_low_lim_wid, ch_up_lim_wid], def_val_wid=ch_def_val_wid: (
+                    self.ch_limits_updated(event, ch, lim_wids, def_val_wid)
                 ),
             )
-            chLowLimWid.bind(
+            ch_low_lim_wid.bind(
                 "<Return>",
-                lambda event, ch=ch, limWids=[chLowLimWid, chUppLimWid], dVwid=chDefValWid: (
-                    self.chLimitsUpdated(event, ch, limWids, dVwid)
+                lambda event, ch=ch, lim_wids=[ch_low_lim_wid, ch_up_lim_wid], def_val_wid=ch_def_val_wid: (
+                    self.ch_limits_updated(event, ch, lim_wids, def_val_wid)
                 ),
             )
 
-            chUppLimWid.bind(
+            ch_up_lim_wid.bind(
                 "<FocusOut>",
-                lambda event, ch=ch, limWids=[chLowLimWid, chUppLimWid], dVwid=chDefValWid: (
-                    self.chLimitsUpdated(event, ch, limWids, dVwid)
+                lambda event, ch=ch, lim_wids=[ch_low_lim_wid, ch_up_lim_wid], def_val_wid=ch_def_val_wid: (
+                    self.ch_limits_updated(event, ch, lim_wids, def_val_wid)
                 ),
             )
-            chUppLimWid.bind(
+            ch_up_lim_wid.bind(
                 "<Return>",
-                lambda event, ch=ch, limWids=[chLowLimWid, chUppLimWid], dVwid=chDefValWid: (
-                    self.chLimitsUpdated(event, ch, limWids, dVwid)
+                lambda event, ch=ch, lim_wids=[ch_low_lim_wid, ch_up_lim_wid], def_val_wid=ch_def_val_wid: (
+                    self.ch_limits_updated(event, ch, lim_wids, def_val_wid)
                 ),
             )
 
-            chDefValWid.bind(
+            ch_def_val_wid.bind(
                 "<FocusOut>",
-                lambda event, ch=ch, wid=chDefValWid: self.chDefValUpdated(event, ch, wid),
+                lambda event, ch=ch, wid=ch_def_val_wid: self.ch_def_val_updated(event, ch, wid),
             )
-            chDefValWid.bind(
+            ch_def_val_wid.bind(
                 "<Return>",
-                lambda event, ch=ch, wid=chDefValWid: self.chDefValUpdated(event, ch, wid),
+                lambda event, ch=ch, wid=ch_def_val_wid: self.ch_def_val_updated(event, ch, wid),
             )
 
-            calibFnameWid.bind(
+            calib_fname_wid.bind(
                 "<FocusOut>",
-                lambda event, ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid: (
-                    self.chCalibFileUpdated(event, ch, wid, defValLab, defValWid)
+                lambda event, ch=ch, wid=calib_fname_wid, def_val_lab=ch_def_val_lab, def_val_wid=ch_def_val_wid: (
+                    self.ch_calib_file_updated(event, ch, wid, def_val_lab, def_val_wid)
                 ),
             )
-            calibFnameWid.bind(
+            calib_fname_wid.bind(
                 "<Return>",
-                lambda event, ch=ch, wid=calibFnameWid, defValLab=chDefValLab, defValWid=chDefValWid: (
-                    self.chCalibFileUpdated(event, ch, wid, defValLab, defValWid)
+                lambda event, ch=ch, wid=calib_fname_wid, def_val_lab=ch_def_val_lab, def_val_wid=ch_def_val_wid: (
+                    self.ch_calib_file_updated(event, ch, wid, def_val_lab, def_val_wid)
                 ),
             )
 
@@ -599,99 +614,104 @@ class DAQ_configuration_UI:
         self.dropdown.grid(row=0, column=0, sticky=tk.N + tk.W)
 
         channels[
-            self.getChannelDropdownLabel(controllerChannels[0].chNum, controllerChannels[0].chName)
+            self.get_channel_dropdown_label(
+                controller_channels[0].chNum, controller_channels[0].chName
+            )
         ].grid()
 
-        channelsFrame.grid_columnconfigure(0, weight=0)
-        channelsFrame.grid_columnconfigure(1, weight=1)
+        channels_frame.grid_columnconfigure(0, weight=0)
+        channels_frame.grid_columnconfigure(1, weight=1)
 
-        return channelsFrame, channels
+        return channels_frame, channels
 
-    def getButtonsFrame(self):
-        buttonsFrame = tk.Frame(self.top)
-        applyButton = tk.Button(
-            buttonsFrame, text="Apply", command=self.apply, width=15, bg="green"
+    def get_buttons_frame(self):
+        buttons_frame = tk.Frame(self.top)
+        apply_button = tk.Button(
+            buttons_frame, text="Apply", command=self.apply, width=15, bg="green"
         )
-        cancelButton = tk.Button(
-            buttonsFrame, text="Cancel", command=self.cancel, width=15, bg="red"
+        cancel_button = tk.Button(
+            buttons_frame, text="Cancel", command=self.cancel, width=15, bg="red"
         )
-        applyButton.grid(row=0, column=1, sticky=tk.E)
-        cancelButton.grid(row=1, column=1, sticky=tk.E)
+        apply_button.grid(row=0, column=1, sticky=tk.E)
+        cancel_button.grid(row=1, column=1, sticky=tk.E)
 
-        return buttonsFrame
+        return buttons_frame
 
-    def _updateChannelDropdown(self, options, initialVal=None):
+    def _update_channel_dropdown(self, options, initial_val=None):
         """reset the values in the option menu"""
         menu = self.dropdown["menu"]
         menu.delete(0, "end")
-        callback = lambda var=self.dropdownVar: self.channelSelected(var)
+
+        def callback(var=self.dropdownVar):
+            return self.channel_selected(var)
+
         for v in options:
             menu.add_command(label=v, command=tk._setit(self.dropdownVar, v, callback))
-        if initialVal is not None:
-            self.dropdownVar.set(initialVal)
+        if initial_val is not None:
+            self.dropdownVar.set(initial_val)
 
-    def masterSelected(self, widget, cardNumber, state):
+    def master_selected(self, widget, card_number, state):
         """Function called when a 'master' checkbox is selected/deselected.
         widget - the checkbox widget clicked on
         cardNumber - the card number assosiated with the widget
         state - 0/1, checkbox is now deselected/selected"""
-        print(widget, cardNumber, state.get())
+        print(widget, card_number, state.get())
 
-    def channelSelected(self, channelLabel):
+    def channel_selected(self, channel_label):
         for _, wid in self.channels.items():
             wid.grid_remove()
-        self.channels[channelLabel].grid()
+        self.channels[channel_label].grid()
 
-    def getChannelDropdownLabel(self, chNum, chName):
-        return f"Ch {chNum!s}: {chName}"
+    def get_channel_dropdown_label(self, ch_num, ch_name):
+        return f"Ch {ch_num!s}: {ch_name}"
 
-    def chNameUpdated(self, event, ch, wid):
+    def ch_name_updated(self, event, ch, wid):
         """Updates the channel dictionary and the channel dropdown with the new channel name"""
-        oldChLabel = self.getChannelDropdownLabel(ch.chNum, ch.chName)
+        old_ch_label = self.get_channel_dropdown_label(ch.chNum, ch.chName)
         ch.chName = wid.get()
-        newChLabel = self.getChannelDropdownLabel(ch.chNum, ch.chName)
-        self.channels[newChLabel] = self.channels.pop(oldChLabel)
-        self._updateChannelDropdown(
+        new_ch_label = self.get_channel_dropdown_label(ch.chNum, ch.chName)
+        self.channels[new_ch_label] = self.channels.pop(old_ch_label)
+        self._update_channel_dropdown(
             [
-                self.getChannelDropdownLabel(ch.chNum, ch.chName)
+                self.get_channel_dropdown_label(ch.chNum, ch.chName)
                 for ch in sorted(self.controller.get_channels(), key=lambda x: x.chNum)
             ],
-            newChLabel,
+            new_ch_label,
         )
-        self.channelSelected(newChLabel)
+        self.channel_selected(new_ch_label)
         self._flash(wid, "green")
 
-    def chLimitsUpdated(self, event, ch: DAQChannel, limWids: list[Any], dVwid):
-        oldLimits = ch.chLimits
+    def ch_limits_updated(self, event, ch: DAQChannel, lim_wids: list[Any], def_val_wid):
+        old_limits = ch.chLimits
         flash_col = "green"
 
         # Check the new limits are valid (can be floats and min <= max)
         try:
-            newLimits = [float(w.get()) for w in limWids]
+            new_limits = [float(w.get()) for w in lim_wids]
 
-            if not newLimits[0] <= newLimits[1]:
+            if not new_limits[0] <= new_limits[1]:
                 raise ValueError("Lower limit must be less than upper limit")
 
             # Must be valid if we got here
-            ch.chLimits = newLimits
-            if not newLimits[0] <= ch.defaultValue <= newLimits[1]:
-                dVwid.delete(0, tk.END)
-                dVwid.insert(0, np.clip(ch.defaultValue, newLimits[0], newLimits[1]))
-                self.chDefValUpdated(None, ch, dVwid)
+            ch.chLimits = new_limits
+            if not new_limits[0] <= ch.defaultValue <= new_limits[1]:
+                def_val_wid.delete(0, tk.END)
+                def_val_wid.insert(0, np.clip(ch.defaultValue, new_limits[0], new_limits[1]))
+                self.ch_def_val_updated(None, ch, def_val_wid)
 
         except (ValueError, IndexError):
             flash_col = "red"
 
             # revert changes
             for i in [0, 1]:
-                limWids[i].delete(0, tk.END)
-                limWids[i].insert(0, oldLimits[i])
+                lim_wids[i].delete(0, tk.END)
+                lim_wids[i].insert(0, old_limits[i])
 
-        for wid in limWids:
+        for wid in lim_wids:
             self._flash(wid, flash_col)
 
-    def chDefValUpdated(self, event, ch: DAQChannel, wid):
-        oldDefVal = ch.defaultValue
+    def ch_def_val_updated(self, event, ch: DAQChannel, wid):
+        old_default_val = ch.defaultValue
         flash_col = "green"
 
         try:
@@ -700,21 +720,21 @@ class DAQ_configuration_UI:
 
             # 2. Handle Calibration logic with explicit None checks for Pylance
             if ch.isCalibrated and ch.calibrationToVFunc is not None:
-                newDefVal = float(ch.calibrationToVFunc(raw_val))
+                new_default_value = float(ch.calibrationToVFunc(raw_val))
             else:
-                newDefVal = raw_val
+                new_default_value = raw_val
 
             # 3. Validation against limits
-            if not (ch.chLimits[0] <= newDefVal <= ch.chLimits[1]):
+            if not (ch.chLimits[0] <= new_default_value <= ch.chLimits[1]):
                 raise ValueError("Value out of bounds")
 
             # 4. Success Path
-            ch.defaultValue = newDefVal
+            ch.defaultValue = new_default_value
 
             # If calibrated, update the widget (in case the function modified/clipped the value)
             if ch.isCalibrated and ch.calibrationFromVFunc is not None:
                 wid.delete(0, tk.END)
-                wid.insert(0, ch.calibrationFromVFunc(newDefVal))
+                wid.insert(0, ch.calibrationFromVFunc(new_default_value))
 
         except (ValueError, TypeError, IndexError):
             # 5. Failure Path
@@ -722,32 +742,34 @@ class DAQ_configuration_UI:
             wid.delete(0, tk.END)
 
             if ch.isCalibrated and ch.calibrationFromVFunc is not None:
-                wid.insert(0, ch.calibrationFromVFunc(oldDefVal))
+                wid.insert(0, ch.calibrationFromVFunc(old_default_val))
             else:
-                wid.insert(0, oldDefVal)
+                wid.insert(0, old_default_val)
 
         self._flash(wid, flash_col)
 
-    def chUIVisUpdated(self, ch: DAQChannel, var):
+    def ch_ui_v_is_updated(self, ch: DAQChannel, var):
         ch.isUIVisible = var.get()
 
-    def chCalibFileUpdated(self, event, ch: DAQChannel, wid, defValLab, defValWid):
+    def ch_calib_file_updated(
+        self, event, ch: DAQChannel, wid, default_value_label, default_value_widget
+    ):
         # Get the old value of the widget to restore it if the calibration fails.
-        oldWidValue = ch.calibrationFname if ch.isCalibrated else "None"
+        old_widget_value = ch.calibrationFname if ch.isCalibrated else "None"
         try:
             ch.calibrate(wid.get())
-            defValLab.configure(text=f"Default value ({ch.calibrationUnits}):")
-            defValWid.delete(0, tk.END)
+            default_value_label.configure(text=f"Default value ({ch.calibrationUnits}):")
+            default_value_widget.delete(0, tk.END)
             if ch.calibrationFromVFunc is not None:
                 value = ch.calibrationFromVFunc(ch.defaultValue)
             else:
                 raise ValueError("Calibration function is None")
-            defValWid.insert(0, value)
+            default_value_widget.insert(0, value)
             flash_col = "green"
         except OSError:
             # If the calibration failed as a bad file was selected, reset the widget to it's previous state
             wid.delete(0, tk.END)
-            wid.insert(0, oldWidValue)
+            wid.insert(0, old_widget_value)
             flash_col = "red"
         self._flash(wid, flash_col)
 
@@ -755,8 +777,8 @@ class DAQ_configuration_UI:
         wid.config(bg=flash_col)
         wid.after(delay, lambda: wid.configure(bg="white"))
 
-    def selectCalibFileButton(self, ch, wid, defValLab, defValWid):
-        fname = tkFileDialog.askopenfilename(
+    def select_calibration_file_button(self, ch, wid, default_value_label, default_value_wid):
+        fname = tk_file_dialog.askopenfilename(
             parent=self.top, title="Select a calibration file", initialdir=""
         )
         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
@@ -766,28 +788,28 @@ class DAQ_configuration_UI:
         if fname != "":
             wid.delete(0, tk.END)
             wid.insert(0, fname)
-            self.chCalibFileUpdated(None, ch, wid, defValLab, defValWid)
+            self.ch_calib_file_updated(None, ch, wid, default_value_label, default_value_wid)
 
-    def removeCalibFileButton(self, ch, wid, defValLab, defValWid):
+    def remove_calib_file_button(self, ch, wid, default_value_lab, default_val_wid):
         """Remove the calibration from the channel and re-set the relevant UI labels and entries"""
         ch.remove_calibration()
         wid.delete(0, tk.END)
         wid.insert(0, "None")
-        defValLab.configure(text="Default value (V):")
-        defValWid.delete(0, tk.END)
-        defValWid.insert(0, ch.defaultValue)
+        default_value_lab.configure(text="Default value (V):")
+        default_val_wid.delete(0, tk.END)
+        default_val_wid.insert(0, ch.defaultValue)
 
     def apply(self):
         self.triggerDAQUpdates = True
-        self.closeWindow(False)
+        self.close_window(False)
 
     def cancel(self):
-        self.revertChanges()
+        self.revert_changes()
         self.triggerDAQUpdates = False
-        self.closeWindow(False)
+        self.close_window(False)
 
     #     def save(self):
-    #         fname = tkFileDialog.asksaveasfilename(title="Save a DAQ configuration")
+    #         fname = tk_file_dialog.asksaveasfilename(title="Save a DAQ configuration")
     #         # Check for empyy filenames (i.e. when the user cancelled the acion)
     #         if fname!= '':
     #             writer = DaqWriter(fname)
@@ -797,7 +819,7 @@ class DAQ_configuration_UI:
     #         self.top.lift()
     #
     #     def load(self):
-    #         fname = tkFileDialog.askopenfilename(master=self, title="Load a DAQ configuration", initialdir="")
+    #         fname = tk_file_dialog.askopenfilename(master=self, title="Load a DAQ configuration", initialdir="")
     #
     #         # Check for empty filenames (i.e. when the user cancelled the action)
     #         if fname!= '':
@@ -809,20 +831,20 @@ class DAQ_configuration_UI:
     #         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
     #         self.top.lift()
 
-    def revertChanges(self):
+    def revert_changes(self):
         self.controller = self.controllerOrig
 
-    def closeWindow(self, askToApplyChanges=True):
+    def close_window(self, ask_to_apply_changes=True):
         """Close the window."""
-        if askToApplyChanges:
-            applyOnExit = tkMessageBox.askyesnocancel(
+        if ask_to_apply_changes:
+            apply_on_exit = tk_message_box.askyesnocancel(
                 "Confirm exit",
                 "Would you like to apply your changes before you exit?",
                 parent=self.top,
             )
-            if applyOnExit == None:
+            if apply_on_exit is None:
                 return
-            elif not applyOnExit:
-                self.revertChanges()
+            elif not apply_on_exit:
+                self.revert_changes()
         self.top.grab_release()
         self.top.destroy()

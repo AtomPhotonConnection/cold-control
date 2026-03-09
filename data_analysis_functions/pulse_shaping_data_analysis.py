@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import re
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -54,7 +56,7 @@ class ExperimentalDataProcessor:
                     df = self.apply_rolling_average(df, self.rolling_window)
                 dataframes.append(df)
             except Exception as e:
-                warnings.warn(f"Could not load {csv_file}: {e}")
+                warnings.warn(f"Could not load {csv_file}: {e}", stacklevel=2)
 
         return dataframes
 
@@ -72,7 +74,7 @@ class ExperimentalDataProcessor:
         df_smooth = df.copy()
 
         # Apply rolling average to all voltage channels
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in df_smooth.columns:
                 df_smooth[col_name] = (
                     df_smooth[col_name].rolling(window=window, center=True, min_periods=1).mean()
@@ -83,9 +85,9 @@ class ExperimentalDataProcessor:
     def validate_data(
         self,
         df: pd.DataFrame,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
     ) -> bool:
         """
         Validate that data meets experimental conditions.
@@ -103,7 +105,7 @@ class ExperimentalDataProcessor:
         if marker_time_range and self.channel_cols[self.marker_channel] in df.columns:
             marker_data = df[self.channel_cols[self.marker_channel]]
             # Find minimum of marker pulse (voltage drop)
-            marker_min_idx = int(marker_data.idxmin())
+            marker_min_idx = int(cast(int, marker_data.idxmin()))
             marker_min_time = df.iloc[marker_min_idx][self.time_col]
 
             if not (marker_time_range[0] <= marker_min_time <= marker_time_range[1]):
@@ -134,10 +136,10 @@ class ExperimentalDataProcessor:
     def average_shot_data(
         self,
         shot_folder: str,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
-        output_path: Optional[Path] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
+        output_path: Path | None = None,
         validate_data: bool = True,
     ) -> pd.DataFrame:
         """
@@ -173,7 +175,7 @@ class ExperimentalDataProcessor:
         averaged_df = valid_dfs[0].copy()
 
         # Average all voltage columns
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in averaged_df.columns:
                 values = np.array([df[col_name].values for df in valid_dfs])
                 averaged_df[col_name] = np.mean(values, axis=0)
@@ -188,12 +190,12 @@ class ExperimentalDataProcessor:
         self,
         shot_folder: str,
         fluor_drop_voltage: float,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         time_before_drop: float = 1.1e-3,
         time_after_drop: float = 4e-3,
         num_points: int = 50000,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
     ) -> pd.DataFrame:
         """
         Average CSV files after aligning them based on fluorescence drop timing.
@@ -251,18 +253,18 @@ class ExperimentalDataProcessor:
         interpolated_data = {}
         interpolated_data[self.time_col] = aligned_time
 
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in valid_dfs[0].columns:
                 interpolated_data[col_name] = []
 
         # Interpolate each valid dataset to the aligned time axis
-        for df, drop_time in zip(valid_dfs, drop_times):
+        for df, drop_time in zip(valid_dfs, drop_times, strict=True):
             # Shift time relative to drop
             relative_time = df[self.time_col].values - drop_time
             # print(f"Relative time axis: {relative_time[0]} to {relative_time[-1]} seconds")
 
             # Interpolate each channel
-            for channel_num, col_name in self.channel_cols.items():
+            for _, col_name in self.channel_cols.items():
                 if col_name not in df.columns:
                     continue
 
@@ -283,7 +285,7 @@ class ExperimentalDataProcessor:
 
         # Average the interpolated data
         averaged_data = {self.time_col: aligned_time}
-        for channel_num, col_name in self.channel_cols.items():
+        for _, col_name in self.channel_cols.items():
             if col_name in interpolated_data and len(interpolated_data[col_name]) > 0:
                 channel_stack = np.array(interpolated_data[col_name])
                 # Use nanmean to handle any NaN values from interpolation
@@ -326,11 +328,12 @@ class ExperimentalDataProcessor:
         channel4_data = np.asarray(df[channel4_col].values)
 
         # Calculate background average and std
+        bg_mask = None
         if not subtract_int_from_background:
             bg_mask = (time_data >= background_time_range[0]) & (
                 time_data <= background_time_range[1]
             )
-        elif subtract_int_from_background:
+        else:
             bg_mask = (
                 (time_data >= background_time_range[0])
                 & (time_data <= background_time_range[1])
@@ -340,6 +343,8 @@ class ExperimentalDataProcessor:
                 )
             )
 
+        if bg_mask is None or not bg_mask.any():
+            raise ValueError("No data points found in background time range")
         background_data = channel4_data[bg_mask]
         bg_average = np.mean(background_data)
         bg_std = np.std(background_data)
@@ -371,14 +376,14 @@ class ExperimentalDataProcessor:
     def process_all_experiments(
         self,
         root_folder: Path,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         background_time_range: tuple[float, float] = (0, 1),
         integration_time_range: tuple[float, float] = (2, 3),
         save_averaged_csvs: bool = True,
         use_alignment: bool = False,
-        alignment_params: Optional[dict] = None,
+        alignment_params: dict | None = None,
         _validate_data: bool = True,
     ) -> pd.DataFrame:
         """
@@ -485,12 +490,12 @@ class ExperimentalDataProcessor:
     def process_img_sweep_expts(
         self,
         root_folder: Path,
-        marker_time_range: Optional[tuple[float, float]] = None,
-        fluor_drop_voltage: Optional[float] = None,
-        fluor_drop_time_range: Optional[tuple[float, float]] = None,
+        marker_time_range: tuple[float, float] | None = None,
+        fluor_drop_voltage: float | None = None,
+        fluor_drop_time_range: tuple[float, float] | None = None,
         save_averaged_csvs: bool = True,
         use_alignment: bool = True,
-        alignment_params: Optional[dict] = None,
+        alignment_params: dict | None = None,
     ) -> pd.DataFrame:
         """
         Process all experiments in the root folder.

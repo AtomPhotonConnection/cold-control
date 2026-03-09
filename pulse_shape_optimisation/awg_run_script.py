@@ -12,24 +12,24 @@ Replace the optimisation step (step 3) with any algorithm you like —
 NLMS, Wiener, gradient descent, etc.  The experiment runner is agnostic.
 """
 
-import os
 import sys
+from pathlib import Path
 
 # Ensure the parent directory is on the path so imports resolve
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from marina.pulse_experiment import (
+from pulse_shape_optimisation.pulse_experiment import (
     PulseShapeConfig,
     PulseShapeExperimentRunner,
     load_signal_from_path,
 )
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def main():
     # ── 1. Configuration ─────────────────────────────────────────────────
-    config_path = os.path.join(SCRIPT_DIR, "config_pulse_experiment.ini")
+    config_path = SCRIPT_DIR / "config_pulse_experiment.ini"
     cfg = PulseShapeConfig(config_path)
 
     # ── 2. Load theoretical waveform ─────────────────────────────────────
@@ -48,14 +48,12 @@ def main():
         print(f"Baseline MAE:  {baseline.mae:.6e}")
 
         baseline.plot(
-            output_dir=str(cfg.output_dir),
+            output_dir=cfg.output_dir,
             filename="01_baseline.png",
             title="Baseline — theoretical waveform sent directly",
         )
 
-        baseline.save_to_csv(
-            os.path.join(cfg.output_dir, "baseline_measured_signal.csv"), to_save="measured"
-        )
+        baseline.save_to_csv(cfg.output_dir / "baseline_measured_signal.csv", to_save="measured")
 
     finally:
         runner.close()

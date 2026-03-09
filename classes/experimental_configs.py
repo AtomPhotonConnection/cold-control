@@ -20,12 +20,12 @@ from copy import deepcopy
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 
+from classes.daq_sequence import DaqSequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
-from classes.Sequence import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -278,16 +278,18 @@ class AwgConfiguration:
     Can be read from a filepath using the AwgConfigReader class in config_readers.py.
 
     Structure of the AWG configuration file:
-    waveform sequence: A list of lists. Each inner list corresponds to a channel and
+    waveform_sequence: A list of lists. Each inner list corresponds to a channel and
         contains the indices of the waveforms to play on that channel.
+    waveforms: A dictionary mapping waveform indices to Waveform objects
+    sample_rate: Sample rate for the AWG output in samples per second.
+    burst_count: Number of times to repeat the waveform sequence in a single trigger.
+    waveform_output_channels: Channels on the AWG that will be used for outputting waveforms.
+    waveform_output_channel_lags: Timing lags for each output channel to synchronize them.
+    marker_width_samps: Width of the marker pulse in samples.
+
+    marked channels: DEPRECATED
     waveform stitch delays: DEPRECATED
     interleave waveforms: DEPRECATED
-    sample rate: Sample rate for the AWG output in samples per second.
-    burst count: Number of times to repeat the waveform sequence in a single trigger.
-    waveform output channels: Channels on the AWG that will be used for outputting waveforms.
-    waveform output channel lags: Timing lags for each output channel to synchronize them.
-    marked channels: DEPRECATED
-    marker width: Width of the marker pulse in us. TODO switch to samples.
 
     waveforms:
     A list of waveform configurations, each containing:
@@ -306,16 +308,16 @@ class AwgConfiguration:
 
     def __init__(
         self,
-        waveform_sequence: tuple[tuple[int, ...], ...],
-        waveforms: tuple[Waveform, ...],
+        waveform_sequence: list[list[int]],
+        waveforms: dict[int, Waveform],
         sample_rate: float,
         burst_count: int,
         waveform_output_channels: tuple[int, ...],
-        marker_width_samps: Optional[int],
-        waveform_output_channel_lags: Optional[tuple[float, ...]] = None,
-        waveform_stitch_delays: Optional[tuple[tuple[Any, ...], ...]] = None,
-        interleave_waveforms: Optional[bool] = None,
-        marked_channels: Optional[tuple[int, ...]] = None,
+        marker_width_samps: int | None,
+        waveform_output_channel_lags: tuple[float, ...] | None = None,
+        waveform_stitch_delays: tuple[tuple[Any, ...], ...] | None = None,
+        interleave_waveforms: bool | None = None,
+        marked_channels: tuple[int, ...] | None = None,
     ):
 
         self._waveform_sequence = waveform_sequence
@@ -383,6 +385,15 @@ class AwgConfiguration:
     def _verify_marker_width(marker_width_samps: int) -> bool:
         """Ensures the marker width in samples is valid (even and greater than zero)."""
         return marker_width_samps > 0 and marker_width_samps % 2 == 0
+
+    def get_total_time(self) -> float:
+        """Calculates the total time of all waveforms in the sequence on the longest channel."""
+        channel_times = np.zeros(len(self.waveform_output_channels))
+        for i, channel in enumerate(self.waveform_output_channels):
+            channel_waveforms = [self.waveforms[idx] for idx in self.waveform_sequence[channel]]
+            channel_time = sum(wf.get_t_length(self.sample_rate) for wf in channel_waveforms)
+            channel_times[i] = channel_time
+        return max(channel_times) if channel_times else 0.0
 
 
 class ScopeConfiguration:
@@ -522,6 +533,9 @@ class MotFluoresceConfiguration(GenericConfiguration):
         awg_config_path: str | None = None,
         cam_dict: dict | None = None,
         sequence_config_path: str | None = None,
+        background_mode: bool = False,
+        background_iterations: int | None = None,
+        repump_channel: int | None = None,
     ):
         super().__init__(save_location, mot_reload, iterations)
 
@@ -529,6 +543,13 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.awg_config = awg_config
         self.awg_config_path = awg_config_path
         self.sequence_config_path = sequence_config_path
+        self.background_mode = background_mode
+        self.background_iterations = background_iterations
+
+        if repump_channel is not None:
+            self.repump_channel = repump_channel
+        else:
+            self.repump_channel = 20  # default channel for MOT repumping
 
         self.use_scope = scope_config is not None
         self.use_awg = awg_config is not None
@@ -582,7 +603,7 @@ class MotFluoresceConfigurationSweep:
     def __init__(
         self,
         base_config: MotFluoresceConfiguration,
-        base_sequence: Sequence,
+        base_sequence: DaqSequence,
         sweep_type: str,
         num_shots: int,
         sweep_params: dict[Any, Any],
@@ -602,7 +623,7 @@ class MotFluoresceConfigurationSweep:
         print(f"[DEBUG] time: {self.current_time}")
 
         self.configs: list[MotFluoresceConfiguration] = []
-        self.sequences: list[Sequence] = []
+        self.sequences: list[DaqSequence] = []
         print("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
@@ -637,7 +658,7 @@ class MotFluoresceConfigurationSweep:
     def from_config_reader(
         cls,
         experiment_config: MotFluoresceConfiguration,
-        sequence: Sequence,
+        sequence: DaqSequence,
         sweep_type: str,
         num_shots: int,
         sweep_params: dict[Any, Any],
@@ -662,7 +683,7 @@ class MotFluoresceConfigurationSweep:
         object and the associated Sequence object. These can then be used to run a single shot
         of the sweep.
         """
-        return iter(zip(self.configs, self.sequences))
+        return iter(zip(self.configs, self.sequences, strict=True))
 
     def __len__(self):
         return len(self.configs)
@@ -829,7 +850,7 @@ class MotFluoresceConfigurationSweep:
     ) -> AwgConfiguration:
         new_config = deepcopy(base_config)
 
-        for idx, wf in enumerate(new_config.waveforms):
+        for idx, wf in new_config.waveforms.items():
             if idx in waveform_csvs:
                 wf.fname = waveform_csvs[idx]
             if idx in mod_freqs:
@@ -878,7 +899,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
         super().__init__(save_location, mot_reload, iterations)
 
         self._waveform_sequence = waveform_sequence
-        self.waveforms: tuple[Waveform, ...] = waveforms
+        self.waveforms: dict[int, Waveform] = waveforms
         self.interleave_waveforms: bool = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 

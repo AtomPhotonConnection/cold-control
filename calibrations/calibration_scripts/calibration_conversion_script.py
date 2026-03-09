@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from classes.config_readers import ConfigReader, DaqReader
-from classes.DAQ import DAQChannel
+from classes.daq import DAQChannel
 
 config_reader = ConfigReader(Path.cwd() / "configs" / "rootConfig.ini")
 daq_config_fname = (

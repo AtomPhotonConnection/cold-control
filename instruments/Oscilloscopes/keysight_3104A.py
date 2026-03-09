@@ -300,6 +300,28 @@ class OscilloscopeManager:
         else:
             raise ValueError(f"Invalid value for trigger_slope: {trigger_slope}")
 
+    def configure_from_config(self, scope_config, trigger_slope="+"):
+        """Configure the scope from a :class:`ScopeConfiguration` object.
+
+        This is a convenience wrapper that calls :meth:`configure_scope` and
+        :meth:`configure_trigger` using the parameters stored in *scope_config*.
+
+        Args:
+            scope_config: A ``ScopeConfiguration`` instance (from
+                ``classes.experimental_configs``).
+            trigger_slope: Trigger edge direction, ``"+"`` (default) or ``"-"``.
+        """
+        self.configure_scope(
+            scope_config.data_channels,
+            samp_rate=scope_config.sample_rate,
+            timebase_range=scope_config.time_range,
+        )
+        self.configure_trigger(
+            scope_config.trigger_channel,
+            scope_config.trigger_level,
+            trigger_slope,
+        )
+
     # def set_to_digitize(self, channels=(1, 2)):
     #     """
     #     Function to set the scope to digitize mode. This is the primary way to collect

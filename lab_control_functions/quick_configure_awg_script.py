@@ -11,42 +11,50 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-_waveforms = [
-    Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", 74e6, [(0, 0)]),
-    Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", 55e6, [(0, 0)]),
-    Waveform(r"waveforms\marina\zeros\zero_1000.csv", 0, [(0, 0)]),
-    Waveform(r"waveforms\pulse_shaping_exp\stirap\standard_200ns_pump.csv", 61e6, [(0, 0)]),
-    Waveform(r"waveforms\pulse_shaping_exp\stirap\standard_200ns_stokes.csv", 80e6, [(0, 0)]),
-]
+_waveforms = {
+    0: Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=74e6),
+    1: Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=55e6),
+    2: Waveform(r"waveforms\marina\zeros\zero_1000.csv", modulated=False, mod_frequency=0),
+    3: Waveform(
+        r"waveforms\pulse_shaping_exp\stirap\standard_200ns_pump.csv",
+        modulated=True,
+        mod_frequency=61e6,
+    ),
+    4: Waveform(
+        r"waveforms\pulse_shaping_exp\stirap\standard_200ns_stokes.csv",
+        modulated=True,
+        mod_frequency=80e6,
+    ),
+}
 
 awg_config = AwgConfiguration(
     waveform_sequence=[[2, 3], [0, 4], [1]],
     waveforms=_waveforms,
     sample_rate=1.25e9,
     burst_count=1,
-    waveform_output_channels=[1, 2, 3],
-    waveform_output_channel_lags=[0.0, 0.0, 0.0],
-    marker_width=1e-9,
+    waveform_output_channels=(1, 2, 3),
+    waveform_output_channel_lags=(0.0, 0.0, 0.0),
+    marker_width_samps=2,
 )
 
 awg_config_simple = AwgConfiguration(
     waveform_sequence=[[0]],
-    waveforms=[_waveforms[0]],
+    waveforms={0: _waveforms[0]},
     sample_rate=1.25e9,
     burst_count=1,
-    waveform_output_channels=[1],
-    waveform_output_channel_lags=[0.0],
-    marker_width=1e-9,
+    waveform_output_channels=(1,),
+    waveform_output_channel_lags=(0.0,),
+    marker_width_samps=2,
 )
 
 awg_config_justch3 = AwgConfiguration(
     waveform_sequence=[[0]],
-    waveforms=[_waveforms[0]],
+    waveforms={0: _waveforms[0]},
     sample_rate=1.25e9,
     burst_count=1,
-    waveform_output_channels=[3],
-    waveform_output_channel_lags=[0.0],
-    marker_width=1e-9,
+    waveform_output_channels=(3,),
+    waveform_output_channel_lags=(0.0,),
+    marker_width_samps=2,
 )
 
 

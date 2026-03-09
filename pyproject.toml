@@ -1,10 +1,13 @@
 [project]
 name = "cold-control"
 version = "0.1.0"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py312"
 line-length = 100
 fix = true
 
@@ -24,14 +27,45 @@ select = [
 
 ignore = [
     "E501",  # Line too long (handled by formatter)
-    "UP007", # Allow Union for 3.9 compatibility
-    "UP045", # Allow Optional for 3.9 compatibility
 ]
 
 fixable = ["ALL"]
+
+allowed-confusables = ["σ", "π"]
+
+[tool.ruff.lint.per-file-ignores]
+"instruments/ThorlabsPM100/ThorlabsPM100.py" = ["N801", "N999"]
+
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
+
+[tool.pyright]
+include = ["."] 
+exclude = ["**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    "**/.*",
+    "**/dlls",
+    "**/icons",
+    "**/labbook",
+    "**/measurements",
+    "**/temp"]
+
+venvPath = "C:\\Users\\kingm\\AppData\\Local\\miniforge3\\envs"
+venv = "cold-control"
+
+pythonVersion = "3.12"
+typeCheckingMode = "standard" # Options: "off", "basic", "standard", "strict"
+
+# Specific Rule Overrides
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+
+# Diagnostic settings to match your Ruff style
+reportUnusedImport = "warning"
+reportUnusedVariable = "warning"

@@ -1,6 +1,6 @@
-import os
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -34,10 +34,7 @@ def plot_averaged_shot(shot_folder: str, suffix="_averaged.csv", save=True):
             label="Individual Shots" if file == files[0] else None,
         )
 
-    if suffix == "_aligned.csv":
-        time_correction = 0.6e-3
-    else:
-        time_correction = 0.0
+    time_correction = 0.0006 if suffix == "_aligned.csv" else 0.0
 
     # Plot the averaged CSV
     if avg_file.exists():
@@ -60,19 +57,19 @@ def plot_averaged_shot(shot_folder: str, suffix="_averaged.csv", save=True):
     plt.close()
 
 
-def plot_experiment_summary(summary_path: str, save_path: Optional[str] = None):
+def plot_experiment_summary(summary_path: Path, save_path: Path | None = None):
     """
     Plot integrated_value vs shot number for each parameter folder.
 
     Parameters:
-        summary_path (str): Path to the experiment_summary.csv.
-        save_path (str): Path to save the plot image. If None, doesn't save.
+        summary_path (Path): Path to the experiment_summary.csv.
+        save_path (Path): Path to save the plot image. If None, doesn't save.
     """
     df = pd.read_csv(summary_path)
     df["shot_number"] = df["shot_folder"].str.extract(r"(\d+)").astype(int)
 
     plt.figure(figsize=(12, 6))
-    sns.set(style="whitegrid")
+    sns.set_theme(style="whitegrid")
 
     grouped = df.groupby("parameter_folder")
 
@@ -136,20 +133,20 @@ if __name__ == "__main__":
             break
         if Path(user_input).is_dir():
             root = Path(user_input)
-            summary_csv_averaged = os.path.join(root, "experiment_summary_averaged.csv")
-            summary_csv_aligned = os.path.join(root, "experiment_summary_aligned.csv")
+            summary_csv_averaged = root / "experiment_summary_averaged.csv"
+            summary_csv_aligned = root / "experiment_summary_aligned.csv"
 
             # Plot experiment summary
             print(f"Plotting summaries for {root}...")
             try:
                 plot_experiment_summary(
-                    summary_csv_averaged, save_path=os.path.join(root, "summary_plot_averaged.png")
+                    summary_csv_averaged, save_path=root / "summary_plot_averaged.png"
                 )
             except Exception as e:
                 print(f"Failed to plot averaged summary: {e}")
             try:
                 plot_experiment_summary(
-                    summary_csv_aligned, save_path=os.path.join(root, "summary_plot_aligned.png")
+                    summary_csv_aligned, save_path=root / "summary_plot_aligned.png"
                 )
             except Exception as e:
                 print(f"Failed to plot aligned summary: {e}")

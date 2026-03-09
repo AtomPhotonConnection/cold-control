@@ -4,8 +4,10 @@ Helper functions for the calibration functions.
 @author: Matt King
 """
 
-import os
-from typing import Optional, cast
+from __future__ import annotations
+
+from pathlib import Path
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,21 +15,17 @@ import pandas as pd
 import pyvisa as visa
 from pyvisa.resources import MessageBasedResource
 
+from classes.experimental_configs import Waveform
 from instruments.ThorlabsPM100 import ThorlabsPM100
 
-"""
-Load required classes for awg driven AOM calibration
-"""
-from classes.experimental_configs import Waveform
 
-
-class CalibrationException(Exception):
+class CalibrationError(Exception):
     def __init__(self, message):
         # Call the base class constructor with the parameters it needs
         super().__init__(message)
 
 
-class testWaveform(Waveform):
+class TestWaveform(Waveform):
     """
     Subclass of waveform to enable us to easily generate rf signals of different amplitudes.
     Level is in (0,1) - it corresponds to the (-1,1) range that waveforms loaded into the
@@ -53,7 +51,7 @@ class testWaveform(Waveform):
         self.mod_frequency = mod_freq
 
 
-def getCalibName(aom_name, freq):
+def get_calib_name(aom_name, freq):
     return f"{aom_name}_amp_at_{freq}MHz"
 
 
@@ -62,7 +60,10 @@ def default_v_step():
     Returns the smallest resolvable voltage step a 4096 bit digital output corresponding to -10 to 10V can make.
     i.e. the voltage resolution of the DAQ-2502 cards.
     """
-    f = lambda x: np.interp(x, (0, 4095), (-10, 10))
+
+    def f(x):
+        return np.interp(x, (0, 4095), (-10, 10))
+
     return f(1) - f(0)
 
 
@@ -78,7 +79,7 @@ def get_power_meter(debug_mode=False):
     rm = visa.ResourceManager()
     all_res = rm.list_resources()
     power_meter = None
-    inst: Optional[MessageBasedResource] = None
+    inst: MessageBasedResource | None = None
     # the VISA addresses of the 3 thorlabs powermeters we have are in the list below:
     pm_addresses = [
         "USB0::0x1313::0x8079::P1002563::0::INSTR",
@@ -107,12 +108,12 @@ def get_power_meter(debug_mode=False):
 
     if power_meter is None:
         print("Calibration failed - power meter could not be found")
-        raise CalibrationException("Calibration failed - power meter could not be found")
+        raise CalibrationError("Calibration failed - power meter could not be found")
 
     return inst, power_meter
 
 
-def configure_power_meter(power_meter: ThorlabsPM100, nMeasurmentCounts=1):
+def configure_power_meter(power_meter: ThorlabsPM100, n_measurement_counts=1):
     """Configures the power meter, see https://pypi.python.org/pypi/ThorlabsPM100 for full details for a full list of commands.
     Most options are hard coded as I don't see any need to change them right now.
 
@@ -121,34 +122,33 @@ def configure_power_meter(power_meter: ThorlabsPM100, nMeasurmentCounts=1):
                              (note 1 measurement is about 3ms).
 
     """
-    power_meter.sense.correction.wavelength = 780
-    power_meter.sense.power.dc.range.auto = "ON"
-    power_meter.sense.power.dc.unit = "W"
-    power_meter.sense.average.count = nMeasurmentCounts
+    power_meter.sense.correction.wavelength = 780  # pyright: ignore[reportAttributeAccessIssue]
+    power_meter.sense.power.dc.range.auto = "ON"  # pyright: ignore[reportAttributeAccessIssue]
+    power_meter.sense.power.dc.unit = "W"  # pyright: ignore[reportAttributeAccessIssue]
+    power_meter.sense.average.count = n_measurement_counts  # pyright: ignore[reportAttributeAccessIssue]
 
 
-def create_file_txt(fname, levelData, parsedData, units):
+def create_file_txt(fname, level_data, parsed_data, units):
     """
     Saves a .txt file containing the voltage levels and the calibration data. DEPRECATED.
     """
-    fname = f"{fname}.txt"
+    fname = Path(fname).with_suffix(".txt")
 
-    f = open(fname, "a")
     print("created: ", fname)
-    lineArgs = [("V", units)]
-    lineArgs += zip(levelData, parsedData)
-    for args in lineArgs:
-        f.write("{0}\t{1}\n".format(*args))
-    f.close()
+    line_args = [("V", units)]
+    line_args += zip(level_data, parsed_data, strict=True)
+    with fname.open("a") as f:
+        for args in line_args:
+            f.write("{}\t{}\n".format(*args))
     print("written: ", fname)
 
 
-def create_file(fname, levelData, parsedData, calib_units, level_units="Voltage (V)"):
+def create_file(fname: str | Path, level_data, parsed_data, calib_units, level_units="Voltage (V)"):
     """
     Saves data to a CSV file using pandas.
 
     Args:
-        fname (str): The base filename for the output file.
+        fname (str | Path): The base filename for the output file (without extension).
         levelData (list): A list of voltage levels.
         parsedData (list): A list of corresponding calibration data.
         calib_units (str): The units of the calibration levels (e.g., "W", "uW").
@@ -156,29 +156,31 @@ def create_file(fname, levelData, parsedData, calib_units, level_units="Voltage 
     Returns:
         None
     """
+    fname = Path(fname)
+
     if level_units == "Voltage (V)":
         df = pd.DataFrame(
-            {"Voltage (V)": levelData, f"Calibration Data ({calib_units})": parsedData}
+            {"Voltage (V)": level_data, f"Calibration Data ({calib_units})": parsed_data}
         )
     else:
         df = pd.DataFrame(
-            {f"{level_units}": levelData, f"Calibration Data ({calib_units})": parsedData}
+            {f"{level_units}": level_data, f"Calibration Data ({calib_units})": parsed_data}
         )
 
-    # Get the directory path from the filename
-    directory = os.path.dirname(fname)
+    # Create directory if it doesn't exist
+    fname.parent.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)  # Create directory if it doesn't exist
-
-    df.to_csv(f"{fname}.csv", index=False)
-    print(f"created: {fname}.csv")
+    out_path = fname.with_suffix(".csv")
+    df.to_csv(out_path, index=False)
+    print(f"created: {out_path}")
 
 
-def save_plot(fname, vData, calData, units, title, level_units="Voltage (V)"):
+def save_plot(fname: str | Path, v_data, cal_data, units, title, level_units="Voltage (V)"):
     """
     Saves a plot of voltage against calibration data.
     """
+    fname = Path(fname)
+
     fig = plt.figure()
 
     ax = fig.add_subplot(111)
@@ -189,13 +191,10 @@ def save_plot(fname, vData, calData, units, title, level_units="Voltage (V)"):
     ax.set_ylabel(f"Calibration data ({units})")
     # ax.set_ylabel("test")
 
-    ax.plot(vData, calData)
+    ax.plot(v_data, cal_data)
 
-    # Get the directory path from the filename
-    directory = os.path.dirname(fname)
-
-    if not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)  # Create directory if it doesn't exist
+    # Create directory if it doesn't exist
+    fname.parent.mkdir(parents=True, exist_ok=True)
 
     plt.savefig(fname)
     print("saved img: ", fname)

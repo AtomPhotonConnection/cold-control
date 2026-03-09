@@ -1,0 +1,67 @@
+"""
+A wrapper class for using a TF930 frequency counter
+via a serial port.
+
+Created on 7 May 2016
+
+@author: Tom Barrett
+"""
+
+import re
+import time
+
+import serial
+
+
+class TF930(serial.Serial):
+    def __init__(self, port="COM5", timeout=3, **kwargs):
+
+        print(f"Opening serial connection to TF930 on port {port}...")
+        serial.Serial.__init__(
+            self,
+            port=port,
+            baudrate=115200,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            bytesize=serial.EIGHTBITS,
+            timeout=timeout,
+        )
+        print("...connection {}".format("successful" if self.is_open else "failed"))
+
+    def query_frequency(self, read_delay=0.5):
+
+        output = self.query("N?", delay=read_delay)
+        # Parse the output, once for units and once for values
+        r = r"([\d|\.|e|\+]+)([a-zA-Z]*)\r\n"
+
+        match = re.match(r, output)
+        if not match:
+            return "N/A", "N/A"
+
+        freq, units = float(match.group(1)), match.group(2)
+
+        # Just a hack to convert Hz to MHz as it's nicer.
+        if units == "Hz":
+            freq = freq / 10**6
+            units = "MHz"
+
+        return freq, units
+
+    def write(self, string: str) -> int:  # type: ignore[override]
+        return serial.Serial.write(self, (string + "\n").encode("ascii"))  # type: ignore[return-value]
+
+    def read(self, size: int = 1) -> str:  # type: ignore[override]
+        out = b""
+        while self.in_waiting > 0:
+            out += serial.Serial.read(self, size=size)
+        return out.decode("ascii")
+
+    def query(self, string, delay: float = 1.0):
+        """Write a query and return the result after a designated delay (1s by default)."""
+        self.write(string)
+        time.sleep(delay)
+        return self.read()
+
+    def close(self):
+        serial.Serial.close(self)
+        print("Serial connection to TF930 closed")

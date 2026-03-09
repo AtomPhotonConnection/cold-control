@@ -6,16 +6,14 @@ Compensates for flip mirror if using_flip_mirror is set to True.
 @author: marina llano, Jan Ole Ernst, Matt King
 """
 
-import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.constants import c, epsilon_0, hbar
 
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-)  # add parent directory to path
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))  # add parent directory to path
 
 
 import lab_control_functions.calibration_functions as calibrate
@@ -107,7 +105,7 @@ def default_calib(calib_tuples):
         target_power_d2 *= 10 ** (-3)  # to W
         print(f"Target Power for desired Rabi Freq: {target_power_d2 * 1e3} mW")
 
-        amplitude_cal, diff, results_dict = calibrate.finding_amplitude_from_power(
+        amplitude_cal, _, results_dict = calibrate.finding_amplitude_from_power(
             [freq * 10**6],  # convert MHz to Hz
             target_power_d2,
             channel,
@@ -130,7 +128,9 @@ def default_calib(calib_tuples):
         )
 
         df["rabi_measured_no_ang"] = df["power"].apply(
-            lambda p: laserpower_to_rabi(p * 1e3, d_d2, cg_d2_map[pulse], typical_waist_size)
+            lambda p, _cg=cg_d2_map[pulse], _ws=typical_waist_size: laserpower_to_rabi(
+                p * 1e3, d_d2, _cg, _ws
+            )
         ) / np.abs(cg_d2_map[pulse])
         df["target power"] = target_power_d2
         df["rabi_des_no_cg"] = np.abs(rabi_d2_map[pulse] / cg_d2_map[pulse])
@@ -142,11 +142,10 @@ def default_calib(calib_tuples):
         # today = datetime.datetime.now().strftime("%d-%m")
 
         # config_path_date = os.path.join(config_save_path, today)
-        full_folder_path = os.path.join(config_save_path, f"{freq:.0f}MHz")
-        if not os.path.exists(full_folder_path):
-            os.makedirs(full_folder_path)
+        full_folder_path = Path(config_save_path) / f"{freq:.0f}MHz"
+        full_folder_path.mkdir(parents=True, exist_ok=True)
 
-        output_file = os.path.join(full_folder_path, "rabi_data.csv")
+        output_file = str(full_folder_path / "rabi_data.csv")
         df.to_csv(output_file, index=False)
 
         print("Instantiating RabiFreqVoltageConverter...")
@@ -182,7 +181,6 @@ pulse = "pump"  # 'stokes', 'pump', 'P1', 'P2'
 channel = 1  # AWG channel
 amplitude = 0.2
 amplitude_cal = 0.00
-diff = 1
 results_dict = {}
 # Finding the voltage amplitude that corresponds to this power
 # awg_chan_freqs_map = {1: [126], 2: [80], 3: [62.35], 4: [82.5]}

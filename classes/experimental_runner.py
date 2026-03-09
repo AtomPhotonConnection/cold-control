@@ -15,6 +15,8 @@ from the GenericExperiment class.
 
 """
 
+from __future__ import annotations
+
 import _tkinter
 import collections.abc
 import copy
@@ -24,7 +26,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -38,30 +40,42 @@ try:
     import instruments.WX218x.awg_manager as awg_manager
 except (ImportError, ModuleNotFoundError):
     awg_manager = None  # type: ignore[assignment]
-from classes.DAQ import DAQChannel, DAQController
+from classes.daq import DAQChannel, DAQController
+from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
+    AwgConfiguration,
     ExperimentSessionConfig,
     GenericConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
     PhotonProductionConfiguration,
+    ScopeConfiguration,
     SingleExperimentConfig,
+    TdcConfiguration,
     Waveform,
 )
-from classes.Sequence import IntervalStyle, Sequence
+
+try:
+    import instruments.quTAU.tdc_manager as tdc_module
+except (ImportError, ModuleNotFoundError):
+    tdc_module = None  # type: ignore[assignment]
+
+from instruments.quTAU.tdc_enums import TdcDevTypeEnum, TdcSignalCondEnum
 
 if TYPE_CHECKING:
-    from instruments.pyicic.IC_Camera import IC_Camera
-    from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+    from instruments.pyicic.ic_camera import ICCamera
+    from instruments.pyicic.ic_imaging_control import ICImagingControl
 else:
     try:
-        from instruments.pyicic.IC_Camera import IC_Camera
-        from instruments.pyicic.IC_ImagingControl import IC_ImagingControl
+        from instruments.pyicic.ic_camera import ICCamera
+        from instruments.pyicic.ic_imaging_control import ICImagingControl
     except (OSError, FileNotFoundError, ImportError):
-        IC_Camera = None
-        IC_ImagingControl = None
-from instruments.pyicic.IC_Exception import IC_Exception
+        ICCamera = None
+        ICImagingControl = None
+import contextlib
+
+from instruments.pyicic.ic_exception import ICError
 
 
 def make_property(attr_name):
@@ -75,7 +89,7 @@ def make_property(attr_name):
 T = TypeVar("T", bound=GenericConfiguration)
 
 
-class GenericExperiment(Generic[T]):
+class GenericExperiment[T: GenericConfiguration]:
     """
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     """
@@ -83,7 +97,7 @@ class GenericExperiment(Generic[T]):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         configuration: T,
         development_mode: bool = False,
     ):
@@ -144,9 +158,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
-        ic_imaging_control: IC_ImagingControl,
+        ic_imaging_control: ICImagingControl,
     ):
         """
         Runs an absorbtion imaging experiment. Takes a number of parameters, namely:
@@ -163,7 +177,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         c: AbsorbtionImagingConfiguration = self.config
         self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
-        # Use the externally provided IC_ImagingControl instances if one is provided
+        # Use the externally provided ICImagingControl instances if one is provided
         if ic_imaging_control is not None:
             self.ic_ic = ic_imaging_control
             if not self.ic_ic.initialised:
@@ -171,7 +185,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.external_ic_ic_provided = True
         # Otherwise create and initialise one of our own, setting a flag so it is closed again later.
         else:
-            self.ic_ic = IC_ImagingControl()
+            self.ic_ic = ICImagingControl()
             self.ic_ic.init_library()
             self.external_ic_ic_provided = False
 
@@ -268,8 +282,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         Perform and configuration that has to occur before the experiment can be safely run.
         """
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
-        self.sequences: list[Sequence] = []
-        self.bkg_sequences: list[Sequence] = []
+        self.sequences: list[DaqSequence] = []
+        self.bkg_sequences: list[DaqSequence] = []
         assert isinstance(self.config, AbsorbtionImagingConfiguration)
         c: AbsorbtionImagingConfiguration = self.config
 
@@ -373,8 +387,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def __configure_camera(self):
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: IC_Camera
-        cam: IC_Camera
+        self.cam: ICCamera
+        cam: ICCamera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
         #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
@@ -404,8 +418,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         try:
             cam.wait_til_frame_ready(self.cam_frame_timeout)
             cam.get_image_data()
-        except IC_Exception as err:
-            print(f"Caught IC_Exception with error: {err.message}")
+        except ICError as err:
+            print(f"Caught ICError with error: {err.message}")
         cam.reset_frame_ready()
 
     def __take_images(self, save_raw_images):
@@ -414,7 +428,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         img_dir = None
         bkg_dir = None
 
-        for seq, bkg_seq, label in zip(self.sequences, self.bkg_sequences, self.sequence_labels):
+        for seq, bkg_seq, label in zip(
+            self.sequences, self.bkg_sequences, self.sequence_labels, strict=True
+        ):
             # Write the persistance values and wait for the MOT to reload
             self.daq_controller.load(seq.get_array())
             self.daq_controller.write_channel_values()
@@ -508,14 +524,16 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 "processing images by subtracting the image from the background and clipping to be between 0 and 255"
             )  # This was Tom's original method
             unscaled_corr_imgs = [
-                np.clip(np.round(bkg - img), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+                np.clip(np.round(bkg - img), 0, 255)
+                for img, bkg in zip(img_arrs, bkg_aves_float, strict=True)
             ]
         elif process_type == 2:
             print(
                 "processing images by subtracting the background from the image and clipping to be between 0 and 255"
             )
             unscaled_corr_imgs = [
-                np.clip(np.round(img - bkg), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+                np.clip(np.round(img - bkg), 0, 255)
+                for img, bkg in zip(img_arrs, bkg_aves_float, strict=True)
             ]
         elif process_type == 3:
             print("images aren't being processed.")
@@ -532,7 +550,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             save_location = Path(self.save_location)
             bkg_dir = save_location / "backgrounds"
             bkg_dir.mkdir(parents=True, exist_ok=True)
-            for img, bkg_img, label in zip(corr_images, bkg_aves, self.sequence_labels):
+            for img, bkg_img, label in zip(
+                corr_images, bkg_aves, self.sequence_labels, strict=True
+            ):
                 Image.fromarray(img).save(save_location / f"{label}.bmp", "bmp")
                 Image.fromarray(bkg_img).save(bkg_dir / f"{label}.bmp", "bmp")
             print("Processed images saved")
@@ -553,7 +573,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             print("No images to save.")
         elif self.corr_img_arrs is None:
             # this code runs when only a background experiment has been run
-            for bkg_img, label in zip(cast(list[Any], self.ave_bkg_arrs), self.sequence_labels):
+            for bkg_img, label in zip(
+                cast(list[Any], self.ave_bkg_arrs), self.sequence_labels, strict=True
+            ):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
                     bkg_img = (
@@ -562,7 +584,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
         else:
             for img, bkg_img, label in zip(
-                self.corr_img_arrs, cast(list[Any], self.ave_bkg_arrs), self.sequence_labels
+                self.corr_img_arrs,
+                cast(list[Any], self.ave_bkg_arrs),
+                self.sequence_labels,
+                strict=True,
             ):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
@@ -602,79 +627,63 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         super().daq_cards_off()
 
 
-r"""
-Needs to be reworked to use the new AWG manager.
-"""
-
-
 class PhotonProductionExperiment(GenericExperiment):
     def __init__(
-        self, daq_controller, sequence, photon_production_configuration, development_mode=False
+        self,
+        daq_controller: DAQController,
+        sequence: DaqSequence,
+        photon_production_configuration: PhotonProductionConfiguration,
+        development_mode: bool = False,
     ):
-        warnings.warn(
-            "PhotonProductionExperiment is deprecated; use MotFluoresceExperiment instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.forced_stop = False
-        self.data_saver: PhotonProductionDataSaver
-        self.iterations = 0
-        self.mot_reload_time = 0
-        self.waveform_length = 0
-        self.configure_data_queue = lambda x: x
-        self.is_live = False
-        self.set_iterations = lambda x: x
-        self.set_mot_reload_time = lambda x: x
-        pass
-
-
-r"""
-
-    def __init__(self, daq_controller:DAQ_controller, sequence:Sequence, photon_production_configuration:PhotonProductionConfiguration):
         super().__init__(daq_controller, sequence, photon_production_configuration)
         # the configuration object is a PhotonProductionConfiguration object and called self.config
-        self.photon_production_config:PhotonProductionConfiguration = self.config
-        self.tdc_config = self.photon_production_config.tdc_configuration
-        self.awg_config = self.photon_production_config.awg_configuration
+        self.photon_production_cfg: PhotonProductionConfiguration = self.config
+        self.tdc_config: TdcConfiguration = self.photon_production_cfg.tdc_configuration
+        self.awg_config: AwgConfiguration = self.photon_production_cfg.awg_configuration
+        self.development_mode = development_mode
 
-        c = self.config
-
-        self.iterations = c.iterations
-        self.mot_reload_time = c.mot_reload# in ms
-        print('MOT reload time (ms)', self.mot_reload_time)
-        self.is_live = False # Experiment is not running yet
-        self.forced_stop = False # Flag for if the experiment is forcibly stopped early.
-        self.data_queue = None # Queue to push data into
+        self.iterations = self.photon_production_cfg.iterations
+        self.mot_reload_time = self.photon_production_cfg.mot_reload  # in ms
+        print("MOT reload time (ms)", self.mot_reload_time)
+        self.is_live = False  # Experiment is not running yet
+        self.forced_stop = False  # Flag for if the experiment is forcibly stopped early.
+        self.data_queue = None  # Queue to push data into
 
     def configure(self):
         super().daq_cards_on()
-        self.daq_controller.load(self.sequence.getArray())
+        self.daq_controller.load(self.sequence.get_array())
         # Configure the awg and record the length of the waveform loaded onto it (in seconds)
-        self.awg, self.waveform_length = self.__configure_awg()
+        self.awg = self.__configure_awg()
         self.tdc = self.__configure_tdc()
-#         try:
-#             self.counter = TF930.TF930(port='COM5')
-#         except SerialException:
-#             print 'Cannot find counter. Ignoring and carrying on.'
-#             self.counter = None
+        #         try:
+        #             self.counter = tf930_manager.TF930(port='COM5')
+        #         except SerialException:
+        #             print 'Cannot find counter. Ignoring and carrying on.'
+        #             self.counter = None
         self.counter = None
         # Get tdc timebase in ps - do i once now, rather than every time we poll
         # the tdc for data (just for performance reasons).
-        self.tdc_timebase = self.tdc.get_timebase()*10**12
-        self.data_saver = PhotonProductionDataSaver(self.tdc_timebase,
-                                                    self.tdc_config.marker_channel,
-                                                    self.photon_production_config.save_location,
-                                                    data_queue = self.data_queue,
-                                                    create_log=False)
+        self.tdc_timebase = self.tdc.get_timebase() * 10**12
+        self.data_saver = PhotonProductionDataSaver(
+            self.tdc_timebase,
+            self.tdc_config.marker_channel,
+            self.photon_production_cfg.save_location,
+            data_queue=self.data_queue,
+            create_log=False,
+        )
 
     def configure_data_queue(self, data_queue):
         self.data_queue = data_queue
-        try:
+        with contextlib.suppress(AttributeError):
             self.data_saver.data_queue = self.data_queue
-        except AttributeError:
-            pass
 
     def run(self):
+        if self.development_mode:
+            print("This experiment is not currently set up to be run in development mode.")
+            raise NotImplementedError(
+                "This experiment is not currently set up to be run in development mode."
+            )
+        self.configure()
         self.tdc.enable_tdc_input(True)
         self.tdc.freeze_buffers(True)
         self.tdc.clear_buffer()
@@ -683,370 +692,105 @@ r"""
         self.is_live = True
         i = 1
         tdc_read_thread = None
-        self.daq_controller.load(self.sequence.getArray())
+        self.daq_controller.load(self.sequence.get_array())
 
         while i <= self.iterations and self.is_live:
-            print('iter: {0}'.format(i))
+            print(f"iter: {i}")
 
-            sleep(self.mot_reload_time*10**-3) # convert from ms to s
+            sleep(self.mot_reload_time * 10**-3)  # convert from ms to s
 
-            if tdc_read_thread: tdc_read_thread.join(timeout=5000)
-#             self.daq_controller.load(self.sequence.getArray()) # TODO: can we load only once at start?
-            print('unfreeze')
+            if tdc_read_thread:
+                tdc_read_thread.join(timeout=5000)
+                #             self.daq_controller.load(self.sequence.getArray()) # TODO: can we load only once at start?
+            print("unfreeze")
             self.tdc.freeze_buffers(False)
-#             sleep(1)
-            print('play')
+            #             sleep(1)
+            print("play")
             self.daq_controller.play(float(self.sequence.t_step), clear_cards=False)
-            print('freeze')
-            tdc_read_thread = threading.Thread(name='PhotonProductionExperiment_read TDC buffer and start save thread',
-                                  target=self.__save_throw_data,
-                                  args=(i,))
+            print("freeze")
+            tdc_read_thread = threading.Thread(
+                name="PhotonProductionExperiment_read TDC buffer and start save thread",
+                target=self.__save_throw_data,
+                args=(i,),
+            )
             tdc_read_thread.start()
-#             self.__save_throw_data(throw_number=i)
-#
-#             if (i%100 == 0 or i==1)  and self.counter != None:
-#                 self.data_saver.log_in_thread(['Repump offset VCO is at ', self.counter.query_frequency],
-#                                               throw_number=i)
+            #             self.__save_throw_data(throw_number=i)
+            #
+            #             if (i%100 == 0 or i==1)  and self.counter != None:
+            #                 self.data_saver.log_in_thread(['Repump offset VCO is at ', self.counter.query_frequency],
+            #                                               throw_number=i)
 
-            self.daq_controller.writeChannelValues()
+            self.daq_controller.write_channel_values()
 
-            i+=1
+            i += 1
 
         self.daq_controller.clear_cards()
         self.is_live = False
-        if tdc_read_thread: tdc_read_thread.join(timeout=5000)
+        if tdc_read_thread:
+            tdc_read_thread.join(timeout=5000)
         self.tdc.enable_tdc_input(False)
 
-
-
     def close(self):
-        print("Closing connection to AWG..."),
-        self.awg.disable_channel(Channel.CHANNEL_1)
-        self.awg.disable_channel(Channel.CHANNEL_2)
-        self.awg.disable_channel(Channel.CHANNEL_3)
-        self.awg.disable_channel(Channel.CHANNEL_4)
+        print("Closing connection to AWG...")
         self.awg.close()
         print("...closed")
 
-        print("Closing connection to TDC...",
-        self.tdc.close())
+        print("Closing connection to TDC...", self.tdc.close())
         print("...closed")
 
-        if self.counter!=None:
-            print('Closing connection to TF930')
+        if self.counter is not None:
+            print("Closing connection to TF930")
             self.counter.close()
 
         super().daq_cards_off()
 
-        print('Consolidating experimental data...',
-        self.data_saver.combine_saves())
-        print('done.')
+        print("Consolidating experimental data...", self.data_saver.combine_saves())
+        print("done.")
 
     def __save_throw_data(self, throw_number):
-        t=time.time()
-        sleep( 200*10**-3 )
+        t = time.time()
+        sleep(200 * 10**-3)
         self.tdc.freeze_buffers(True)
-        print('reading tdc')
-        timestamps, channels, valid =  self.tdc.get_timestamps(True)
-        print('throw {0}: counts on tdc={1}, tdc read time={2}ms'.format(throw_number,valid,(time.time()-t)*10**3))
+        print("reading tdc")
+        timestamps, channels, valid = self.tdc.get_timestamps(True)
+        print(
+            f"throw {throw_number}: counts on tdc={valid}, tdc read time={(time.time() - t) * 10**3}ms"
+        )
 
         self.data_saver.save_in_thread(timestamps, channels, valid, throw_number)
-#         save_thread.join(timeout=5000)
-#         fname = r'C:/Users/apc/Desktop/test/'
-#         f = open(os.path.join(fname, '{0}.txt'.format(throw_number)), 'w')
-#         print 'writing to:', os.path.join(fname, '/{0}.txt'.format(throw_number))
-#         for line in zip(timestamps[:valid], channels[:valid]):
-#             f.write('{0},{1}\n'.format(*line))
-#         f.close()
 
-
-
+    #         save_thread.join(timeout=5000)
+    #         fname = r'C:/Users/apc/Desktop/test/'
+    #         f = open(os.path.join(fname, '{0}.txt'.format(throw_number)), 'w')
+    #         print 'writing to:', os.path.join(fname, '/{0}.txt'.format(throw_number))
+    #         for line in zip(timestamps[:valid], channels[:valid]):
+    #             f.write('{0},{1}\n'.format(*line))
+    #         f.close()
 
     def __configure_awg(self):
-        print('Connecting to AWG...')
-        awg = WX218x_awg()
-        awg.open(reset=False)
-        print('...connected')
-        awg.clear_arbitrary_sequence()
-        awg.clear_arbitrary_waveform()
-        awg.configure_sample_rate(self.awg_config.sample_rate)
+        print("Connecting to AWG...")
 
-        awg_chs = self.awg_config.waveform_output_channels
+        awg = awg_manager.AWGManager()  # type: ignore
+        print("...connected")
 
-        awg.configure_output_mode(WX218x_OutputMode.ARBITRARY)
-        awg.configure_couple_enabled(True)
+        awg.upload_and_arm(self.awg_config)
 
-        for ch in [awg_chs[x] for x in range(len(awg_chs)) if x%2==0]:
-            print('Configuring trigger options for', ch)
-            awg.configure_burst_count(ch, self.awg_config.burst_count)
-            awg.configure_operation_mode(ch, WX218x_OperationMode.TRIGGER)
-            time.sleep(1)
-            awg.configure_trigger_source(ch, WX218x_TriggerMode.EXTERNAL)
-            awg.configure_trigger_level(ch, 2)
-            awg.configure_trigger_slope(ch, WX218x_TriggerSlope.POSITIVE)
-
-
-        channel_absolute_offsets = [np.rint(x*10**-6 * self.awg_config.sample_rate) for x in self.awg_config.waveform_output_channel_lags]
-        channel_relative_offsets = list(map(lambda x, m=max(channel_absolute_offsets): int(m-x), channel_absolute_offsets))
-        print("Channel relative lags (in awg steps are)", channel_relative_offsets)
-        print("Channel absolute offsets (in awg steps are)", channel_absolute_offsets)
-
-        marker_levs, marker_waveform_levs = (0,1.2), (0,1)
-        marker_wid  = int(self.awg_config.marker_width*10**-6 * self.awg_config.sample_rate)
-
-        def get_waveform_calib_fnc(calib_fname, max_eff=0.9):
-            calib_data = np.genfromtxt(calib_fname,skip_header=1)
-            calib_data[:,1] /= 100. # convert % as saved to decimal efficiencies
-            calib_data = calib_data[(calib_data[:,1]<=max_eff)] # remove all elements with greater than the maximum efficiency
-            calib_data[:,1] /= max(calib_data[:,1]) # rescale effiencies
-
-            return lambda x: np.interp(np.abs(x),
-                                        calib_data[:,1],
-                                        calib_data[:,0])
-
-        #this takes the array of waveform information and channel based waveform sequencing and returns the waveforms in the order they are to be played
-        seq_waveforms = [[self.photon_production_config.waveforms[i] for i in ch_waveforms]
-                        for ch_waveforms in self.photon_production_config.waveform_sequence]
-
-        print('seq_waveforms={}', seq_waveforms)
-
-        queud_markers = []
-
-        seq_waveform_data, seq_marker_data = [[] for _ in range(len(awg_chs))], []
-
-        # Note we deep copy the config stitch delays so that updating them below doesn't change the configuration settings.
-        seq_waveforms_stitch_delays = copy.deepcopy(self.photon_production_config.waveform_stitch_delays)
-
-        if self.photon_production_config.interleave_waveforms:
-#             '''Add a delay to the front of the i-th channel to wait for the 0,1...,i-1 channels
-#             first waveforms to finish'''
-#             for i in range(1, len(seq_waveform_data)):
-#                 seq_waveform_data[i] += [0]*(len(seq_waveform_data[i-1]) + seq_waveforms[i-1][0].get_n_samples())
-#
-#             '''For other channels/waveforms, add the length of the interleaved waveform from
-#             the opposite channel to the stich delay'''
-#             for i in range(0, len(seq_waveforms)):
-#                 for j in range(0, len(seq_waveforms[i])):
-#                     for k in [l for l in range(len(seq_waveforms)) if l!=i]:
-#                         if j!=len(seq_waveforms[i])-1 or k>i:
-# #                             print i,j,k
-#                             seq_waveforms_stitch_delays[i][j] += seq_waveforms[k][j].get_n_samples()
-#
-            #TODO this needs updating
-            interleave_channels = [(0,1),(0,2)]
-
-            def get_j_segments_max_length(seq_waveforms, channels, j, seq_stitch_delays=None):
-                waveform_lengths = []
-                if seq_stitch_delays==None:
-                    seq_stitch_delays = np.zeros(np.array(seq_waveforms).shape).tolist()
-                for ch in channels:
-                    try:
-                        waveform_lengths.append(seq_waveforms[ch][j].get_n_samples() + seq_stitch_delays[ch][j])
-                    except IndexError:
-                        pass
-                print(waveform_lengths)
-                return int(max(waveform_lengths)) if waveform_lengths != [] else 0
-
-            for i in range(len(seq_waveforms)):
-                woven_channels = sorted([k for pair in [x for x in interleave_channels if i in x] for k in pair if k!=i])
-                bck_woven_channels = [k for k in woven_channels if k<i]
-                fwd_woven_channels = [k for k in woven_channels if k>i]
-                for j in range(0, len(seq_waveforms[i])):
-                    if j==0:
-                        max_bck_waveforms = get_j_segments_max_length(seq_waveforms, bck_woven_channels, j)
-                        print('Pre-padding channel{0}(seg{1}) with {2}'.format(i+1, j, max_bck_waveforms))
-                        seq_waveform_data[i] += [0]*max_bck_waveforms
-
-                    max_bck_waveforms = get_j_segments_max_length(seq_waveforms, bck_woven_channels, j+1)
-                    max_fwd_waveforms = get_j_segments_max_length(seq_waveforms, fwd_woven_channels, j, seq_waveforms_stitch_delays)
-
-                    print('Post-padding channel{0}(seg{1}) with max({2},{3})'.format(i+1,j,max_bck_waveforms,max_fwd_waveforms))
-                    seq_waveforms_stitch_delays[i][j] += max(max_bck_waveforms,max_fwd_waveforms)#
-
-                    '''CURRENT ISSUE IS IF THE DELAY IN A BACK WAVEFORM TAKES THE PREVIOUS J-SEGMENT [AST THE START OF THE CURRENT
-                    TARGET WAVEFORM/SEGMENT.'''
-
-        j = 0
-        for channel, waveform_data, waveforms, delays, channel_abs_offset in zip(awg_chs, seq_waveform_data, seq_waveforms, seq_waveforms_stitch_delays, channel_absolute_offsets):
-
-            waveform_aom_calibs = {}
-            aom_calibration_loc = self.awg_config.waveform_aom_calibrations_locations[j]
-            print('For {0} using aom calibrations in {1}'.format(channel, os.path.join(aom_calibration_loc, '*MHz.txt')))
-            for filename in glob.glob(os.path.join(aom_calibration_loc, '*MHz.txt')):
-                try:
-                    match = re.match(r'\d+\.*\d*', os.path.split(filename)[1])
-                    if match:
-                        waveform_aom_calibs[float(match.group(0))] = get_waveform_calib_fnc(filename)
-                except (AttributeError, ValueError):
-                    pass
-
-            marker_data = []
-
-            print('Writing onto channel:', channel)
-
-            for waveform, delay in zip(waveforms, delays):
-
-                if not waveform_aom_calibs:
-                    calib_fun = lambda x: x
-                else:
-                    calib_fun = waveform_aom_calibs[min(waveform_aom_calibs,
-                                                        key=lambda calib_freq: np.abs(calib_freq - waveform.get_mod_frequency()*10**-6))]
-                    print('\tFor waveform with freq {0}MHz, using calib for {1}MHz'.format(waveform.get_mod_frequency()*10**-6,
-                                                                                         min(waveform_aom_calibs, key=lambda calib_freq: np.abs(calib_freq - waveform.get_mod_frequency()*10**-6))))
-
-                seg_length = waveform.get_n_samples() + delay
-                marker_pos = []
-#                 for i in range(len(queud_markers)):
-#                     print i, queud_markers
-#                     if queud_markers[i] < seg_length:
-#                         marker_pos.append(queud_markers.pop(i))
-                i=0
-                while i < len(queud_markers):
-                    print(i, queud_markers)
-                    if queud_markers[i] < seg_length:
-                        marker_pos.append(queud_markers.pop(i))
-                        i-=1
-                    i+=1
-                if channel_abs_offset <= seg_length:
-                    marker_pos.append(channel_abs_offset)
-                else:
-                    queud_markers.append(channel_abs_offset)
-
-                print('\tWriting markers at', marker_pos)
-                print('\tWriting waveform {0} with stitch delay {1}'.format(os.path.split(waveform.fname)[1], delay))
-                waveform_data += [calib_fun(x) for x in waveform.get(sample_rate=self.awg_config.sample_rate)] + [0]*delay
-                marker_data   += waveform.get_marker_data(marker_positions=marker_pos, marker_levels=marker_waveform_levs, marker_width=marker_wid, n_pad_right=delay)
-    #             marker_data   += waveform.get(sample_rate=self.awg_config.sample_rate) + [0]*delay
-                queud_markers = [x-seg_length for x in queud_markers]
-
-            '''
-            Wrap any makers still queued into the first waveforms markers (presuming we are looping through this sequence multiple times).
-            '''
-            if queud_markers != []:
-                marker_index = 0
-                for waveform, delay in zip(waveforms, delays):
-                    seg_length = waveform.get_n_samples() + delay
-    #             queud_markers = [x-(waveforms[-1].get_n_samples()+self.photon_production_config.waveform_stitch_delays[-1]) for x in queud_markers]
-                    if len([x for x in queud_markers if x>=0])>0:
-                        print('\tStill in queue:', [x for x in queud_markers if x>=0])
-                        markers_in_waveform = [x for x in queud_markers if marker_index <= x <= marker_index+seg_length]
-                        print('\tCan wrap from queue:',markers_in_waveform)
-                        wrapped_marker_data = waveform.get_marker_data(marker_positions=markers_in_waveform,
-                                                                       marker_levels=marker_waveform_levs,
-                                                                       marker_width=marker_wid,
-                                                                       n_pad_right=delay)
-                        marker_data[marker_index:marker_index+len(wrapped_marker_data)] = \
-                                                    [marker_waveform_levs[1] if (a==marker_waveform_levs[1] or b==marker_waveform_levs[1]) else marker_waveform_levs[0] if (a==marker_waveform_levs[0] and b==marker_waveform_levs[0])  else a+b
-                                                     for a,b in zip(marker_data[:len(wrapped_marker_data)], wrapped_marker_data)]
-                        marker_index+=len(wrapped_marker_data)
-                        queud_markers = [x-seg_length for x in queud_markers]
-
-            seq_waveform_data[j] = waveform_data
-            j += 1
-
-            print('\t', j, len(seq_waveform_data), [len(x) for x in seq_waveform_data])
-
-            '''
-            Combine the marker data for each marked channel.
-            '''
-            print(self.awg_config.marked_channels)
-            if channel in self.awg_config.marked_channels:
-                print('\tAdding marker data for', channel)
-                if seq_marker_data == []:
-                    seq_marker_data += marker_data
-                else:
-                    j1, j2 = map(len,[seq_marker_data, marker_data])
-
-                    if j1<j2:
-                        seq_marker_data = [sum(x) for x in zip(seq_marker_data[:j1], marker_data[:j1])]+ marker_data[j1:]
-                    if j2<j1:
-                        seq_marker_data = [sum(x) for x in zip(seq_marker_data[:j2], marker_data[:j2])]+ seq_marker_data[j2:]
-                    if j1==j2:
-                        seq_marker_data = [sum(x) for x in zip(seq_marker_data, marker_data)]
-
-        # Convert the marker offset (used to account for lags in writing the AWG waveform and the STIRAP pulse being sent through the cavity)
-        # from us to AWG units. Ensure the total amount added to the waveform is 16*n samples.
-#         marker_offset_2 = (np.floor(marker_offset_1/16) + 1) * 16 - marker_offset_1 if marker_offset_1%16 != 0 else 0
-#
-#         print marker_offset_1
-#         print marker_offset_2
-#
-#         waveform_data = [0]*marker_offset_2 + waveform_data + [0]*marker_offset_1
-#         marker_data = [marker_waveform_levs[0]]*marker_offset_1 + marker_data + [marker_waveform_levs[0]]*marker_offset_2
-#
-#         # This is a big fix. If the first element of the sequence is 1 (i.e. max high level)
-#         # then the channel remains high at the end of the sequence. Don't know why...
-#         if marker_data[0]==1: marker_data[0]=0
-#         if marker_data[-1]==1: marker_data[-1]=0
-
-        '''
-        Ensure we write the same number of points to each channel.
-        '''
-        N = max([len(x) for x in seq_waveform_data])
-        for x in seq_waveform_data:
-            if len(x) < N:
-                x += [0]*(N-len(x))
-
-        '''Previously we wrote marker data onto channel2 - we now try to use the marker channels.  However, the
-        above work to produce a waveform-ready set of marker data is kept as it is quick and allows us to easily
-        revert back to our previous methods (simply uncomment the following line).'''
-#         wave_handle, marker_handle = awg.create_custom_adv(waveform_data, marker_data)
-
-        l_mark, l_seq = len(seq_marker_data), len(seq_waveform_data[0])
-
-        if   l_mark < l_seq : seq_marker_data += [0]*(l_seq - l_mark)
-        elif l_seq  < l_mark: seq_marker_data  = seq_marker_data[:l_seq]
-
-        awg.configure_arb_wave_trace_mode(WX218x_TraceMode.SINGLE)
-
-        '''Configure each channel for its output data.'''
-        for channel, rel_offset, data in zip(awg_chs, channel_relative_offsets, seq_waveform_data):
-            # Roll channel data to account for relative offsets (e.g. AOM lags)
-            print('Rolling {0} forward by {1} points'.format(channel, rel_offset))
-            data = np.roll(np.array(data), rel_offset).tolist()
-
-            print('Writing {0} points to {1}'.format(len(data),channel))
-            awg.set_active_channel(channel)
-            awg.create_arbitrary_waveform_custom(data)
-
-
-        for channel in awg_chs:
-            awg.enable_channel(channel)
-            awg.configure_arb_gain(channel, 2)
-
-        '''Quick hack to write marker data to channel 2'''
-#         awg.set_active_channel(Channel.CHANNEL_2)
-#         awg.create_arbitrary_waveform_custom(marker_data)
-#         awg.enable_channel(Channel.CHANNEL_2)
-#         awg.configure_arb_gain(Channel.CHANNEL_2, 2)
-
-        marker_starts = [x[0] for x in enumerate(zip([0]+seq_marker_data[:-1],seq_marker_data)) if x[1][0]==0 and x[1][1]>0]
-
-        if len(marker_starts) > 2:
-            print('ERROR: There are more markers required than can be set currently using the marker channels!')
-            marker_starts = marker_starts[:2]
-
-        print('Writing markers to marker channels at {0}'.format(marker_starts))
-        marker_channel_index = 1
-        for marker_pos in marker_starts:
-            awg.configure_marker(awg_chs[0],
-                                 index = marker_channel_index,
-                                 position = int(marker_pos - marker_wid/4),
-                                 levels = marker_levs,
-                                 width = int(marker_wid/2))
-            marker_channel_index += 1
-
-        return awg, len(seq_waveform_data[0])/self.awg_config.sample_rate
+        return awg
 
     def __configure_tdc(self):
-        tdc = TDC_quTAU()
-        print('Connecting to quTAU tdc..')
+        tdc = tdc_module.TdcManager()  # type: ignore
+        print("Connecting to quTAU tdc..")
         tdc.open()
-        print('...opened')
+        print("...opened")
         # Maps converted to lists on the line below. New syntax from python 3
         # https://stackoverflow.com/questions/1303347/getting-a-map-to-return-a-list-in-python-3-x
-        print('Enabling channels: ', list(self.tdc_config.counter_channels) + [self.tdc_config.marker_channel])
-        tdc.set_enabled_channels(list(self.tdc_config.counter_channels) + [self.tdc_config.marker_channel])
+        print(
+            "Enabling channels: ",
+            [*list(self.tdc_config.counter_channels), self.tdc_config.marker_channel],
+        )
+        tdc.set_enabled_channels(
+            [*list(self.tdc_config.counter_channels), self.tdc_config.marker_channel]
+        )
         tdc.set_timestamp_buffer_size(self.tdc_config.timestamp_buffer_size)
         # Four our need: the exposure time determines the rate at which data is put into the buffer.
         # Future proofing: if we use the in-built quTAU functions (e.g. histograms) an exposure time
@@ -1054,43 +798,54 @@ r"""
         tdc.set_exposure_time(0)
 
         # Set the tdc to high impedance
-        if tdc.get_dev_type() == TDC_DevType.DEVTYPE_1A:
+        if tdc.get_dev_type() == TdcDevTypeEnum.DEVTYPE_1A:
             # Turn 50 Ohm termination off
-            print('Device 1A')
+            print("Device 1A")
             tdc.switch_termination(False)
-        elif tdc.get_dev_type() in [TDC_DevType.DEVTYPE_1B, TDC_DevType.DEVTYPE_1C]:
-            print('Device 1B/1C')
+        elif tdc.get_dev_type() in [TdcDevTypeEnum.DEVTYPE_1B, TdcDevTypeEnum.DEVTYPE_1C]:
+            print("Device 1B/1C")
             print(self.tdc_config.marker_channel)
-            tdc.configure_signal_conditioning(self.tdc_config.marker_channel,
-                                              TDC_SignalCond.SCOND_MISC,
-                                              edge = 1, # rising edge,
-                                              term = 0, # Turn 50 Ohm termination off
-                                              threshold = 0.5)
+            tdc.configure_signal_conditioning(
+                self.tdc_config.marker_channel,
+                TdcSignalCondEnum.SCOND_MISC,
+                edge=1,  # rising edge,
+                term=0,  # Turn 50 Ohm termination off
+                threshold=0.5,
+            )
             for ch in self.tdc_config.counter_channels:
-                tdc.configure_signal_conditioning(ch,
-                                              TDC_SignalCond.SCOND_MISC,
-                                              edge = 1, # rising edge,
-                                              term = 0, # Turn 50 Ohm termination off
-                                              threshold = 0.05)
+                tdc.configure_signal_conditioning(
+                    ch,
+                    TdcSignalCondEnum.SCOND_MISC,
+                    edge=1,  # rising edge,
+                    term=0,  # Turn 50 Ohm termination off
+                    threshold=0.05,
+                )
 
-#         tdc.enable_tdc_input(True)
-        print('tdc configured')
+        #         tdc.enable_tdc_input(True)
+        print("tdc configured")
         return tdc
 
     def set_iterations(self, iterations):
-        '''
+        """
         Sets the iterations.
-        '''
+        """
         self.iterations = iterations
 
     def set_mot_reload_time(self, reload_time):
-        '''
+        """
         Sets the MOT reload time. Takes the reload_time in milliseconds.
-        '''
-        print(f'Setting reload_time to {reload_time}ms')
+        """
+        print(f"Setting reload_time to {reload_time}ms")
         self.mot_reload_time = reload_time
 
-"""
+    def get_total_wfm_time(self):
+        """
+        Calculates the total time of all the waveforms loaded onto the AWG in seconds.
+        """
+        if self.awg_config is None:
+            raise Exception("AWG configuration is not set. Cannot calculate total waveform time.")
+        else:
+            return self.awg_config.get_total_time()
 
 
 class MotFluoresceExperiment(GenericExperiment):
@@ -1124,9 +879,9 @@ class MotFluoresceExperiment(GenericExperiment):
     def __init__(
         self,
         daq_controller: DAQController,
-        sequence: Sequence,
+        sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
-        ic_imaging_control: Optional[IC_ImagingControl] = None,
+        ic_imaging_control: ICImagingControl | None = None,
         sweep=True,
         development_mode: bool = False,
     ):
@@ -1138,11 +893,27 @@ class MotFluoresceExperiment(GenericExperiment):
         assert isinstance(self.config, MotFluoresceConfiguration), (
             "mot_fluoresce_configuration must be a MotFluoresceConfiguration object."
         )
+        self.config: MotFluoresceConfiguration = self.config
         self.mot_fluoresce_config: MotFluoresceConfiguration = self.config
+        self.background_mode = self.mot_fluoresce_config.background_mode
         self.save_location = Path(self.mot_fluoresce_config.save_location)
         self.iterations = self.mot_fluoresce_config.iterations
         self.mot_reload = self.mot_fluoresce_config.mot_reload  # in ms
         print("MOT reload time (ms)", self.mot_reload)
+
+        # Background mode: override iterations and modify save path
+        if self.background_mode:
+            if self.mot_fluoresce_config.background_iterations is not None:
+                self.iterations = self.mot_fluoresce_config.background_iterations
+            else:
+                print(
+                    "WARNING: background_iterations is not set in the configuration."
+                    + "Defaulting to using the same number of iterations as in normal mode."
+                )
+            print(
+                f"BACKGROUND MODE: repump channel will be zeroed. "
+                f"Running {self.iterations} background iterations."
+            )
 
         self.with_cam = self.mot_fluoresce_config.use_cam
         self.with_scope = self.mot_fluoresce_config.use_scope
@@ -1160,7 +931,7 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_cam:
             if ic_imaging_control is None:
                 # if no imaging control object is provided, create a new one
-                self.ic_ic = IC_ImagingControl()
+                self.ic_ic = ICImagingControl()
                 self.external_ic_ic_provided = False
                 self.ic_ic.init_library()
             else:
@@ -1179,11 +950,8 @@ class MotFluoresceExperiment(GenericExperiment):
             print("Not using camera for MOT fluorescence experiment.")
 
         if self.with_scope:
-            self.samp_rate = self.mot_fluoresce_config.scope_sample_rate
-            self.time_range = self.mot_fluoresce_config.scope_time_range
-            self.trig_ch = self.mot_fluoresce_config.scope_trigger_channel
-            self.trig_lvl = self.mot_fluoresce_config.scope_trigger_level
-            self.data_chs = self.mot_fluoresce_config.scope_data_channels
+            self.scope_config: ScopeConfiguration = self.mot_fluoresce_config.scope_config  # type: ignore[assignment]
+            assert self.scope_config is not None, "scope_config must be set when use_scope is True."
 
     def __configure_camera(self):
         """
@@ -1191,8 +959,8 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         # open first available camera device
         cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: IC_Camera
-        cam: IC_Camera
+        self.cam: ICCamera
+        cam: ICCamera
         self.cam = cam = self.ic_ic.get_device(cam_names[0])
         #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         # is this in milliseconds? and does it match the MOT reload time? I think so
@@ -1223,14 +991,29 @@ class MotFluoresceExperiment(GenericExperiment):
         try:
             cam.wait_til_frame_ready(self.cam_frame_timeout)
             cam.get_image_data()
-        except IC_Exception as err:
-            print(f"Caught IC_Exception with error: {cast(IC_Exception, err).message}")
+        except ICError as err:
+            print(f"Caught ICError with error: {cast(ICError, err).message}")
         cam.reset_frame_ready()
 
     def configure(self):
         """
         Configures the experiment.
+
+        If background_mode is enabled, the MOT repumping channel is zeroed out
+        for the entire sequence so that no MOT forms and only scattered light
+        from the MOT beams is detected. This provides a background measurement.
         """
+        # In background mode, zero out the repump channel so no MOT loads
+        if self.background_mode:
+            # Channel number for the MOT repumping
+            repump_channel = self.config.repump_channel
+            print(
+                f"Background mode: zeroing channel {repump_channel} "
+                f"(MOT Repumping) for background measurement."
+            )
+            self.sequence = copy.deepcopy(self.sequence)
+            self.sequence.update_channel(repump_channel, [(0, 0)], [IntervalStyle.FLAT])
+
         super().daq_cards_on()
         self.daq_controller.load(self.sequence.get_array())
 
@@ -1247,11 +1030,7 @@ class MotFluoresceExperiment(GenericExperiment):
                 )
                 self.scope = osc.OscilloscopeManager()
             # self.scope.reset_scope()
-            self.scope.configure_scope(
-                self.data_chs, samp_rate=self.samp_rate, timebase_range=self.time_range
-            )
-
-            self.scope.configure_trigger(self.trig_ch, self.trig_lvl)
+            self.scope.configure_from_config(self.scope_config)
             print("scope configured")
             print(f"configuring scope took {time.time() - start_time}s")
             # self.scope.set_to_run()
@@ -1267,7 +1046,7 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         self.awg = None
         assert self.awg_config is not None, "AWG config is not set. Cannot configure AWG."
-        start_time = time.time()
+        start_time = time.perf_counter()
         print("Connecting to AWG...")
         if self.development_mode:
             from instruments.dummy import DummyAWGManager
@@ -1281,7 +1060,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
         self.awg.upload_and_arm(self.awg_config)
 
-        print(f"AWG configured in {time.time() - start_time}s")
+        print(f"AWG configured in {time.perf_counter() - start_time}s")
 
     def __run_with_scope(self):
         """
@@ -1319,7 +1098,7 @@ class MotFluoresceExperiment(GenericExperiment):
         while i <= self.config.iterations:
             print(f"Iteration {i}")
             print(f"loading mot for {self.config.mot_reload}ms")
-            # self.scope.set_to_digitize(self.data_chs)
+            # self.scope.set_to_digitize(self.scope_config.data_channels)
             sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
 
             self.scope.arm_scope()
@@ -1335,7 +1114,9 @@ class MotFluoresceExperiment(GenericExperiment):
             if success:
                 start_data_time = time.time()
                 print("collecting data")
-                data = self.scope.read_slow_return_data(list(self.data_chs.keys()))
+                data = self.scope.read_slow_return_data(
+                    list(self.scope_config.data_channels.keys())
+                )
                 if data is not None:
                     filename = f"iteration_{i}_data.csv"
                     full_name = full_directory / filename
@@ -1481,6 +1262,12 @@ class MotFluoresceSweepExperiment:
         self.sweep_config = sweep_config
         self.daq_controller = daq_controller
         self.development_mode = development_mode
+
+    def run_in_thread(self, start_thread=True):
+        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
+        if start_thread:
+            thread.start()
+        return thread
 
     def run(self):
         """
@@ -1643,7 +1430,7 @@ class PhotonProductionDataSaver:
         ch = None
 
         try:
-            for t, ch in zip(timestamps, channels):
+            for t, ch in zip(timestamps, channels, strict=True):
                 if ch == self.tdc_marker_channel:
                     #                     print 'MARKER', t, ch
                     t_stirap_0 = t

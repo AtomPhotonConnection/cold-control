@@ -1,7 +1,7 @@
-from pyicic.IC_ImagingControl import *
+from instruments.pyicic.ic_imaging_control import ICImagingControl
 
 # open lib
-ic_ic = IC_ImagingControl()
+ic_ic = ICImagingControl()
 ic_ic.init_library()
 
 # open first available camera device
@@ -32,7 +32,7 @@ cam.enable_trigger(False)  # camera will wait for trigger
 if not cam.callback_registered:
     cam.register_frame_ready_callback()  # needed to wait for frame ready callback
 
-for i in range(100):
+for _i in range(100):
     # cam.reset_frame_ready()                 # reset frame ready flag
     cam.snap_image(1000)
     # cam.wait_til_frame_ready(1000)              # wait for frame ready due to trigger

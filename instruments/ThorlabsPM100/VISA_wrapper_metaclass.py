@@ -10,6 +10,7 @@ There is a full example at the end of this file
 
 import numbers
 import re
+from typing import Any
 
 
 class TestValue:
@@ -28,7 +29,7 @@ class TestValue:
     def to_string(self, value):
         return str(value)
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return False
 
     def from_string(self, val):
@@ -38,7 +39,7 @@ class TestValue:
 class TestValueFromEnum(TestValue):
     def __init__(self, values, replacement=None):
         if replacement is None:
-            replacement = enum_value._keys
+            replacement = values._keys
         self.replacement = replacement
         self.values = values
 
@@ -50,11 +51,11 @@ class TestValueFromEnum(TestValue):
             i = self.values._keys.index(value)
             return self.replacement[i]
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return (value in self.values._values) or (value in self.values._keys)
 
     def __repr__(self):
-        return "from enum %s" % self.values._keys.__str__()
+        return f"from enum {self.values._keys}"
 
 
 class TestValueFromType(TestValue):
@@ -63,24 +64,24 @@ class TestValueFromType(TestValue):
     def __init__(self, tpe):
         self.type = tpe
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return isinstance(value, self.type)
 
     def __repr__(self):
-        return "of type %s" % self.type.__name__
+        return f"of type {self.type.__name__}"
 
 
 class TestValueFromRE(TestValue):
     """Test a value using a regular expression"""
 
-    def __init__(self, re):
-        self.re = re
+    def __init__(self, pattern):
+        self.pattern = pattern
 
-    def condition(self, value):
-        return re.match(value)
+    def condition(self, value) -> bool:
+        return bool(self.pattern.match(value))
 
     def __repr__(self):
-        return "match %s" % self.re
+        return f"match {self.pattern}"
 
 
 class TestValueBoundNumber(TestValue):
@@ -90,11 +91,11 @@ class TestValueBoundNumber(TestValue):
         self.minimum = minimum
         self.maximum = maximum
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return isinstance(value, numbers.Number) and value >= self.minimum and value <= self.maximum
 
     def __repr__(self):
-        return "in between %s and %s" % (self.minimum, self.maximum)
+        return f"in between {self.minimum} and {self.maximum}"
 
 
 class TestValueFromValue(TestValue):
@@ -103,11 +104,11 @@ class TestValueFromValue(TestValue):
     def __init__(self, val):
         self.val = val
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return value == self.val
 
     def __repr__(self):
-        return "equal to %s" % self.val
+        return f"equal to {self.val}"
 
 
 def _short_version(s):
@@ -130,31 +131,31 @@ class TestValueFromString(TestValue):
         self.val = val.lower()
         self.val_short = _short_version(val).lower()
 
-    def condition(self, value):
+    def condition(self, value) -> bool:
         return str(value).lower() == self.val or str(value).lower() == self.val_short
 
     def __repr__(self):
-        return "equal to %s or equal to %s" % (self.initial_val, self.val_short)
+        return f"equal to {self.initial_val} or equal to {self.val_short}"
 
 
-def _convert_value_to_TestValue(val):
+def _convert_value_to_test_value(val):
     if isinstance(val, TestValue):
         return val
     elif isinstance(val, type):
         return TestValueFromType(val)
-    elif isinstance(val, type(re.compile("po"))):
+    elif isinstance(val, re.Pattern):
         return TestValueFromRE(val)
-    elif isinstance(val, str) or isinstance(val, unicode):
+    elif isinstance(val, str):
         return TestValueFromString(val)
     else:
         return TestValueFromValue(val)
 
 
-def _convert_list_value_to_list_of_TestValue(lst):
+def _convert_list_value_to_list_of_test_value(lst):
     try:
-        return map(_convert_value_to_TestValue, lst)
+        return map(_convert_value_to_test_value, lst)
     except TypeError:
-        return map(_convert_value_to_TestValue, [lst])
+        return map(_convert_value_to_test_value, [lst])
 
 
 def _try_to_convert_to_number(value):
@@ -180,10 +181,10 @@ def _generic_command(cmd_name, doc=None):
 
     def command(self):
         cmd_nameb = self._get_cmd_name(cmd_name)
-        value = self._write("%s" % cmd_nameb)
+        self._write(f"{cmd_nameb}")
         return None
 
-    command.__name__ = "_%s" % (cmd_name.replace(":", "_").lower())
+    command.__name__ = f"_{cmd_name.replace(':', '_').lower()}"
     command.__doc__ = command.__name__ if doc is None else doc
     return command
 
@@ -204,10 +205,10 @@ def _generic_get_command(cmd_name, out_conversion=None, doc=None):
         cmd_nameb = self._get_cmd_name(cmd_name)
         cmd_nameb = cmd_nameb.split(" ")
         cmd_nameb[0] = cmd_nameb[0] + "?"
-        value = self._ask("%s" % " ".join(cmd_nameb))
+        value = self._ask(" ".join(cmd_nameb))
         return out_conversion(value)
 
-    get_val.__name__ = "_get_%s" % (cmd_name.replace(":", "_").lower())
+    get_val.__name__ = f"_get_{cmd_name.replace(':', '_').lower()}"
     get_val.__doc__ = get_val.__name__ if doc is None else doc
     return get_val
 
@@ -221,27 +222,21 @@ def _generic_set_command(cmd_name, in_test=None, doc=None):
     Optional argument :
         in_test : function that converts arguments to string.
     """
-    if in_test is None:
 
-        def set_val(self, value):
-            cmd_nameb = self._get_cmd_name(cmd_name)
-            self._write("%s %s" % (cmd_nameb, value))
-    else:
+    def set_val(self, value):
+        if in_test is not None:
+            value = in_test(*value) if isinstance(value, tuple) else in_test(value)
+        cmd_nameb = self._get_cmd_name(cmd_name)
+        self._write(f"{cmd_nameb} {value}")
 
-        def set_val(self, args):
-            if isinstance(args, tuple):
-                param = in_test(*args)
-            else:
-                param = in_test(args)
-            cmd_nameb = self._get_cmd_name(cmd_name)
-            self._write("%s %s" % (cmd_nameb, param))
-
-    set_val.__name__ = "_set_%s" % (cmd_name.replace(":", "_").lower())
+    set_val.__name__ = f"_set_{cmd_name.replace(':', '_').lower()}"
     set_val.__doc__ = set_val.__name__ if doc is None else doc
     return set_val
 
 
 class GenericCommandClass:
+    cmd: str
+
     @classmethod
     def get_argument_list(cls):
         out = []
@@ -302,7 +297,7 @@ class GenericCommandClass:
     @classmethod
     def _get_the_doc(cls):
         title = cls.full_acces + "()"
-        out = cls.__doc__ + "\n\n"
+        out = (cls.__doc__ or "") + "\n\n"
         return _make_doc(out, title, _type="method")
 
 
@@ -335,9 +330,9 @@ class GenericGetCommandClass(GenericCommandClass):
         title = cls.full_acces
         out = ""
         out = "Read-only property\n\n"
-        out += cls.__doc__ + "\n\n"
+        out += (cls.__doc__ or "") + "\n\n"
         args = cls.get_argument_list_name()
-        if set(args) != set(["value"]) and not len(args) == 0:
+        if set(args) != set(["value"]) and len(args) != 0:
             out += "**Property value (read-only) :** " + ",".join(args) + "\n\n"
         out += f"**Initial SCPI command :** {cls.cmd}\n\n"
         return _make_doc(out, title)
@@ -357,7 +352,7 @@ class GenericSetCommandClass(GenericCommandClass):
         title = cls.full_acces
         out = ""
         out = "Write-only property\n\n"
-        out += cls.__doc__ + "\n\n"
+        out += (cls.__doc__ or "") + "\n\n"
         args = cls.get_argument_list()
         #        if set(args)<>set(['value']) and not len(args)==0:
         #            out += "**Property value (write-only) :** "+','.join(args)+"\n\n"
@@ -386,7 +381,7 @@ class GenericGetSetCommandClass(GenericCommandClass):
         title = cls.full_acces
         out = ""
         out = "Write or read property\n\n"
-        out += cls.__doc__ + "\n\n"
+        out += (cls.__doc__ or "") + "\n\n"
         #        args = cls.get_argument_list_name()
         #        if set(args)<>set(['value']) and not len(args)==0:
         #            out += "**Property value :** "+','.join(args)+"\n\n"
@@ -413,7 +408,7 @@ class Argument:
         return list_test_value
 
     def convert(self, val):
-        list_test_value = _convert_list_value_to_list_of_TestValue(self.list_test_value)
+        list_test_value = _convert_list_value_to_list_of_test_value(self.list_test_value)
         for test in list_test_value:
             a = test.from_string(val)
             if not isinstance(a, str):
@@ -421,7 +416,7 @@ class Argument:
         return val
 
     def check(self, value):
-        list_test_value = _convert_list_value_to_list_of_TestValue(self.list_test_value)
+        list_test_value = _convert_list_value_to_list_of_test_value(self.list_test_value)
         if value is None:
             value = self.default
         for test in list_test_value:
@@ -429,8 +424,8 @@ class Argument:
             if a is not None:
                 return a
         raise ValueError(
-            "Error: set value is %s while it should be %s"
-            % (value, " or ".join(map(str, list_test_value)))
+            f"Error: set value is {value} while it should be"
+            f" {' or '.join(map(str, list_test_value))}"
         )
 
 
@@ -458,12 +453,12 @@ class InstrumentMetaclass(type):
         attrs = dict(
             (name, value)
             for name, value in dct.items()
-            if type(value) == type and issubclass(value, GenericCommandClass)
+            if type(value) is type and issubclass(value, GenericCommandClass)
         )
         attrsbis = dict(
             (name, value)
             for name, value in dct.items()
-            if type(value) == InstrumentMetaclass and issubclass(value, Group)
+            if type(value) is InstrumentMetaclass and issubclass(value, Group)
         )
 
         #        out =  dict((name, value) for name, value in dct.items() if not name.startswith('__'))
@@ -482,6 +477,9 @@ class InstrumentMetaclass(type):
 
 
 class InstrumentCommand:
+    _property_list: Any
+    _subgroups: Any
+
     def _get_cmd_name(self, cmd_name):
         return cmd_name
 
@@ -492,7 +490,7 @@ class InstrumentCommand:
         for elm in cls._property_list:
             out += getattr(cls, elm).__doc__ + "\n\n"
         for elm in cls._subgroups:
-            out += _underline("Group %s" % elm, "=")
+            out += _underline(f"Group {elm}", "=")
             out += getattr(cls, elm)._get_the_doc()
         return out
 
@@ -507,6 +505,9 @@ class Group:
     1) Define the class of the group that herits from Group
     2) Add an instance of the defined class in the __init__ of the instrument
     """
+
+    _property_list: Any
+    _subgroups: Any
 
     def __init__(self, parent):
         self._parent = parent
@@ -542,6 +543,8 @@ class IndexedGroup(Group):
        item number in the command
     """
 
+    var: str = ""
+
     def __init__(self, parent, item=0):
         Group.__init__(self, parent)
         self._item = item
@@ -556,11 +559,8 @@ class IndexedGroup(Group):
 
 
 if __name__ == "__main__":
-    from six import with_metaclass
 
-    class Generic(with_metaclass(InstrumentMetaclass)):
-        #        __metaclass__ = InstrumentMetaclass
-
+    class Generic(metaclass=InstrumentMetaclass):
         def __init__(self):
             print("Initialise dummy instrument")
 
@@ -573,35 +573,32 @@ if __name__ == "__main__":
                 return "3"
             return "45.4, 57.3"
 
-    class ChannelMachinGroup(Group):
-        __metaclass__ = InstrumentMetaclass
-
-        class truc(GenericGetSetCommandClass):
+    class ChannelMachinGroup(Group, metaclass=InstrumentMetaclass):
+        class Truc(GenericGetSetCommandClass):
             """coucou"""
 
             cmd = "CH<X>:MACHIN:TRUC"
             value = Argument(0, [numbers.Number])
 
-    class ChannelGroup(IndexedGroup):
-        __metaclass__ = InstrumentMetaclass
+    class ChannelGroup(IndexedGroup, metaclass=InstrumentMetaclass):
         machin = ChannelMachinGroup
         var = "<X>"
 
-        class testa(GenericGetSetCommandClass):
+        class Testa(GenericGetSetCommandClass):
             """coucou"""
 
             cmd = "CH<X>:TEST1"
             value = Argument(0, [TestValueBoundNumber(-1, 1)])
 
-        class testb(GenericGetSetCommandClass):
+        class Testb(GenericGetSetCommandClass):
             """coucou"""
 
             cmd = "CH<X>:TEST"
             value = Argument(0, [TestValueBoundNumber(-1, 1)])
             freq = Argument(1, [numbers.Number])
 
-    class Test(Generic, InstrumentCommand, with_metaclass(InstrumentMetaclass)):
-        class coucou_val(GenericGetCommandClass):
+    class Test(Generic, InstrumentCommand, metaclass=InstrumentMetaclass):
+        class CoucouVal(GenericGetCommandClass):
             """This is a test method"""
 
             cmd = "COUCOU:VAL"
@@ -611,6 +608,6 @@ if __name__ == "__main__":
         channel = ChannelGroup
 
     scope = Test()
-    print(scope.coucou_val)
-    scope.channel[1].testb = 0.2, 4.5
-    print(scope.channel[2].machin.truc)
+    print(scope.coucou_val)  # type: ignore[attr-defined]
+    scope.channel[1].testb = 0.2, 4.5  # type: ignore[index, attr-defined]
+    print(scope.channel[2].machin.truc)  # type: ignore[index, attr-defined]

@@ -4,6 +4,8 @@ Created on 22 Apr 2016
 @author: Tom Barrett, Jan Ole Ernst
 """
 
+from __future__ import annotations
+
 import ast
 import functools
 import operator
@@ -13,12 +15,12 @@ import time
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 from configobj import ConfigObj
 
-from classes.DAQ import (
+from classes.daq import (
     INPUT_LINE,
     OUTPUT_LINE,
     Channel_P1A,
@@ -31,6 +33,9 @@ from classes.DAQ import (
     DAQController,
     DAQDio,
 )
+
+# from instruments.WX218x.WX218x_awg import Channel
+from classes.daq_sequence import DaqSequence
 from classes.experimental_configs import (
     AbsorbtionImagingConfiguration,
     AwgConfiguration,
@@ -44,9 +49,6 @@ from classes.experimental_configs import (
     Waveform,
 )
 
-# from instruments.WX218x.WX218x_awg import Channel
-from classes.Sequence import Sequence
-
 GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
 
@@ -56,7 +58,7 @@ def get_config_root() -> str:
     return os.environ.get("COLD_CONTROL_CONFIG_ROOT", str(Path.cwd()))
 
 
-def resolve_config_path(path: str, base: Optional[str] = None) -> str:
+def resolve_config_path(path: str, base: str | None = None) -> str:
     """Resolve a config path. If path is relative, join with base (default get_config_root())."""
     if path is None or path == "":
         return path
@@ -398,7 +400,7 @@ class SequenceReader:
         self.config = MyConfig(self.fname)
 
     def load_sequence(self):
-        seq = Sequence(*self.get_sequence_init_args())
+        seq = DaqSequence(*self.get_sequence_init_args())
         sequence_channels: dict[str, Any] = {}
         sequence_channels = self.config["sequence channels"]
 
@@ -487,7 +489,7 @@ class AwgConfigReader:
 
     def load_awg_configuration(self) -> AwgConfiguration:
         """Parse the config file and return a fully-populated ``AwgConfiguration``."""
-        waveforms = self._parse_waveforms()
+        waveforms: dict[int, Waveform] = self._parse_waveforms()
         output_channels = self._parse_output_channels(
             raw_channels=self.config["waveform output channels"]
         )
@@ -495,11 +497,11 @@ class AwgConfigReader:
         cfg = self.config
 
         raw_seq = eval(self.config["waveform sequence"])
-        waveform_sequence = tuple(tuple(ch) for ch in raw_seq)
+        waveform_sequence = list(list(ch) for ch in raw_seq)
 
         awg_config = AwgConfiguration(
             waveform_sequence=waveform_sequence,
-            waveforms=tuple(waveforms),
+            waveforms=waveforms,
             sample_rate=float(cfg["sample rate"]),
             burst_count=int(cfg["burst count"]),
             waveform_output_channels=tuple(output_channels),
@@ -527,8 +529,8 @@ class AwgConfigReader:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _parse_waveforms(self) -> tuple[Waveform, ...]:
-        """Read the ``[waveforms]`` section and return a tuple of ``Waveform`` objects.
+    def _parse_waveforms(self) -> dict[int, Waveform]:
+        """Read the ``[waveforms]`` section and return a dict of ``Waveform`` objects.
 
         Each waveform sub-section supports the following keys:
 
@@ -543,26 +545,26 @@ class AwgConfigReader:
         ``phases`` (optional)
             Mid-waveform phase-jump specification.  Defaults to ``[]``.
         """
-        waveforms: list[Waveform] = []
-        for _key, v in self.config["waveforms"].items():
-            phases = self._parse_phases(v.get("phases"))
-            fname = resolve_config_path(v["filename"])
+        waveforms: dict[int, Waveform] = {}
+        for idx, wform in self.config["waveforms"].items():
+            phases = self._parse_phases(wform.get("phases"))
+            fname = resolve_config_path(wform["filename"])
 
             # Parse modulation frequency (optional, defaults to 0.0)
-            mod_frequency = float(v["modulation frequency"]) if "modulation frequency" in v else 0.0
+            mod_frequency = (
+                float(wform["modulation frequency"]) if "modulation frequency" in wform else 0.0
+            )
 
             # Parse modulated flag (optional, inferred from mod_frequency if absent)
-            modulated = to_bool(v["modulated"]) if "modulated" in v else None
+            modulated = to_bool(wform["modulated"]) if "modulated" in wform else None
 
-            waveforms.append(
-                Waveform(
-                    fname=fname,
-                    modulated=modulated,
-                    mod_frequency=mod_frequency,
-                    phases=phases,
-                )
+            waveforms[int(idx)] = Waveform(
+                fname=fname,
+                modulated=modulated,
+                mod_frequency=mod_frequency,
+                phases=phases,
             )
-        return tuple(waveforms)
+        return waveforms
 
     @staticmethod
     def _parse_phases(raw_phases) -> list[tuple[float, int]]:
@@ -617,7 +619,7 @@ class AwgConfigReader:
             return tuple(map(float, cfg["waveform output channel lags"]))
 
     @staticmethod
-    def _extract_marker_width(cfg: MyConfig) -> Optional[int]:
+    def _extract_marker_width(cfg: MyConfig) -> int | None:
         if "marker width samples" in cfg:
             return int(cfg["marker width samples"])
         elif "marker width samps" in cfg:
@@ -824,7 +826,7 @@ class ExperimentConfigReader:
             use_camera = "camera_settings" in self.config
 
         # --- Scope ---
-        scope_config: Optional[ScopeConfiguration] = None
+        scope_config: ScopeConfiguration | None = None
         if has_new_scope:
             scope_path = resolve_config_path(self.config["scope_config"], get_config_root())
             scope_config = ScopeConfigReader(scope_path).load_scope_configuration()
@@ -839,8 +841,8 @@ class ExperimentConfigReader:
             scope_config = ScopeConfigReader._parse_scope_config(scope_section)
 
         # --- AWG ---
-        awg_config: Optional[AwgConfiguration] = None
-        awg_config_path: Optional[str] = None
+        awg_config: AwgConfiguration | None = None
+        awg_config_path: str | None = None
         if has_new_awg:
             awg_config_path = resolve_config_path(self.config["awg_config"], get_config_root())
             awg_reader = AwgConfigReader(awg_config_path)
@@ -858,7 +860,7 @@ class ExperimentConfigReader:
             awg_config = awg_reader.load_awg_configuration()
 
         # --- Camera (unchanged — kept as dict for now) ---
-        camera_settings_dict: Optional[dict] = None
+        camera_settings_dict: dict | None = None
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
@@ -871,7 +873,7 @@ class ExperimentConfigReader:
             }
 
         # --- Sequence (new format only) ---
-        sequence_config_path: Optional[str] = None
+        sequence_config_path: str | None = None
         if "sequence_config" in self.config:
             sequence_config_path = resolve_config_path(
                 self.config["sequence_config"], get_config_root()
@@ -1042,7 +1044,7 @@ class ExperimentConfigReader:
         else:
             raise ValueError(f"Unknown experiment type: {expt_type}")
 
-    def get_sequence(self) -> Sequence:
+    def get_sequence(self) -> DaqSequence:
         """Load the sequence from the ``sequence_config`` path in this experiment config.
 
         Raises ``KeyError`` if the config file does not contain a ``sequence_config`` key.

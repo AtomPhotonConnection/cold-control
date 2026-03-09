@@ -1,0 +1,35 @@
+name: cold-control-mar26
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+
+  # Core data science
+  - numpy=1.26.4
+  - pandas=2.2.3
+  - scipy=1.13.1
+  - matplotlib=3.9.2
+  - seaborn=0.13.2
+
+  # Instrument control
+  - pyvisa=1.14.1
+  - pyvisa-py=0.7.2
+  - pyserial=3.5
+  - libusb=1.0.28
+
+  # Config & imaging
+  - configobj=5.0.6
+  - pillow=10.4.0
+
+  # Dev / IDE tools
+  - ipython=8.15.0
+  - ipykernel=6.29.5
+  - debugpy
+  - pip
+
+  - pip:
+      - pytest>=8.4
+      - ruff>=0.15
+      - pyright==1.1.408
+prefix: C:\Users\kingm\AppData\Local\miniforge3\envs\cold-control-mar26
