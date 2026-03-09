@@ -44,7 +44,7 @@ line-ending = "auto"
 docstring-code-format = true
 
 [tool.pyright]
-include = ["."] # Adjust "src" to your actual source folder name
+include = ["."] 
 exclude = ["**/node_modules",
     "**/__pycache__",
     ".venv",
@@ -55,7 +55,7 @@ exclude = ["**/node_modules",
     "**/measurements",
     "**/temp"]
 
-venvPath = "C:\\Users\\kingm\\.conda\\envs"
+venvPath = "C:\\Users\\kingm\\AppData\\Local\\miniforge3\\envs"
 venv = "cold-control"
 
 pythonVersion = "3.12"

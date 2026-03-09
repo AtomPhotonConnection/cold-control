@@ -6,7 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy import trapz
+from scipy.integrate import trapezoid
 
 plotter = False
 
@@ -101,7 +101,7 @@ def calculate_integrals_single_trace(data, i=0):
     average = ch4_segment_ref["Channel 3 Voltage (V)"].mean(axis=0)
 
     # integration area below curve, taking average as a zero reference
-    area = trapz(
+    area = trapezoid(
         ch4_segment_fl["Channel 3 Voltage (V)"]
         - [average] * len(ch4_segment_fl["Channel 3 Voltage (V)"]),
         ch4_segment_fl["Time (s)"],
@@ -173,7 +173,7 @@ def single_trace_int_based_on_marker(data, i=0):
     average = ch4_segment_ref["Channel 3 Voltage (V)"].mean(axis=0)
 
     # integration area below curve, taking average as a zero reference
-    area = trapz(
+    area = trapezoid(
         ch4_segment_fl["Channel 3 Voltage (V)"]
         - [average] * len(ch4_segment_fl["Channel 3 Voltage (V)"]),
         ch4_segment_fl["Time (s)"],

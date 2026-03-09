@@ -795,8 +795,8 @@ class _InteractiveLegend:
 
     def _build_lookups(self, legend):
         handles, labels = legend.axes.get_legend_handles_labels()
-        label2handle = dict(zip(labels, handles))
-        handle2text = dict(zip(handles, legend.texts))
+        label2handle = dict(zip(labels, handles, strict=True))
+        handle2text = dict(zip(handles, legend.texts, strict=True))
 
         lookup_artist = {}
         lookup_handle = {}
@@ -807,8 +807,8 @@ class _InteractiveLegend:
                 lookup_artist[handle] = artist
                 lookup_artist[handle2text[handle]] = artist
 
-        lookup_handle.update(zip(handles, handles))
-        lookup_handle.update(zip(legend.texts, handles))
+        lookup_handle.update(zip(handles, handles, strict=True))
+        lookup_handle.update(zip(legend.texts, handles, strict=True))
 
         return lookup_artist, lookup_handle
 

@@ -508,7 +508,7 @@ def test_stirap_aom_freq_response(
 
     cal_data = []
 
-    for freq_mhz, freq_hz in zip(freqs, freqs_hz):
+    for freq_mhz, freq_hz in zip(freqs, freqs_hz, strict=True):
         print("freq:", freq_mhz, "MHz")
 
         awg.play_sine_wave(awg_channel, frequency=freq_hz, amplitude=level)
@@ -574,8 +574,8 @@ def finding_amplitude_from_power(
                     f"Calibration CSV {CALIB_CSV} does not have the required columns 'power_flip' and 'power_target'."
                 )
 
-            x = df["power_flip"].values.astype(float)
-            y = df["power_target"].values.astype(float)
+            x = np.asarray(df["power_flip"].values.astype(float))
+            y = np.asarray(df["power_target"].values.astype(float))
 
             a, b = np.polyfit(x, y, 1)
             # print("Compensating for flip mirror: ", a, b)

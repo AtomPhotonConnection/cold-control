@@ -258,7 +258,7 @@ class ExperimentalDataProcessor:
                 interpolated_data[col_name] = []
 
         # Interpolate each valid dataset to the aligned time axis
-        for df, drop_time in zip(valid_dfs, drop_times):
+        for df, drop_time in zip(valid_dfs, drop_times, strict=True):
             # Shift time relative to drop
             relative_time = df[self.time_col].values - drop_time
             # print(f"Relative time axis: {relative_time[0]} to {relative_time[-1]} seconds")

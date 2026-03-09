@@ -72,7 +72,8 @@ class DaqSequence:
         old_tv_pairs, old_v_interval_styles = channel.tV_pairs, channel.V_interval_styles
         try:
             tv_sorted, v_interval_sorted = zip(
-                *sorted(zip(tv_pairs, v_interval_styles), key=lambda x: x[0][0])
+                *sorted(zip(tv_pairs, v_interval_styles, strict=True), key=lambda x: x[0][0]),
+                strict=True,
             )
             channel.tV_pairs = list(tv_sorted)
             channel.V_interval_styles = list(v_interval_sorted)
@@ -143,7 +144,11 @@ class _ChannelSequence:
         self.parent: DaqSequence = parent_sequence
 
         self.tV_pairs, self.V_interval_styles = map(
-            list, zip(*sorted(zip(tv_pairs, v_interval_styles), key=lambda x: x[0][0]))
+            list,
+            zip(
+                *sorted(zip(tv_pairs, v_interval_styles, strict=True), key=lambda x: x[0][0]),
+                strict=True,
+            ),
         )
 
         self.validate()

@@ -263,7 +263,13 @@ class ExperimentalUI(tk.LabelFrame):
         # set channel 3 to DC Voltage
         self.run_tone_freqs = [60.8558 * 10**6, 80 * 10**6, 54.8558 * 10**6, 10 * 10**6, 2.6]
         self.run_tone_output_states = [False, False, False, False, False]
-        self.run_tone_buttons = []
+        self.run_tone_buttons: dict[int, tk.Button | None] = {
+            0: None,
+            1: None,
+            2: None,
+            3: None,
+            4: None,
+        }
 
         self.on_icon = ImageTk.PhotoImage(Image.open("icons/toggle_on_icon.png").resize((25, 20)))
         self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
@@ -303,7 +309,7 @@ class ExperimentalUI(tk.LabelFrame):
                     button, i_ch
                 )
             )
-            self.run_tone_buttons.append(toggle_run_tone_button)
+            self.run_tone_buttons[i] = toggle_run_tone_button
 
             run_tone_freq_frame.grid(row=i, column=0, **rtf_grid_opts)
             toggle_run_tone_button.grid(row=i, column=1, **rtf_grid_opts)
@@ -384,8 +390,10 @@ class ExperimentalUI(tk.LabelFrame):
         Function to run experiments when the "Run experiment" button is pressed.
         """
         # If run tone is on, turn it off!
-        for state, button in zip(self.run_tone_output_states, self.run_tone_buttons):
-            if state:
+        for state, button in zip(
+            self.run_tone_output_states, self.run_tone_buttons.values(), strict=True
+        ):
+            if state and button is not None:
                 button.invoke()
 
         if isinstance(self.loaded_experiment_config, PhotonProductionConfiguration):
@@ -489,7 +497,8 @@ class ExperimentalUI(tk.LabelFrame):
 
         # Simplified subtraction
         unscaled_corr_imgs = [
-            np.clip(bkg - img.astype(float), 0, 255) for img, bkg in zip(img_arrs, bkg_aves)
+            np.clip(bkg - img.astype(float), 0, 255)
+            for img, bkg in zip(img_arrs, bkg_aves, strict=True)
         ]
 
         corr_imgs = [(arr * 255.0 / arr.max()).astype(np.uint8) for arr in unscaled_corr_imgs]
@@ -1129,6 +1138,7 @@ class AbsorptionImagingConfigurationUi:
                     for ch in sorted(controller_channels, key=lambda x: x.chNum)
                 ],
                 [x.chNum for x in controller_channels],
+                strict=True,
             )
         )
         channel_opts = sorted(channel_opts_dict.keys(), key=channel_opts_dict.__getitem__)
@@ -1282,6 +1292,7 @@ class AbsorptionImagingConfigurationUi:
             checkbuttons,
             check_vars,
             [self.c.save_raw_images, self.c.save_processed_images, self.c.review_processed_images],
+            strict=True,
         ):
             var.set(init_val)
         if check_vars[2].get():
@@ -1410,7 +1421,7 @@ class AbsorptionImagingConfigurationUi:
         lab_grid_opts: dict[str, Any] = {"sticky": tk.W}
         wid_grid_opts = {"sticky": tk.E + tk.W}
         lab_config = {"font": ("Helvetica", 10, "bold"), "padx": 5}
-        for r, (lab, wid, fn) in enumerate(zip(labels, widgets, fns_to_bind)):
+        for r, (lab, wid, fn) in enumerate(zip(labels, widgets, fns_to_bind, strict=True)):
             tk.Label(frame, text=lab, **lab_config).grid(row=r, column=0, **lab_grid_opts)
             wid.grid(row=r, column=1, **wid_grid_opts)
             if fn is not None:
@@ -1940,7 +1951,7 @@ class GenericExperimentConfigUi:
 
         return top
 
-    def load_config(self, fname_wid):
+    def load_config(self, fname_wid: ExperimentalParamFrame):
         fname = tk_file_dialog.askopenfilename(
             parent=self.top, title="Choose a config file", initialdir="configs"
         )
@@ -1950,7 +1961,7 @@ class GenericExperimentConfigUi:
             self.conf_reader = ExperimentConfigReader(fname)
             self.experiment_config = self.conf_reader.get_correct_config()
 
-            fname_wid.updateEntry(fname)
+            fname_wid.update_entry(fname)
 
         # Seems to be a tkinter bug that the parent is shown on top after a file dialog - so let's fix that
         self.top.lift(self.top.master)
@@ -2449,7 +2460,10 @@ class AbsorptionImagingReviewUI(tk.Toplevel):
         images_canvas._image_cache = []  # type: ignore[attr-defined]
         canvas_img_items = []
         for i, (img_arr, label) in enumerate(
-            sorted(zip(img_arrs, labels), key=lambda x: int(re.findall(r"\d+", str(x[1]))[-1]))
+            sorted(
+                zip(img_arrs, labels, strict=True),
+                key=lambda x: int(re.findall(r"\d+", str(x[1]))[-1]),
+            )
         ):
             x_coord, y_coord = 0.5 * img_dims[0] + i * (img_dims[0] + img_buffer), img_dims[1]
 
@@ -2653,7 +2667,7 @@ class CountRatePlotLive(tk.LabelFrame):
         """Each plot with new data."""
         # TODO: speed this up
         x_data = range(n_iters + 1)
-        for data, line in zip(lines_data, self.lines):
+        for data, line in zip(lines_data, self.lines, strict=True):
             if max(data) > self.y_max:
                 self.y_max = max(data)
                 self.ax.set_ylim((0, self.y_max * 1.05))

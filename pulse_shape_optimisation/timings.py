@@ -141,7 +141,7 @@ def measure_signal(
     meas_stokes = pd.DataFrame()
     meas_pump = pd.DataFrame()
 
-    for i, (data_stokes, data_pump) in enumerate(zip(all_stokes, all_pump)):
+    for i, (data_stokes, data_pump) in enumerate(zip(all_stokes, all_pump, strict=True)):
         meas_stokes[f"Time (s) {i}"] = data_stokes["Time (s)"]
         meas_stokes[f"Voltage (V) {i}"] = data_stokes["Voltage (V)"]
         meas_pump[f"Time (s) {i}"] = data_pump["Time (s)"]

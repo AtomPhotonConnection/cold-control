@@ -517,7 +517,7 @@ class PulseShapeExperimentRunner:
         logger.info(f"Saved waveform CSV: {csv_path}")
         return csv_path
 
-    def _build_scope_acq(self) -> "_ScopeAcquisition":
+    def _build_scope_acq(self) -> _ScopeAcquisition:
         """Build a scope acquisition helper. Returns acq."""
         acq = _ScopeAcquisition(self.scope, self.config.scope_config)
         return acq

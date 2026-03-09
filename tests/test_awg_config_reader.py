@@ -61,7 +61,7 @@ def test_load_awg_configuration():
     expected_freqs = [74000000, 54855800, 0, 60855800, 80000000]
     expected_modulated = [True, True, False, True, True]
     for (wf_idx, wf), expected_f, expected_m in zip(
-        awg_config.waveforms.items(), expected_freqs, expected_modulated
+        awg_config.waveforms.items(), expected_freqs, expected_modulated, strict=True
     ):
         assert isinstance(wf, Waveform), f"Waveform {wf_idx} type: {type(wf)}"
         assert wf.mod_frequency == expected_f, (

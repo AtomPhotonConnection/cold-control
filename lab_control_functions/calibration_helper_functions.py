@@ -136,7 +136,7 @@ def create_file_txt(fname, level_data, parsed_data, units):
 
     print("created: ", fname)
     line_args = [("V", units)]
-    line_args += zip(level_data, parsed_data)
+    line_args += zip(level_data, parsed_data, strict=True)
     with fname.open("a") as f:
         for args in line_args:
             f.write("{}\t{}\n".format(*args))
