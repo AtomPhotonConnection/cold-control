@@ -25,6 +25,10 @@ STAGE 2 — DATA ANALYSIS (FluorescenceAnalyser)
     All individual uncertainties are the standard error of the mean (σ/√n).
 """
 
+# ruff: noqa: N803, N806
+# N803: Argument name should be lowercase
+# N806: Variable name in function should be lowercase
+
 from __future__ import annotations
 
 import pickle
@@ -199,7 +203,7 @@ class UnifiedFluorescenceProcessor:
 
         max_start = -time_before_drop
         min_end = time_after_drop
-        for df, drop_time in zip(valid_dfs, drop_times):
+        for df, drop_time in zip(valid_dfs, drop_times, strict=True):
             rel_time = df[self.time_col].values - drop_time
             max_start = max(max_start, rel_time[0])
             min_end = min(min_end, rel_time[-1])
@@ -218,7 +222,7 @@ class UnifiedFluorescenceProcessor:
 
         interpolated_data: dict[str, list] = {col_name: [] for col_name in available_channels}
 
-        for df, drop_time in zip(valid_dfs, drop_times):
+        for df, drop_time in zip(valid_dfs, drop_times, strict=True):
             relative_time = df[self.time_col].values - drop_time
 
             for col_name in available_channels:
@@ -580,7 +584,7 @@ class UnifiedFluorescenceProcessor:
             "n_background_shots": n,
         }
 
-        print(f"\n  Background summary:")
+        print("\n  Background summary:")
         print(f"    F_max_bg = {result['F_max_bg']:.6f} ± {result['F_max_bg_sem']:.6f} V")
         print(f"    F_img_bg = {result['F_img_bg']:.6f} ± {result['F_img_bg_sem']:.6f} V")
         print(f"    n_background_shots = {n}")
@@ -633,7 +637,7 @@ class UnifiedFluorescenceProcessor:
         colors = virid_cmap(np.linspace(0, 1, max(len(shots), 1)))
 
         ax = axes[0]
-        for shot_name, color in zip(shots, colors):
+        for shot_name, color in zip(shots, colors, strict=False):
             df = self.aligned_data_cache[shot_name]
             if self.fluorescence_col in df.columns:
                 ax.plot(
@@ -890,7 +894,7 @@ def plot_normalised_results(
     """
     Plot the analysed (background-subtracted, normalised) fluorescence results.
 
-    Generates a 2×2 figure:
+    Generates a 2x2 figure:
       - Top-left: F_norm vs shot (with error bars), grouped by parameter folder.
       - Top-right: F_max and F_img (background-subtracted) vs shot.
       - Bottom-left: Raw actual vs background values for diagnostics.
@@ -935,7 +939,7 @@ def plot_normalised_results(
     if "parameter_folder" in df.columns and df["parameter_folder"].nunique() > 1:
         groups = df.groupby("parameter_folder")
         colors = cmap(np.linspace(0, 1, max(len(groups), 1)))
-        for (pf, group), color in zip(groups, colors):
+        for (pf, group), color in zip(groups, colors, strict=True):
             x = group["shot_number"] if "shot_number" in group.columns else range(len(group))
             ax.errorbar(
                 x,

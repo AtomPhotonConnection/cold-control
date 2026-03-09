@@ -26,7 +26,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -89,7 +89,7 @@ def make_property(attr_name):
 T = TypeVar("T", bound=GenericConfiguration)
 
 
-class GenericExperiment(Generic[T]):
+class GenericExperiment[T: GenericConfiguration]:
     """
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     """
@@ -428,7 +428,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         img_dir = None
         bkg_dir = None
 
-        for seq, bkg_seq, label in zip(self.sequences, self.bkg_sequences, self.sequence_labels):
+        for seq, bkg_seq, label in zip(
+            self.sequences, self.bkg_sequences, self.sequence_labels, strict=True
+        ):
             # Write the persistance values and wait for the MOT to reload
             self.daq_controller.load(seq.get_array())
             self.daq_controller.write_channel_values()
@@ -522,14 +524,16 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 "processing images by subtracting the image from the background and clipping to be between 0 and 255"
             )  # This was Tom's original method
             unscaled_corr_imgs = [
-                np.clip(np.round(bkg - img), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+                np.clip(np.round(bkg - img), 0, 255)
+                for img, bkg in zip(img_arrs, bkg_aves_float, strict=True)
             ]
         elif process_type == 2:
             print(
                 "processing images by subtracting the background from the image and clipping to be between 0 and 255"
             )
             unscaled_corr_imgs = [
-                np.clip(np.round(img - bkg), 0, 255) for img, bkg in zip(img_arrs, bkg_aves_float)
+                np.clip(np.round(img - bkg), 0, 255)
+                for img, bkg in zip(img_arrs, bkg_aves_float, strict=True)
             ]
         elif process_type == 3:
             print("images aren't being processed.")
@@ -546,7 +550,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             save_location = Path(self.save_location)
             bkg_dir = save_location / "backgrounds"
             bkg_dir.mkdir(parents=True, exist_ok=True)
-            for img, bkg_img, label in zip(corr_images, bkg_aves, self.sequence_labels):
+            for img, bkg_img, label in zip(
+                corr_images, bkg_aves, self.sequence_labels, strict=True
+            ):
                 Image.fromarray(img).save(save_location / f"{label}.bmp", "bmp")
                 Image.fromarray(bkg_img).save(bkg_dir / f"{label}.bmp", "bmp")
             print("Processed images saved")
@@ -567,7 +573,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             print("No images to save.")
         elif self.corr_img_arrs is None:
             # this code runs when only a background experiment has been run
-            for bkg_img, label in zip(cast(list[Any], self.ave_bkg_arrs), self.sequence_labels):
+            for bkg_img, label in zip(
+                cast(list[Any], self.ave_bkg_arrs), self.sequence_labels, strict=True
+            ):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
                     bkg_img = (
@@ -576,7 +584,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
                 Image.fromarray(bkg_img).save(f"{bkg_dir}/{label}.bmp", "bmp")
         else:
             for img, bkg_img, label in zip(
-                self.corr_img_arrs, cast(list[Any], self.ave_bkg_arrs), self.sequence_labels
+                self.corr_img_arrs,
+                cast(list[Any], self.ave_bkg_arrs),
+                self.sequence_labels,
+                strict=True,
             ):
                 # Normalize the floating-point image to the range 0-255
                 if bkg_img.dtype == float:
@@ -1419,7 +1430,7 @@ class PhotonProductionDataSaver:
         ch = None
 
         try:
-            for t, ch in zip(timestamps, channels):
+            for t, ch in zip(timestamps, channels, strict=True):
                 if ch == self.tdc_marker_channel:
                     #                     print 'MARKER', t, ch
                     t_stirap_0 = t

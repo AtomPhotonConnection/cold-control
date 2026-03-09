@@ -546,7 +546,7 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.background_mode = background_mode
         self.background_iterations = background_iterations
 
-        if self.repump_channel is not None:
+        if repump_channel is not None:
             self.repump_channel = repump_channel
         else:
             self.repump_channel = 20  # default channel for MOT repumping
@@ -683,7 +683,7 @@ class MotFluoresceConfigurationSweep:
         object and the associated Sequence object. These can then be used to run a single shot
         of the sweep.
         """
-        return iter(zip(self.configs, self.sequences))
+        return iter(zip(self.configs, self.sequences, strict=True))
 
     def __len__(self):
         return len(self.configs)

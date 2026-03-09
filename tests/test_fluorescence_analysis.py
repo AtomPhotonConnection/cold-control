@@ -22,6 +22,9 @@ from data_analysis_functions.unified_fluorescence_analysis import (
     UnifiedFluorescenceProcessor,
 )
 
+# ruff: noqa: N803, N806
+# N803: Argument name should be lowercase
+# N806: Variable name in function should be lowercase
 
 # ===========================================================================
 # Helpers
@@ -145,7 +148,7 @@ class TestAnalyseSinglePoint:
         expected = (0.050 - 0.005) / (0.100 - 0.010)  # 0.5
         assert np.isclose(r.F_norm, expected)
 
-    def test_uncertainty_F_max_eq4(self, analyser):
+    def test_uncertainty_f_max_eq4(self, analyser):
         """σ_F_max = sqrt(σ_act² + σ_bg²) (eq 4)."""
         r = analyser.analyse_single_point(
             F_max_act=0.100,
@@ -156,7 +159,7 @@ class TestAnalyseSinglePoint:
         expected = np.sqrt(0.002**2 + 0.001**2)
         assert np.isclose(r.F_max_uncertainty, expected)
 
-    def test_uncertainty_F_img_eq5(self, analyser):
+    def test_uncertainty_f_img_eq5(self, analyser):
         """σ_F_img = sqrt(σ_act² + σ_bg²) (eq 5)."""
         r = analyser.analyse_single_point(
             F_max_act=0.100,
@@ -167,7 +170,7 @@ class TestAnalyseSinglePoint:
         expected = np.sqrt(0.003**2 + 0.0005**2)
         assert np.isclose(r.F_img_uncertainty, expected)
 
-    def test_uncertainty_F_norm_eq7(self, analyser):
+    def test_uncertainty_f_norm_eq7(self, analyser):
         """σ_F_norm = F_norm * sqrt((σ_img/F_img)² + (σ_max/F_max)²) (eq 7)."""
         r = analyser.analyse_single_point(
             F_max_act=0.100,
@@ -248,7 +251,7 @@ class TestAnalyseSinglePoint:
 
 
 class TestAnalyseEdgeCases:
-    def test_near_zero_F_max_gives_nan_with_warning(self):
+    def test_near_zero_f_max_gives_nan_with_warning(self):
         """When F_max → 0, normalisation is undefined and should warn."""
         bg = _make_background_data(F_max_bg=0.100)  # bg ≈ signal
         analyser = FluorescenceAnalyser(bg)
@@ -589,9 +592,9 @@ class TestFullPipelineIntegration:
         """Create a synthetic oscilloscope trace with a clean MOT drop.
 
         Layout (absolute time):
-            0–2.5 ms: pre-drop fluorescence (high)
-            2.5–8 ms: post-drop baseline (low)
-            3.5–3.98 ms: imaging pulse (overrides baseline)
+            0-2.5 ms: pre-drop fluorescence (high)
+            2.5-8 ms: post-drop baseline (low)
+            3.5-3.98 ms: imaging pulse (overrides baseline)
 
         Uses enough points and a gradual-ish drop so that the
         64-point rolling average doesn't distort the flat regions.
