@@ -410,9 +410,7 @@ class AWGManager:
     def get_sample_rate(self) -> float:
         return float(self._query(":FREQ:RAST?"))
 
-    def set_sample_rate(
-        self, sample_rate: float, channels: tuple[int, ...] | None = None
-    ) -> None:
+    def set_sample_rate(self, sample_rate: float, channels: tuple[int, ...] | None = None) -> None:
         for ch in (1, 2, 3, 4):
             if channels is None or ch in channels:
                 self.select_channel(ch)
@@ -803,6 +801,9 @@ class AWGManager:
         """
         self.delete_all_segments()  # clear waveform memory
 
+        print(f"continuous: {continuous}")
+        self.set_continuous(False)
+
         waveform_sequence = awg_cfg.waveform_sequence
         sample_rate = awg_cfg.sample_rate
         burst_count = awg_cfg.burst_count
@@ -851,9 +852,11 @@ class AWGManager:
         print("\n--- Starting waveform upload ---\n")
 
         # --- Upload waveforms for each channel ---
+        self.set_continuous(False)
         for ch in outp_channels:
             data = all_ch_data[ch]
             success = self.upload_waveform(data, segment=1, channel=ch)
+            self.set_continuous(False)
             if not success:
                 raise RuntimeError(f"Failed to upload waveform for channel {ch}")
             self._log.info(f"Waveform for channel {ch} uploaded successfully.")
@@ -866,11 +869,18 @@ class AWGManager:
                 "Marker width is %g samples",
                 marker_width_samps,
             )
+            self.set_continuous(False)
             self.configure_marker(channel=1, width=marker_width_samps)
+            self.set_continuous(False)
 
             self._log.info(f"self.check_errors(): {self.check_errors()}")
         else:
             self._log.info("No marker configuration provided, skipping marker setup.")
+
+        if continuous:
+            self.set_continuous(True)
+        else:
+            self.set_continuous(False)
 
         # --- Enable outputs and arm ---
         for ch in outp_channels:
@@ -889,8 +899,11 @@ class AWGManager:
         -------
         None
         """
+        self.set_continuous(False)  # triggered mode
+
         self._upload_core(awg_cfg, continuous=False)
-        self.initiate()
+        # self.initiate()
+        self.set_continuous(False)  # triggered mode
 
         self._log.info("AWG armed and waiting for trigger.")
         print("AWG armed and waiting for trigger.")

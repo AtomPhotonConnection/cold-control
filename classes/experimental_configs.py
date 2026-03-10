@@ -72,12 +72,14 @@ class Waveform:
 
     def __init__(
         self,
-        fname: str,
+        fname: str | Path,
         modulated: bool | None = None,
         mod_frequency: float = 0.0,
         phases: list[tuple[float, int]] | None = None,
     ):
-        self.__fname = fname
+        if isinstance(fname, str):
+            fname = Path(fname)
+        self.__fname: Path = fname
         self.__mod_frequency = mod_frequency
         self.__phases = sorted(phases, key=lambda x: x[1]) if phases else []
 
@@ -108,7 +110,7 @@ class Waveform:
         If the file contains multiple rows *and* multiple columns the format is
         ambiguous and a ``ValueError`` is raised.
         """
-        with Path(self.__fname).open() as csvfile:
+        with self.__fname.open() as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             rows: list[list[str]] = [row for row in reader if row]  # skip blank lines
 
@@ -234,11 +236,13 @@ class Waveform:
     # --- Properties ---
 
     @property
-    def fname(self) -> str:
+    def fname(self) -> Path:
         return self.__fname
 
     @fname.setter
-    def fname(self, value: str):
+    def fname(self, value: str | Path):
+        if isinstance(value, str):
+            value = Path(value)
         self.__fname = value
         self.data = self.__load_data()
 

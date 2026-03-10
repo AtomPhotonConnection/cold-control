@@ -37,9 +37,9 @@ except (ImportError, ModuleNotFoundError):
     osc = None  # type: ignore[assignment]
 
 try:
-    import instruments.WX218x.awg_manager as awg_manager
+    from instruments.WX218x.awg_manager import AWGManager
 except (ImportError, ModuleNotFoundError):
-    awg_manager = None  # type: ignore[assignment]
+    AWGManager = None  # type: ignore[assignment]
 from classes.daq import DAQChannel, DAQController
 from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
@@ -770,7 +770,7 @@ class PhotonProductionExperiment(GenericExperiment):
     def __configure_awg(self):
         print("Connecting to AWG...")
 
-        awg = awg_manager.AWGManager()  # type: ignore
+        awg = AWGManager()  # type: ignore
         print("...connected")
 
         awg.upload_and_arm(self.awg_config)
@@ -1048,15 +1048,16 @@ class MotFluoresceExperiment(GenericExperiment):
         assert self.awg_config is not None, "AWG config is not set. Cannot configure AWG."
         start_time = time.perf_counter()
         print("Connecting to AWG...")
-        if self.development_mode:
+        if not self.development_mode:
+            assert AWGManager is not None, (
+                "awg_manager module is not available. Cannot configure AWG."
+            )
+            self.awg = AWGManager()
+
+        else:
             from instruments.dummy import DummyAWGManager
 
             self.awg = DummyAWGManager()
-        else:
-            assert awg_manager is not None, (
-                "awg_manager module is not available. Cannot configure AWG."
-            )
-            self.awg = awg_manager.AWGManager()
 
         self.awg.upload_and_arm(self.awg_config)
 
