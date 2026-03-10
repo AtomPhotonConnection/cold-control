@@ -22,6 +22,8 @@ from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
 
+from UI_classes.UI_helpers import ImageButton
+
 # import wx
 from classes.config_readers import SequenceReader, SequenceWriter
 from classes.daq_sequence import (
@@ -38,16 +40,6 @@ TODO -
 3. Implement channel wrapper (e.g. V <--> Hz for AOMs)
 4. Sequence: update interval --> sequence speed
 """
-
-
-class ImageButton(tk.Button):
-    """Important class to prevent image being garbage collected.
-    Usage:
-    self.addButton = ImageButton(..., image=icon)
-    self.addButton.image_ref=icon
-    """
-
-    image_ref: ImageTk.PhotoImage
 
 
 class DaqSequenceUI(tk.Toplevel):
