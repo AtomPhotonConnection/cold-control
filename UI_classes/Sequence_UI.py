@@ -22,8 +22,6 @@ from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
 
-from UI_classes.UI_helpers import ImageButton
-
 # import wx
 from classes.config_readers import SequenceReader, SequenceWriter
 from classes.daq_sequence import (
@@ -32,6 +30,7 @@ from classes.daq_sequence import (
     InvalidSequenceChannelError,
     MultipleInvalidSequenceChannelError,
 )
+from UI_classes.UI_helpers import ImageButton
 
 """
 TODO -

@@ -23,7 +23,7 @@ from configobj import ConfigObj
 
 logger = logging.getLogger(__name__)
 
-from classes.daq import (
+from classes.daq import (  # noqa: E402
     INPUT_LINE,
     OUTPUT_LINE,
     Channel_P1A,
@@ -38,8 +38,8 @@ from classes.daq import (
 )
 
 # from instruments.WX218x.WX218x_awg import Channel
-from classes.daq_sequence import DaqSequence
-from classes.experimental_configs import (
+from classes.daq_sequence import DaqSequence  # noqa: E402
+from classes.experimental_configs import (  # noqa: E402
     AbsorbtionImagingConfiguration,
     AwgConfiguration,
     ExperimentSessionConfig,
@@ -95,7 +95,8 @@ def to_int_tuple(arg):
 def to_float_list(arg):
     if isinstance(arg, str):
         warnings.warn(
-            "to_float_list received a string input. This may lead to unexpected behavior."
+            "to_float_list received a string input. This may lead to unexpected behavior.",
+            stacklevel=2,
         )
         return [float(arg)]
     return list(map(float, arg))
