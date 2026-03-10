@@ -840,10 +840,10 @@ class FluorescenceAnalyser:
 
         for _, row in signal_df.iterrows():
             ar = self.analyse_single_point(
-                F_max_act=float(row["F_max"]),
-                F_max_act_sem=float(row["F_max_sem"]),
-                F_img_act=float(row["F_img"]),
-                F_img_act_sem=float(row["F_img_sem"]),
+                F_max_act=float(row["F_max"]),  # type: ignore[arg-type]
+                F_max_act_sem=float(row["F_max_sem"]),  # type: ignore[arg-type]
+                F_img_act=float(row["F_img"]),  # type: ignore[arg-type]
+                F_img_act_sem=float(row["F_img_sem"]),  # type: ignore[arg-type]
             )
             # Carry metadata through
             ar.shot_name = str(row.get("shot_name", "") or "")

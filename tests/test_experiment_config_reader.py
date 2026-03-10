@@ -6,7 +6,7 @@ import sys
 import tempfile
 import warnings
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 # Ensure the project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
