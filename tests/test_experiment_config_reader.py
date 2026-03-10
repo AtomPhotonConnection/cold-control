@@ -1,10 +1,12 @@
 """Tests for the ExperimentConfigReader with both old and new config formats."""
 
 import os
+import shutil
 import sys
 import tempfile
 import warnings
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 # Ensure the project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +124,16 @@ def test_get_sequence_from_experiment_config():
 # ---------------------------------------------------------------------------
 
 
+def _mock_rescale_csv(self, rabi, csv_in, csv_out, normalised=True):
+    """Mock rescale_csv that just copies the input CSV to the output path."""
+    Path(csv_out).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(csv_in, csv_out)
+
+
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_loads():
     """New self-contained sweep config returns a MotFluoresceConfigurationSweep."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -132,6 +144,10 @@ def test_new_format_sweep_loads():
     )
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_has_base_config():
     """Sweep config's base_config is a valid MotFluoresceConfiguration."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -143,6 +159,10 @@ def test_new_format_sweep_has_base_config():
     assert config.base_config.use_awg is True
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_has_sequence():
     """Sweep config's base_sequence is a loaded Sequence object."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -153,6 +173,10 @@ def test_new_format_sweep_has_sequence():
     assert hasattr(config.base_sequence, "n_samples")
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_params():
     """Sweep config has correct sweep parameters."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)

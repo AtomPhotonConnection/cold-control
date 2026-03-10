@@ -84,7 +84,7 @@ def _make_averaged_df(
     n_points: int = 50000,
     time_range: tuple[float, float] = (-0.5e-3, 4e-3),
     mot_on_window: tuple[float, float] = (-0.5e-3, 0),
-    img_window: tuple[float, float] = (1.0e-3, 1.48e-3),
+    img_window: tuple[float, float] = (1.0e-3, 1.5e-3),
 ) -> pd.DataFrame:
     """Create a synthetic averaged DataFrame for extract_fluorescence_values tests.
 
@@ -487,13 +487,15 @@ class TestProcessBackground:
     def _make_drop_trace(
         n_points: int = 1000,
         pre_drop_voltage: float = 0.050,
-        post_drop_voltage: float = 0.005,
+        post_drop_voltage: float = 0.0001,
         img_voltage: float = 0.020,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Create a synthetic oscilloscope trace with a fluorescence drop.
 
         The trace goes: high → drop → imaging pulse → low.
         Uses absolute time starting at 0 with a drop at ~2.5 ms.
+        post_drop_voltage must be below FLUOR_DROP_VOLTAGE (0.5e-3 V)
+        for drop detection to work.
         """
         time = np.linspace(0, 8e-3, n_points)
         fluor = np.full_like(time, post_drop_voltage)
@@ -586,7 +588,7 @@ class TestFullPipelineIntegration:
     def _make_trace(
         pre_drop: float,
         img: float,
-        post_drop: float = 0.005,
+        post_drop: float = 0.0001,
         n: int = 10000,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Create a synthetic oscilloscope trace with a clean MOT drop.
@@ -596,8 +598,8 @@ class TestFullPipelineIntegration:
             2.5-8 ms: post-drop baseline (low)
             3.5-3.98 ms: imaging pulse (overrides baseline)
 
-        Uses enough points and a gradual-ish drop so that the
-        64-point rolling average doesn't distort the flat regions.
+        post_drop must be below FLUOR_DROP_VOLTAGE (0.5e-3 V)
+        for drop detection to work.
         """
         time = np.linspace(0, 8e-3, n)
         fluor = np.full_like(time, post_drop)
