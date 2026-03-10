@@ -1,7 +1,17 @@
 import logging
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))  # add parent directory to path
 
 from classes.experimental_configs import AwgConfiguration, Waveform
 from instruments.WX218x.awg_manager import AWGManager
+
+print(
+    f"Current working directory: {Path(__file__)}"
+)  # Debugging line to check the current working directory
+
+cc_path = Path(__file__).resolve().parent.parent
 
 # ensure logging goes to the right place
 logging.basicConfig(
@@ -12,16 +22,22 @@ logging.basicConfig(
 )
 
 _waveforms = {
-    0: Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=74e6),
-    1: Waveform(r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=55e6),
-    2: Waveform(r"waveforms\marina\zeros\zero_1000.csv", modulated=False, mod_frequency=0),
+    0: Waveform(
+        cc_path / r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=74e6
+    ),
+    1: Waveform(
+        cc_path / r"waveforms\new_Jan\tophat\tophat_1000ns.csv", modulated=True, mod_frequency=55e6
+    ),
+    2: Waveform(
+        cc_path / r"waveforms\marina\zeros\zero_1000.csv", modulated=False, mod_frequency=0
+    ),
     3: Waveform(
-        r"waveforms\pulse_shaping_exp\stirap\standard_200ns_pump.csv",
+        cc_path / r"waveforms\pulse_shaping_exp\stirap\standard_200ns_pump.csv",
         modulated=True,
         mod_frequency=61e6,
     ),
     4: Waveform(
-        r"waveforms\pulse_shaping_exp\stirap\standard_200ns_stokes.csv",
+        cc_path / r"waveforms\pulse_shaping_exp\stirap\standard_200ns_stokes.csv",
         modulated=True,
         mod_frequency=80e6,
     ),
@@ -65,7 +81,8 @@ if __name__ == "__main__":
         # plt.show()
 
         awg = AWGManager()
-        awg.upload_and_arm(awg_config)
+        # awg.upload_and_arm(awg_config)
+        awg.set_continuous(False)
 
     finally:
         if awg is not None:
