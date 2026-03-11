@@ -45,6 +45,7 @@ from classes.experimental_configs import (  # noqa: E402
     ExperimentSessionConfig,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
+    MotFluorescenceAlignmentConfiguration,
     PhotonProductionConfiguration,
     ScopeConfiguration,
     SingleExperimentConfig,
@@ -1019,6 +1020,7 @@ class ExperimentConfigReader:
         Returns the appropriate configuration object:
         - ``"mot fluorescence"`` → ``MotFluoresceConfiguration``
         - ``"mot fluorescence sweep"`` → ``MotFluoresceConfigurationSweep``
+        - ``"mot fluorescence alignment"`` → ``MotFluorescenceAlignmentConfiguration``
         - ``"photon production"`` → ``PhotonProductionConfiguration``
         - ``"absorbtion imaging"`` → ``AbsorbtionImagingConfiguration``
         """
@@ -1031,6 +1033,8 @@ class ExperimentConfigReader:
             return self.get_mot_flourescence_configuration()
         elif expt_type == "mot fluorescence sweep":
             return self.get_full_sweep_configuration()
+        elif expt_type == "mot fluorescence alignment":
+            return self.get_mot_fluorescence_alignment_configuration()
         elif expt_type == "absorbtion imaging":
             return self.get_absorbtion_imaging_configuration()
         else:
@@ -1048,6 +1052,32 @@ class ExperimentConfigReader:
             )
         seq_path = resolve_config_path(self.config["sequence_config"], get_config_root())
         return SequenceReader(seq_path).load_sequence()
+
+    def get_mot_fluorescence_alignment_configuration(self) -> MotFluorescenceAlignmentConfiguration:
+        """Build a ``MotFluorescenceAlignmentConfiguration`` from the config file.
+
+        The config file uses the same format as a standard MOT fluorescence
+        experiment (with ``scope_config``, ``awg_config``, ``sequence_config``
+        etc.) but sets ``experiment_type = "MOT Fluorescence Alignment"``.
+
+        An optional top-level ``background_folder`` key specifies the path to
+        a directory of background measurement data.  If present, the alignment
+        loop will compute F_norm; otherwise it shows raw F_img.
+        """
+        base_config = self.get_mot_flourescence_configuration()
+        sequence = self.get_sequence()
+
+        background_folder: str | None = None
+        if "background_folder" in self.config:
+            background_folder = resolve_config_path(
+                self.config["background_folder"], get_config_root()
+            )
+
+        return MotFluorescenceAlignmentConfiguration(
+            base_config=base_config,
+            base_sequence=sequence,
+            background_folder=background_folder,
+        )
 
     def get_full_sweep_configuration(self) -> MotFluoresceConfigurationSweep:
         """Build a complete ``MotFluoresceConfigurationSweep`` from a self-contained sweep config.

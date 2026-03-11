@@ -603,6 +603,40 @@ class MotFluoresceConfiguration(GenericConfiguration):
         return cast(ScopeConfiguration, self.scope_config).data_channels
 
 
+class MotFluorescenceAlignmentConfiguration:
+    """Configuration for a MOT fluorescence alignment experiment.
+
+    This experiment repeatedly runs the same MOT fluorescence experiment until
+    the user stops it, displaying a computed metric (F_norm or F_img) after
+    each iteration so the experimenter can tune the physical setup in real time.
+
+    The configuration wraps a :class:`MotFluoresceConfiguration` (defining a
+    single-shot experiment) and a :class:`DaqSequence`.  An optional
+    ``background_folder`` path enables background-subtracted normalisation.
+
+    Parameters
+    ----------
+    base_config : MotFluoresceConfiguration
+        The single-shot experiment configuration to repeat.
+    base_sequence : DaqSequence
+        The DAQ sequence to play for each iteration.
+    background_folder : str | None
+        Path to a folder containing background measurement data.  If provided,
+        the alignment loop will compute F_norm (normalised fluorescence); if
+        ``None``, it falls back to displaying raw F_img.
+    """
+
+    def __init__(
+        self,
+        base_config: MotFluoresceConfiguration,
+        base_sequence: DaqSequence,
+        background_folder: str | None = None,
+    ):
+        self.base_config = base_config
+        self.base_sequence = base_sequence
+        self.background_folder = background_folder
+
+
 class MotFluoresceConfigurationSweep:
     def __init__(
         self,

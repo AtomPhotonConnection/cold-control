@@ -31,12 +31,14 @@ from classes.daq import DAQDio
 from classes.experimental_configs import (
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
+    MotFluorescenceAlignmentConfiguration,
     PhotonProductionConfiguration,
 )
 from classes.experimental_runner import (
     AbsorbtionImagingExperiment,
     GenericExperiment,
     MotFluoresceExperiment,
+    MotFluorescenceAlignmentExperiment,
     MotFluoresceSweepExperiment,
     PhotonProductionExperiment,
 )
@@ -125,7 +127,10 @@ class ExperimentalUI(tk.LabelFrame):
         )
         self.configure_photon_production_button.image_ref = icon  # see ImageButton class
 
-        if isinstance(self.loaded_experiment_config, MotFluoresceConfigurationSweep):
+        if isinstance(
+            self.loaded_experiment_config,
+            (MotFluoresceConfigurationSweep, MotFluorescenceAlignmentConfiguration),
+        ):
             cfg = self.loaded_experiment_config.base_config
         else:
             cfg = self.loaded_experiment_config
@@ -439,6 +444,23 @@ class ExperimentalUI(tk.LabelFrame):
             print("Running MOT Fluoresce Sweep experiment")
             sweep_experiment.run_in_thread()
             return
+
+        elif isinstance(self.loaded_experiment_config, MotFluorescenceAlignmentConfiguration):
+            # Alignment config loaded — run the alignment loop with live UI
+            alignment_experiment = MotFluorescenceAlignmentExperiment(
+                self.loaded_experiment_config,
+                self.daq_ui.daq_controller,
+                development_mode=self.development_mode,
+            )
+            print("Running MOT Fluorescence Alignment experiment")
+            experiment_thread = alignment_experiment.run_in_thread()
+            time.sleep(0.1)
+            alignment_ui = AlignmentLiveUI(self, alignment_experiment)
+            alignment_ui.poll_results()
+            self.winfo_toplevel().wait_window(alignment_ui)
+            experiment_thread.join()
+            return
+
         else:
             raise Exception(
                 "Invalid experiment type specified.  Must be either PhotonProductionExperiment or MotFluoresceExperiment."
@@ -643,7 +665,7 @@ class ExperimentalUI(tk.LabelFrame):
 
         # Update UI fields - sweep configs store experiment params on base_config
         cfg = self.loaded_experiment_config
-        if isinstance(cfg, MotFluoresceConfigurationSweep):
+        if isinstance(cfg, (MotFluoresceConfigurationSweep, MotFluorescenceAlignmentConfiguration)):
             cfg = cfg.base_config
         self.total_iterations_frame.entryWid.delete(0, tk.END)
         self.total_iterations_frame.entryWid.insert(0, cfg.iterations)
@@ -1991,6 +2013,160 @@ class GenericExperimentConfigUi:
         for wid in self.top.winfo_children():
             wid.destroy()
         self.top.destroy()
+
+
+# =======================================================================================
+# MARK: Alignment Live UI
+# =======================================================================================
+class AlignmentLiveUI(tk.Toplevel):
+    """Live UI for the MOT Fluorescence Alignment experiment.
+
+    Displays the current fluorescence metric prominently (colour-coded to
+    indicate improvement/degradation), a scrollable history of past values,
+    and a **Stop** button to end the alignment loop.
+    """
+
+    def __init__(
+        self,
+        parent,
+        alignment_experiment: MotFluorescenceAlignmentExperiment,
+        **kwargs,
+    ):
+        tk.Toplevel.__init__(self, parent, **kwargs)
+
+        self.alignment_experiment = alignment_experiment
+        self._last_displayed_count: int = 0
+
+        self.wm_title("MOT Fluorescence Alignment — Live")
+        self.minsize(420, 480)
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # --- Status label ---
+        self.status_label = tk.Label(
+            self, text="Waiting for first result...", font=("Helvetica", 12)
+        )
+        self.status_label.pack(pady=(10, 2))
+
+        # --- Shot counter ---
+        shot_frame = tk.Frame(self)
+        tk.Label(shot_frame, text="Shot:", font=("Helvetica", 12)).pack(side=tk.LEFT)
+        self.shot_var = tk.StringVar(value="0")
+        tk.Label(shot_frame, textvariable=self.shot_var, font=("Helvetica", 12, "bold")).pack(
+            side=tk.LEFT, padx=(5, 0)
+        )
+        shot_frame.pack(pady=2)
+
+        # --- Large metric display ---
+        self.metric_label = tk.Label(self, text="—", font=("Helvetica", 48, "bold"), fg="grey")
+        self.metric_label.pack(pady=(5, 0))
+
+        self.metric_name_label = tk.Label(self, text="", font=("Helvetica", 14))
+        self.metric_name_label.pack(pady=(0, 5))
+
+        # --- Change indicator ---
+        self.change_label = tk.Label(self, text="", font=("Helvetica", 16))
+        self.change_label.pack(pady=(0, 10))
+
+        # --- History ---
+        history_frame = tk.LabelFrame(self, text="History", font=("Helvetica", 11))
+        history_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        self.history_text = ScrolledText(
+            history_frame, height=10, width=45, font=("Courier", 10), state=tk.DISABLED
+        )
+        self.history_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # --- Stop button ---
+        _butt_opts = {"font": ("Helvetica", 14), "height": 35, "width": 200, "compound": tk.LEFT}
+        self.stop_button = tk.Button(
+            self,
+            text="Stop Alignment",
+            command=self._stop_experiment,
+            bg="red",
+            fg="white",
+            font=("Helvetica", 14, "bold"),
+            height=2,
+            width=20,
+        )
+        self.stop_button.pack(pady=10)
+
+    # ---- Polling -----------------------------------------------------------
+
+    def poll_results(self, delay_ms: int = 500) -> None:
+        """Periodically check for new results from the experiment thread."""
+        self._update_display()
+
+        if self.alignment_experiment.is_running:
+            self.after(delay_ms, lambda: self.poll_results(delay_ms))
+        else:
+            # Final update then allow closing
+            self._update_display()
+            self._update_for_finished()
+
+    # ---- Display helpers ---------------------------------------------------
+
+    def _update_display(self) -> None:
+        n_results = len(self.alignment_experiment.results)
+        self.shot_var.set(str(self.alignment_experiment.shot_count))
+
+        if n_results == 0 or n_results == self._last_displayed_count:
+            return
+
+        self._last_displayed_count = n_results
+        value = self.alignment_experiment.results[-1]
+        label = self.alignment_experiment.current_result_label or "Metric"
+
+        # Update prominent metric display
+        self.metric_label.configure(text=f"{value:.6f}")
+        self.metric_name_label.configure(text=label)
+        self.status_label.configure(text=f"Iteration {n_results} complete")
+
+        # Colour-code direction
+        if n_results >= 2:
+            prev = self.alignment_experiment.results[-2]
+            delta = value - prev
+            if delta > 0:
+                self.metric_label.configure(fg="green4")
+                self.change_label.configure(text=f"\u25b2 +{delta:.6f}", fg="green4")
+            elif delta < 0:
+                self.metric_label.configure(fg="red")
+                self.change_label.configure(text=f"\u25bc {delta:.6f}", fg="red")
+            else:
+                self.metric_label.configure(fg="grey")
+                self.change_label.configure(text="— no change", fg="grey")
+        else:
+            self.metric_label.configure(fg="blue")
+            self.change_label.configure(text="(first measurement)", fg="grey")
+
+        # Append to history
+        self.history_text.configure(state=tk.NORMAL)
+        self.history_text.insert(tk.END, f"  #{n_results:>3d}   {label} = {value:.6f}\n")
+        self.history_text.see(tk.END)
+        self.history_text.configure(state=tk.DISABLED)
+
+    def _update_for_finished(self) -> None:
+        self.status_label.configure(text="Alignment complete", fg="blue")
+        self.stop_button.configure(text="Close", command=self._destroy, bg="grey")
+
+    # ---- Actions -----------------------------------------------------------
+
+    def _stop_experiment(self) -> None:
+        self.alignment_experiment.stop()
+        self.status_label.configure(text="Stopping after current iteration...")
+        self.stop_button.configure(state=tk.DISABLED)
+
+    def _on_close(self) -> None:
+        if self.alignment_experiment.is_running:
+            self._stop_experiment()
+            return  # wait for experiment to finish; poll_results will call _update_for_finished
+        self._destroy()
+
+    def _destroy(self) -> None:
+        self.grab_release()
+        for wid in self.winfo_children():
+            wid.destroy()
+        self.destroy()
 
 
 class PhotonProductionLiveUI(tk.Toplevel):

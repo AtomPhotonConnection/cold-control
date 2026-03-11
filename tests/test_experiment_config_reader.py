@@ -21,6 +21,7 @@ from classes.experimental_configs import (  # noqa: E402
     AwgConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
+    MotFluorescenceAlignmentConfiguration,
     ScopeConfiguration,
 )
 
@@ -29,6 +30,9 @@ NEW_FORMAT_CONFIG = str(
 )
 NEW_FORMAT_SWEEP = str(
     PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "sweeps" / "feb26_sweep_level.ini"
+)
+NEW_FORMAT_ALIGNMENT = str(
+    PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "alignment" / "alignment_config.ini"
 )
 
 
@@ -251,6 +255,52 @@ experiment_type = "MOT Fluorescence"
         Path(tmp_path).unlink()
 
 
+# ---------------------------------------------------------------------------
+# Alignment config tests
+# ---------------------------------------------------------------------------
+
+
+def test_alignment_config_loads():
+    """Alignment config file returns a MotFluorescenceAlignmentConfiguration."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration), (
+        f"Expected MotFluorescenceAlignmentConfiguration, got {type(config)}"
+    )
+
+
+def test_alignment_config_has_base_config():
+    """Alignment config wraps a MotFluoresceConfiguration as base_config."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert isinstance(config.base_config, MotFluoresceConfiguration)
+    assert config.base_config.iterations == 7
+    assert config.base_config.mot_reload == 1000
+
+
+def test_alignment_config_has_sequence():
+    """Alignment config loads a DaqSequence as base_sequence."""
+    from classes.daq_sequence import DaqSequence
+
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert isinstance(config.base_sequence, DaqSequence)
+
+
+def test_alignment_config_no_background_by_default():
+    """Alignment config has background_folder=None when not specified."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert config.background_folder is None
+
+
 if __name__ == "__main__":
     test_new_format_loads_mot_fluorescence()
     test_new_format_has_scope_config()
@@ -264,4 +314,8 @@ if __name__ == "__main__":
     test_new_format_sweep_has_sequence()
     test_new_format_sweep_params()
     test_old_format_emits_deprecation_warning()
+    test_alignment_config_loads()
+    test_alignment_config_has_base_config()
+    test_alignment_config_has_sequence()
+    test_alignment_config_no_background_by_default()
     print("All ExperimentConfigReader tests passed!")
