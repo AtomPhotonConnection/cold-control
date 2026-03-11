@@ -281,32 +281,43 @@ class DaqChannelEntry(tk.Entry):
         Increments the value on the DAQ channel accordingly.
         """
 
-        #       Count the number of places between the decimal place in the float and the cursor index
-        #       to calculate the order of the incrementation, i.e 0.01,0.1,1,10,...ect
-        decimal_index = self.widget.get().index(".")
+        # Count the number of places between the decimal place in the float and the cursor index
+        # to calculate the order of the incrementation, i.e 0.01, 0.1, 1, 10, ...
+        current_text = self.widget.get()
+        decimal_index = current_text.index(".")
         cursor_index = self.widget.index(tk.INSERT)
         increment_order = decimal_index - cursor_index
+
+        # Track the cursor offset relative to the decimal point so it can be restored correctly
+        # even when the number of digits changes (e.g. 9.5 -> 10.5 or -0.5 -> 0.5).
+        offset_from_decimal = cursor_index - decimal_index
 
         # If the increment order is -1 the cursor is on the decimal point so do nothing.
         if increment_order != -1:
             if increment_order < -1:
                 increment_order += 1
-            # Caculate the amount to change the value by.  The sign is determined by the key pressed.
+            # Calculate the amount to change the value by.  The sign is determined by the key pressed.
             iterator = (
                 math.pow(10, increment_order)
                 if event.keysym == "Up"
                 else -1 * math.pow(10, increment_order)
             )
 
-            current_value = self.widget.get()
-            # We have to count the number of decimal points of the number and found the iterated
+            # We have to count the number of decimal places of the number and round the iterated
             # value back to this level due to Python's imprecision with floats.
-            ndp = current_value[::-1].find(".")
+            ndp = current_text[::-1].find(".")
 
             self.widget.delete(0, tk.END)
-            self.widget.insert(0, str(round(float(current_value) + iterator, ndp)))
+            self.widget.insert(0, str(round(float(current_text) + iterator, ndp)))
             self.focus_out(event)
-            self.widget.icursor(cursor_index)
+
+            # Restore the cursor at the same position relative to the decimal point so that
+            # repeated arrow key presses continue to increment the same digit, regardless of
+            # whether the string length changed (e.g. 9 -> 10 or 10 -> 9).
+            new_text = self.widget.get()
+            new_decimal_index = new_text.index(".")
+            new_cursor_index = max(0, min(len(new_text), new_decimal_index + offset_from_decimal))
+            self.widget.icursor(new_cursor_index)
 
     def focus_out(self, params):
         flash_col = None
