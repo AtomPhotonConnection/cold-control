@@ -452,15 +452,13 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)
             data = self.cam.get_image_data()
             img = (
-                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                 .convert("L")
                 .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             )
             img_arrs.append(np.array(img))
             if save_raw_images:
                 img.save(f"{img_dir}/img{label}raw.bmp", "bmp")
-
-            #                 sleep(1)
 
             self.cam.reset_frame_ready()
 
@@ -475,7 +473,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
                 data = self.cam.get_image_data()
                 img = (
-                    Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                    Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                     .convert("L")
                     .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                 )
@@ -1184,7 +1182,7 @@ class MotFluoresceExperiment(GenericExperiment):
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)
             data = self.cam.get_image_data()
             img = (
-                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                 .convert("L")
                 .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             )

@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import logging
+import logging.handlers
+import os
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox as tk_message_box
@@ -14,14 +16,35 @@ from UI_classes.Experimental_UI import ExperimentalUI
 from UI_classes.Labbook_UI import LabbookUI
 from UI_classes.Sequence_UI import DaqSequenceUI
 
-# For logging on ALWE61 lab PC
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename=r"C:\pulse_shaping_data\logging\cold_control.log",
-    filemode="a",
-    format="%(asctime)s - %(levelname)s - %(message)s",
+# ---------------------------------------------------------------------------
+# Logging setup — writes to a rotating log file in the user's home directory
+# (or a lab-specific path if $COLD_CONTROL_LOG_DIR is set) and to stderr.
+# ---------------------------------------------------------------------------
+_log_dir = Path(
+    os.environ.get("COLD_CONTROL_LOG_DIR", str(Path.home() / "cold_control_logs"))
 )
+_log_dir.mkdir(parents=True, exist_ok=True)
+_log_file = _log_dir / "cold_control.log"
 
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.DEBUG)
+
+# Rotating file handler (10 MB per file, keep 5 backups)
+_file_handler = logging.handlers.RotatingFileHandler(
+    _log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+_file_handler.setLevel(logging.DEBUG)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+
+# Console handler (INFO and above)
+_console_handler = logging.StreamHandler()
+_console_handler.setLevel(logging.INFO)
+_console_handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+
+_root_logger.addHandler(_file_handler)
+_root_logger.addHandler(_console_handler)
+
+logger = logging.getLogger(__name__)
 
 # Suppress noisy third-party debug output
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
@@ -144,20 +167,20 @@ class ColdControlUI(tk.Frame):
             icon="warning",
         )
         if exit_confirmation == "yes":
-            print("Disconnecting from AWG...")
+            logger.info("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
-            print("Closing camera connections...")
+            logger.info("Closing camera connections...")
             self.camera_UI.close_cameras()
-            print("...all camera connections closed.")
-            print("Releasing DAQ cards...")
+            logger.info("All camera connections closed.")
+            logger.info("Releasing DAQ cards...")
             if not self.development_mode:
                 self.daq_UI.daq_controller.release_all()
-            print("...all cards released.")
-            print("Saving labbook...")
+            logger.info("All cards released.")
+            logger.info("Saving labbook...")
             self.labbook_UI.write()
-            print("...labbook saved")
+            logger.info("Labbook saved.")
             root.destroy()
-            print("Cold Control closed - bye!")
+            logger.info("Cold Control closed - bye!")
 
 
 if __name__ == "__main__":

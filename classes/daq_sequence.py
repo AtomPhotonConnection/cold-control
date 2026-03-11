@@ -4,6 +4,8 @@ Created on 10 Apr 2016
 @author: Tom Barrett
 """
 
+from enum import IntEnum
+
 import numpy as np
 
 
@@ -155,25 +157,15 @@ class _ChannelSequence:
 
     def get_val_array(self):
         t_span = self.parent.get_time_steps()
-        v_span = np.array([], dtype=np.float64)
+        chunks: list[np.ndarray] = []
         num_intervals = len(self.V_interval_styles)
-        #
-        #         if numIntervals == 1:
-        #             # If there is only one interval it's just a constant value for the whole sequence.
-        #             (t_0, V_0) = self.tV_pairs[0]
-        #             (t_1, V_1) = self.parent.getTimeSteps()[-1], V_0
-        #             changeStyle = self.V_interval_styles[0]
-        #
-        #             changeFunc = self.getChangeFunc(changeStyle, (t_0, V_0), (t_1, V_1))
-        #             V_span = np.append(V_span, map(changeFunc, t_span))
-        #
-        #         else:
+
         for i in range(0, num_intervals):
             (t_0, v_0) = self.tV_pairs[i]
             try:
                 (t_1, v_1) = self.tV_pairs[i + 1]
             except IndexError as err:
-                # If there is an index error tHis could be because we are on the final sequence interval.
+                # If there is an index error this could be because we are on the final sequence interval.
                 if i == num_intervals - 1 and self.V_interval_styles[i] == IntervalStyle.FLAT:
                     # If we are, and the final interval style is Flat then we know the final voltage.
                     (t_1, v_1) = t_span[-1], v_0
@@ -188,8 +180,9 @@ class _ChannelSequence:
                 else [t for t in t_span if t_0 <= t < t_1]
             )
 
-            # Note we use t_interval[0] and t_interval[1] rather than t_0 and t_1.  This is because he function fits expected values
-            # between the time points provided - so if t_0 and t_1 are not in t_span then some unwanted values will be set!
+            # Note we use t_interval[0] and t_interval[-1] rather than t_0 and t_1.  This is because
+            # the function fits expected values between the time points provided - so if t_0 and t_1
+            # are not in t_span then some unwanted values will be set!
 
             try:
                 change_func = self.get_change_func(
@@ -197,16 +190,14 @@ class _ChannelSequence:
                 )
                 if change_func is None:
                     raise ValueError(f"Invalid change style {change_style} provided")
-                v_span = np.append(
-                    v_span, np.array(list(map(change_func, t_interval)), dtype=np.float64)
-                )
+                chunks.append(np.array(list(map(change_func, t_interval)), dtype=np.float64))
             except IndexError:
-                # If t_interval is an empty list wel'll catch that here - it just means that t_0 and t_1
-                # are so close together (or identical) so no times in t_span are between them.  The card
-                # can't update that quick so there is nothing to add to V_span anyway.
+                # If t_interval is an empty list we'll catch that here - it just means that t_0 and
+                # t_1 are so close together (or identical) so no times in t_span are between them.
+                # The card can't update that quick so there is nothing to add anyway.
                 pass
 
-        return v_span
+        return np.concatenate(chunks) if chunks else np.array([], dtype=np.float64)
 
     def get_change_func(self, style, t_0_v_0, t_1_v_1):
         t_0, v_0 = t_0_v_0
@@ -283,23 +274,23 @@ class MultipleInvalidSequenceChannelError(Exception):
         self.errorChannels = error_channels
 
 
-class IntervalStyle:
-    FLAT, RAMP = range(2)
+class IntervalStyle(IntEnum):
+    """Enum describing how voltage transitions between two time-voltage pairs."""
+
+    FLAT = 0
+    RAMP = 1
 
     @classmethod
-    def to_string(cls, val):
-        for k, v in vars(cls).items():
-            if v == val:
-                return k.title()
+    def to_string(cls, val: "IntervalStyle") -> str:
+        return cls(val).name.title()
 
     @classmethod
-    def from_string(cls, str):
-        return getattr(cls, str.upper(), None)
+    def from_string(cls, s: str) -> "IntervalStyle | None":
+        try:
+            return cls[s.upper()]
+        except KeyError:
+            return None
 
     @classmethod
-    def get_all(cls):
-        return [
-            x
-            for x in cls.__dict__
-            if not isinstance(cls.__dict__[x], classmethod) and not x.startswith("__")
-        ]
+    def get_all(cls) -> list[str]:
+        return [member.name for member in cls]

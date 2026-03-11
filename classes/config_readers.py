@@ -20,6 +20,10 @@ from typing import Any, cast
 import numpy as np
 from configobj import ConfigObj
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from classes.daq import (
     INPUT_LINE,
     OUTPUT_LINE,
@@ -91,25 +95,13 @@ def to_int_tuple(arg):
 
 def to_float_list(arg):
     if isinstance(arg, str):
-        Warning("to_float_list received a string input. This may lead to unexpected behavior.")
+        warnings.warn(
+            "to_float_list received a string input. This may lead to unexpected behavior.",
+            UserWarning,
+            stacklevel=2,
+        )
         return [float(arg)]
     return list(map(float, arg))
-
-    # def to_float_list(arg):
-    #     if arg is None:
-    #         return None
-    #     if isinstance(arg, list):
-    #         return list(map(float, arg))
-    #     elif isinstance(arg, (int, float)):
-    #         return [float(arg)]
-    #     elif isinstance(arg, str):
-    #         items = [x.strip() for x in arg.replace(',', '\n').split('\n') if x.strip()]
-    #         try:
-    #             return list(map(float, items))
-    #         except ValueError as e:
-    #             raise ValueError(f"Could not convert one of the entries to float: {items}") from e
-    #     else:
-    #         raise TypeError(f"Unsupported input type for to_float_list: {type(arg)}")
 
 
 class ConfigReader:
@@ -171,7 +163,7 @@ class ConfigReader:
         return self.get_experiment_config_fname()
 
     def is_development_mode(self):
-        print("Config keys:", self.config.keys())
+        logger.debug("Config keys: %s", list(self.config.keys()))
         return self.config.as_bool("development_mode")
 
 
@@ -331,10 +323,10 @@ class DaqReader:
                     )
                 )
             except StopIteration as err:
-                print(
+                logger.error(
                     "It looks like one of the DAQ cards has a channel expected that does not exist"
                 )
-                print([ch.chNum for ch in channels])
+                logger.debug("Available channels: %s", [ch.chNum for ch in channels])
                 raise err
 
         return DAQController(daq_master, daq_slaves)
@@ -417,7 +409,7 @@ class SequenceReader:
         return int(self.config["sequence"]["n_samples"]), int(self.config["sequence"]["t_step"])
 
     def get_global_timings(self):
-        return [eval(x) for x in self.config["sequence"]["global_timings"]]
+        return [ast.literal_eval(x) for x in self.config["sequence"]["global_timings"]]
 
     def get_name(self):
         return self.config.filename
@@ -464,7 +456,7 @@ class SequenceWriter:
             self.config["sequence channels"][str(ch_num)] = {
                 "chNum": ch_num,
                 "tV_pairs": ch.tV_pairs,
-                "V_interval_styles": ch.V_interval_styles,
+                "V_interval_styles": [int(style) for style in ch.V_interval_styles],
             }
 
         self.config.write()
@@ -496,7 +488,7 @@ class AwgConfigReader:
 
         cfg = self.config
 
-        raw_seq = eval(self.config["waveform sequence"])
+        raw_seq = ast.literal_eval(self.config["waveform sequence"])
         waveform_sequence = list(list(ch) for ch in raw_seq)
 
         awg_config = AwgConfiguration(
@@ -509,7 +501,7 @@ class AwgConfigReader:
             marker_width_samps=self._extract_marker_width(cfg),
             waveform_stitch_delays=tuple(
                 tuple(x) if isinstance(x, list) else (x,)
-                for x in eval(self.config["waveform stitch delays"])
+                for x in ast.literal_eval(self.config["waveform stitch delays"])
             )
             if "waveform stitch delays" in self.config
             else None,
@@ -630,10 +622,12 @@ class AwgConfigReader:
             # Round to nearest even integer, minimum 2 samples
             return max(2, round((marker_width_us * sample_rate / 1e6) / 2) * 2)
         elif "marker width" in cfg:
-            print(
-                "WARNING: Assuming marker width in microseconds; converting to samples."
-                + " To avoid this warning, specify marker width in samples using 'marker width samples'"
-                + " or 'marker width samps' in the config file."
+            warnings.warn(
+                "Assuming marker width in microseconds; converting to samples."
+                " To avoid this warning, specify marker width in samples using 'marker width samples'"
+                " or 'marker width samps' in the config file.",
+                UserWarning,
+                stacklevel=2,
             )
             marker_width_us = float(cfg["marker width"])
             sample_rate = float(cfg["sample rate"])
@@ -711,7 +705,7 @@ class ExperimentConfigReader:
 
     def __init__(self, fname):
         self.fname = fname
-        print(f"Reading config file: {fname}")
+        logger.debug("Reading config file: %s", fname)
         self.config = MyConfig(fname)
         metadata = self.config.get("metadata", {})
         config_type = metadata.get("config_type") if isinstance(metadata, dict) else None
@@ -770,8 +764,9 @@ class ExperimentConfigReader:
         metadata = self.config.get("metadata", {})
         expt_type = metadata.get("experiment_type")
         if expt_type is None:
-            print(
-                r"To fix this error you probably need to add a 'metadata' section to the config file. See configs\sequence\pulse_shaping_expt\photon_prod_config.ini"
+            logger.error(
+                "To fix this error you probably need to add a 'metadata' section to the config file. "
+                "See configs/pulse_shaping_expt/photon_prod_config.ini"
             )
             raise KeyError("No experiment type specified in the config file.")
 
@@ -784,14 +779,14 @@ class ExperimentConfigReader:
         awg_config = awg_reader.load_awg_configuration()
 
         tdc_config = TdcConfiguration(
-            counter_channels=list(map(eval, self.config["TDC"]["counter channels"])),
+            counter_channels=list(map(ast.literal_eval, self.config["TDC"]["counter channels"])),
             marker_channel=int(self.config["TDC"]["marker channel"]),
             timestamp_buffer_size=int(self.config["TDC"]["timestamp buffer size"]),
         )
 
         photon_production_config = PhotonProductionConfiguration(
             save_location=self.config["save location"],
-            mot_reload=eval(self.config["mot reload"]),
+            mot_reload=ast.literal_eval(self.config["mot reload"]),
             iterations=int(self.config["iterations"]),
             waveform_sequence=awg_config.waveform_sequence,
             waveforms=awg_config.waveforms,
@@ -887,7 +882,7 @@ class ExperimentConfigReader:
 
         mot_fluoresce_config = MotFluoresceConfiguration(
             save_location=self.config["save location"],
-            mot_reload=eval(self.config["mot reload"]),
+            mot_reload=ast.literal_eval(self.config["mot reload"]),
             iterations=int(self.config["iterations"]),
             scope_config=scope_config,
             awg_config=awg_config,
@@ -1001,7 +996,7 @@ class ExperimentConfigReader:
     def get_absorbtion_imaging_configuration(self):
 
         return AbsorbtionImagingConfiguration(
-            scan_abs_img_freq=eval(self.config["scan_abs_img_freq"]),
+            scan_abs_img_freq=ast.literal_eval(self.config["scan_abs_img_freq"]),
             abs_img_freq_ch=int(self.config["abs_img_freq_ch"]),
             abs_img_freqs=to_float_list(self.config["abs_img_freqs"]),
             camera_trig_ch=int(self.config["camera_trig_ch"]),
@@ -1151,7 +1146,7 @@ class ExperimentalAutomationReader:
             automated_experiment_configurations.append(
                 SingleExperimentConfig(
                     daq_channel_static_values=map(
-                        lambda x: (int(eval(x)[0]), float(eval(x)[1])),
+                        lambda x: (int(ast.literal_eval(x)[0]), float(ast.literal_eval(x)[1])),
                         v["daq_channel_static_values"]
                         if v["daq_channel_static_values"] != []
                         else [],
@@ -1159,7 +1154,7 @@ class ExperimentalAutomationReader:
                     sequence=SequenceReader(v["sequence_fname"]).load_sequence(),
                     sequence_fname=v["sequence_fname"],
                     iterations=int(v["iterations"]),
-                    mot_reload=eval(v["mot_reload"]),
+                    mot_reload=ast.literal_eval(v["mot_reload"]),
                     modulation_frequencies=map(
                         float,
                         v["modulation_frequencies"] if v["modulation_frequencies"] != [] else [],
