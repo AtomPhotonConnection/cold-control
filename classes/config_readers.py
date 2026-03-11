@@ -37,7 +37,6 @@ from classes.daq import (  # noqa: E402
     DAQDio,
 )
 
-# from instruments.WX218x.WX218x_awg import Channel
 from classes.daq_sequence import DaqSequence  # noqa: E402
 from classes.experimental_configs import (  # noqa: E402
     AbsorbtionImagingConfiguration,
@@ -431,7 +430,6 @@ class SequenceWriter:
         self.fname = fname
         self.config = MyConfig(fname)
 
-    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, sequence, sequence_channel_labels, global_timings, user_notes):
 
         self.config["date"] = time.strftime("%d/%m/%y")
@@ -1114,7 +1112,6 @@ class PhotonProductionWriter:
         self.fname = fname
         self.config = MyConfig(fname)
 
-    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, photon_producion_config: PhotonProductionConfiguration):
 
         self.config["date"] = time.strftime("%d/%m/%y")
@@ -1198,7 +1195,6 @@ class ExperimentalAutomationWriter:
         self.fname = fname
         self.config = ConfigObj(fname)
 
-    #     writer.save(self.sequence, self.sequence_channel_labels, self.seqEditor.global_timings, self.notesFrame.getUserNotes())
     def save(self, photon_producion_config):
         # TODO
         pass

@@ -238,7 +238,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         # Check the absorbtion imaging flash will be on for background images and other sanity checks
         if c.imag_power_ch in c.bkg_off_channels:
             logger.warning(
-                "You specified no to to have the absorption imaging flash on while taking backgrounds. \n"
+                "You specified not to have the absorption imaging flash on while taking backgrounds. \n"
                 "This will lead to poor background correction so it will be left on for background regardless."
             )
             c.bkg_off_channels.remove(c.imag_power_ch)
@@ -397,7 +397,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
         logger.info(f"Timeout set to {self.cam_frame_timeout}ms")
-        logger.info("Opened connection to camera %s", cam_names[0])
+        logger.info(f"Opened connection to camera {cam_names[0]}")
 
         if not cam.is_open():
             cam.open()
@@ -611,7 +611,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def get_results(self):
         if not self.results_ready:
-            raise Exception("The abosrbtion imaging experiment has not been run yet.")
+            raise Exception("The absorption imaging experiment has not been run yet.")
         logger.info("Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs)))
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
@@ -913,7 +913,7 @@ class MotFluoresceExperiment(GenericExperiment):
                 self.iterations = self.mot_fluoresce_config.background_iterations
             else:
                 logger.warning(
-                    "background_iterations is not set in the configuration."
+                    "background_iterations is not set in the configuration. "
                     "Defaulting to using the same number of iterations as in normal mode."
                 )
             logger.info(
@@ -972,7 +972,7 @@ class MotFluoresceExperiment(GenericExperiment):
         # is this in milliseconds? and does it match the MOT reload time? I think so
         self.cam_frame_timeout = 5000
         logger.info(f"Timeout set to {self.cam_frame_timeout}ms")
-        logger.info("Opened connection to camera %s", cam_names[0])
+        logger.info(f"Opened connection to camera {cam_names[0]}")
 
         if not cam.is_open():
             cam.open()
