@@ -947,6 +947,7 @@ class ExperimentConfigReader:
             mod_freqs = to_float_list(defaults.get("modulation_frequencies", None))
             waveforms = ensure_list(defaults.get("waveforms", None))
             calib_paths = ensure_list(defaults.get("calibration_paths", None))
+            channel_lags = to_float_list(defaults.get("channel_lags", None))
 
             all_sweeps = []
             for sweep_idx in self.config["sweeps"]:
@@ -955,7 +956,7 @@ class ExperimentConfigReader:
                 for key, value in sweep.items():
                     if key == "title":
                         continue
-                    elif key == "rabi_frequencies" or key == "modulation_frequencies":
+                    elif key in ["rabi_frequencies", "modulation_frequencies", "channel_lags"]:
                         sweep_changes[key] = to_float_list(value)
                     elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
@@ -972,6 +973,7 @@ class ExperimentConfigReader:
                 "modulation_frequencies": mod_freqs,
                 "waveforms": waveforms,
                 "calibration_paths": calib_paths,
+                "channel_lags": channel_lags,
                 "sweeps": all_sweeps,
             }
 

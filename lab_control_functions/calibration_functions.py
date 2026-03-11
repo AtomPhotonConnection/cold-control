@@ -27,7 +27,8 @@ from lab_control_functions.calibration_helper_functions import (
     save_plot,
 )
 
-CALIB_CSV = Path("calibrations") / "miscellaneous" / "flip_mirror_calib.csv"
+base_path = Path(__file__).resolve().parent.parent
+CALIB_CSV = base_path / "calibrations" / "miscellaneous" / "flip_mirror_calib.csv"
 
 
 def daq_driven_aom_response(
