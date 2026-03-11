@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
 import logging
+import logging.config
 import tkinter as tk
+import tomllib
 from pathlib import Path
 from tkinter import messagebox as tk_message_box
 from typing import Any
@@ -14,14 +16,35 @@ from UI_classes.Experimental_UI import ExperimentalUI
 from UI_classes.Labbook_UI import LabbookUI
 from UI_classes.Sequence_UI import DaqSequenceUI
 
-# For logging on ALWE61 lab PC
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename=r"C:\pulse_shaping_data\logging\cold_control.log",
-    filemode="a",
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 
+# MARK: Set up logging
+def setup_logging(env="prod"):
+    """Loads logging configuration from pyproject.toml."""
+    toml_path = Path.cwd() / "pyproject.toml"
+    try:
+        # Note: tomllib requires reading the file in binary mode ('rb')
+        with toml_path.open("rb") as f:
+            pyproject_data = tomllib.load(f)
+
+        # Drill down to your specific tool section
+        logging_config = pyproject_data["tool"]["my_instrument_app"]["logging"][env]
+
+        # Apply the configuration
+        logging.config.dictConfig(logging_config)
+        logging.info(f"Loaded {env} logging configuration from pyproject.toml.")
+
+    except (FileNotFoundError, KeyError) as e:
+        # Fallback if the file is missing or the TOML structure is wrong
+        logging.basicConfig(level=logging.INFO)
+        logging.warning(f"Failed to load logging config ({e}). Using basic config.")
+
+
+# Run the setup function
+setup_logging(env="dev")  # Change to "prod" for production logging settings
+
+# Standard app logging
+logger = logging.getLogger(__name__)
+logger.info("Application starting up...")
 
 # Suppress noisy third-party debug output
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

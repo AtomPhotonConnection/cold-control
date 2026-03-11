@@ -1,10 +1,12 @@
 """Tests for the ExperimentConfigReader with both old and new config formats."""
 
 import os
+import shutil
 import sys
 import tempfile
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 # Ensure the project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,7 @@ from classes.experimental_configs import (  # noqa: E402
     AwgConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
+    MotFluorescenceAlignmentConfiguration,
     ScopeConfiguration,
 )
 
@@ -27,6 +30,9 @@ NEW_FORMAT_CONFIG = str(
 )
 NEW_FORMAT_SWEEP = str(
     PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "sweeps" / "feb26_sweep_level.ini"
+)
+NEW_FORMAT_ALIGNMENT = str(
+    PROJECT_ROOT / "configs" / "pulse_shaping_expt" / "alignment" / "alignment_config.ini"
 )
 
 
@@ -122,6 +128,16 @@ def test_get_sequence_from_experiment_config():
 # ---------------------------------------------------------------------------
 
 
+def _mock_rescale_csv(self, rabi, csv_in, csv_out, normalised=True):
+    """Mock rescale_csv that just copies the input CSV to the output path."""
+    Path(csv_out).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(csv_in, csv_out)
+
+
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_loads():
     """New self-contained sweep config returns a MotFluoresceConfigurationSweep."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -132,6 +148,10 @@ def test_new_format_sweep_loads():
     )
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_has_base_config():
     """Sweep config's base_config is a valid MotFluoresceConfiguration."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -143,6 +163,10 @@ def test_new_format_sweep_has_base_config():
     assert config.base_config.use_awg is True
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_has_sequence():
     """Sweep config's base_sequence is a loaded Sequence object."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -153,6 +177,10 @@ def test_new_format_sweep_has_sequence():
     assert hasattr(config.base_sequence, "n_samples")
 
 
+@patch("classes.rabi_voltage_converter.RabiFreqVoltageConverter.rescale_csv", _mock_rescale_csv)
+@patch(
+    "classes.rabi_voltage_converter.RabiFreqVoltageConverter.__init__", lambda self, *a, **kw: None
+)
 def test_new_format_sweep_params():
     """Sweep config has correct sweep parameters."""
     reader = ExperimentConfigReader(NEW_FORMAT_SWEEP)
@@ -227,6 +255,50 @@ experiment_type = "MOT Fluorescence"
         Path(tmp_path).unlink()
 
 
+# ---------------------------------------------------------------------------
+# Alignment config tests
+# ---------------------------------------------------------------------------
+
+
+def test_alignment_config_loads():
+    """Alignment config file returns a MotFluorescenceAlignmentConfiguration."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration), (
+        f"Expected MotFluorescenceAlignmentConfiguration, got {type(config)}"
+    )
+
+
+def test_alignment_config_has_base_config():
+    """Alignment config wraps a MotFluoresceConfiguration."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert isinstance(config.base_config, MotFluoresceConfiguration)
+
+
+def test_alignment_config_has_sequence():
+    """Alignment config wraps a DaqSequence."""
+    from classes.daq_sequence import DaqSequence
+
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert isinstance(config.base_sequence, DaqSequence)
+
+
+def test_alignment_config_no_background_by_default():
+    """Alignment config has no background_folder when not specified."""
+    reader = ExperimentConfigReader(NEW_FORMAT_ALIGNMENT)
+    config = reader.get_correct_config()
+
+    assert isinstance(config, MotFluorescenceAlignmentConfiguration)
+    assert config.background_folder is None
+
+
 if __name__ == "__main__":
     test_new_format_loads_mot_fluorescence()
     test_new_format_has_scope_config()
@@ -240,4 +312,8 @@ if __name__ == "__main__":
     test_new_format_sweep_has_sequence()
     test_new_format_sweep_params()
     test_old_format_emits_deprecation_warning()
+    test_alignment_config_loads()
+    test_alignment_config_has_base_config()
+    test_alignment_config_has_sequence()
+    test_alignment_config_no_background_by_default()
     print("All ExperimentConfigReader tests passed!")
