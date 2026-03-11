@@ -49,6 +49,7 @@ from classes.experimental_configs import (
     GenericConfiguration,
     MotFluoresceConfiguration,
     MotFluoresceConfigurationSweep,
+    MotFluorescenceAlignmentConfiguration,
     PhotonProductionConfiguration,
     ScopeConfiguration,
     SingleExperimentConfig,
@@ -452,7 +453,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)
             data = self.cam.get_image_data()
             img = (
-                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                 .convert("L")
                 .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             )
@@ -475,7 +476,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
                 data = self.cam.get_image_data()
                 img = (
-                    Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                    Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                     .convert("L")
                     .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                 )
@@ -1184,7 +1185,7 @@ class MotFluoresceExperiment(GenericExperiment):
             self.cam.wait_til_frame_ready(self.cam_frame_timeout)
             data = self.cam.get_image_data()
             img = (
-                Image.frombuffer("RGB", (data[1], data[2]), data[0], "raw", "RGB", 0, 1)
+                Image.frombuffer("RGB", (data[1], data[2]), bytes(data[0]), "raw", "RGB", 0, 1)
                 .convert("L")
                 .transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             )
@@ -1290,6 +1291,197 @@ class MotFluoresceSweepExperiment:
 
             experiment.run()
             print(f"Experiment {i} completed and closed.")
+
+
+class MotFluorescenceAlignmentExperiment:
+    """Repeatedly runs the same MOT fluorescence experiment for live alignment.
+
+    After each iteration (a full single-shot experiment with *n* scope traces),
+    the collected data is analysed and a single metric is computed:
+
+    * **F_norm** (normalised fluorescence) when background data is provided.
+    * **F_img** (raw imaging fluorescence) otherwise.
+
+    The metric is stored in :attr:`current_result` and appended to
+    :attr:`results` so that the :class:`AlignmentLiveUI` can display it
+    prominently alongside the history.
+
+    The loop continues until :meth:`stop` is called (typically via the UI
+    stop button), at which point the current iteration finishes and the
+    experiment exits cleanly.
+
+    Parameters
+    ----------
+    alignment_config : MotFluorescenceAlignmentConfiguration
+        Wraps the single-shot config, DAQ sequence, and optional background
+        folder.
+    daq_controller : DAQController
+        The DAQ controller for running DAQ channels.
+    development_mode : bool
+        If ``True``, uses dummy instrument drivers.
+    """
+
+    def __init__(
+        self,
+        alignment_config: MotFluorescenceAlignmentConfiguration,
+        daq_controller: DAQController,
+        development_mode: bool = False,
+    ):
+        self.alignment_config = alignment_config
+        self.daq_controller = daq_controller
+        self.development_mode = development_mode
+
+        self.stop_requested: bool = False
+        self.is_running: bool = False
+        self.current_result: float | None = None
+        self.current_result_label: str = ""
+        self.results: list[float] = []
+        self.shot_count: int = 0
+
+    def stop(self) -> None:
+        """Signal the alignment loop to stop after the current iteration."""
+        self.stop_requested = True
+
+    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
+        thread = threading.Thread(name="Cold Control Alignment Thread", target=self.run)
+        if start_thread:
+            thread.start()
+        return thread
+
+    def run(self) -> None:
+        """Main alignment loop — runs until :meth:`stop` is called."""
+        self.is_running = True
+        base_config = self.alignment_config.base_config
+        base_sequence = self.alignment_config.base_sequence
+        background_folder = self.alignment_config.background_folder
+
+        # --- Prepare optional background analyser ---
+        analyser = None
+        if background_folder is not None:
+            try:
+                from data_analysis_functions.unified_fluorescence_analysis import (
+                    FluorescenceAnalyser,
+                    UnifiedFluorescenceProcessor,
+                )
+
+                bg_processor = UnifiedFluorescenceProcessor(background_folder)
+                bg_data = bg_processor.process_background(background_folder)
+                analyser = FluorescenceAnalyser(bg_data)
+                print(f"Background data loaded from {background_folder}")
+            except Exception as e:
+                print(f"WARNING: Could not load background data: {e}")
+                print("Falling back to raw F_img display.")
+                analyser = None
+
+        save_root = Path(base_config.save_location)
+        now = datetime.now()
+        session_dir = save_root / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S") / "alignment"
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        print("=" * 60)
+        print("  MOT FLUORESCENCE ALIGNMENT — starting")
+        print(f"  Data saved to: {session_dir}")
+        print(f"  Iterations per shot: {base_config.iterations}")
+        print(f"  MOT reload: {base_config.mot_reload} ms")
+        if analyser is not None:
+            print("  Metric: F_norm (background-subtracted, normalised)")
+        else:
+            print("  Metric: F_img (raw imaging fluorescence)")
+        print("=" * 60)
+
+        shot = 0
+        try:
+            while not self.stop_requested:
+                shot += 1
+                self.shot_count = shot
+                print(f"\n--- Alignment shot {shot} ---")
+
+                # Build a per-shot save path
+                shot_dir = session_dir / f"shot{shot}"
+                shot_config = copy.deepcopy(base_config)
+                shot_config.save_location = str(shot_dir)
+                shot_dir.mkdir(parents=True, exist_ok=True)
+
+                shot_sequence = copy.deepcopy(base_sequence)
+
+                experiment = MotFluoresceExperiment(
+                    self.daq_controller,
+                    shot_sequence,
+                    shot_config,
+                    sweep=True,
+                    development_mode=self.development_mode,
+                )
+                experiment.run()
+
+                # --- Analyse the data from this shot ---
+                metric_value = self._analyse_shot(shot_dir, analyser)
+                if metric_value is not None:
+                    self.current_result = metric_value
+                    self.results.append(metric_value)
+
+                    # Provide a clear console readout
+                    change_str = ""
+                    if len(self.results) >= 2:
+                        delta = self.results[-1] - self.results[-2]
+                        direction = "-" if delta < 0 else "+"
+                        change_str = f"  (change: {direction}{delta:.6f})"
+
+                    label = self.current_result_label
+                    print("\n" + "*" * 50)
+                    print(f"  {label} = {metric_value:.6f}{change_str}")
+                    print("*" * 50 + "\n")
+                else:
+                    print("WARNING: Could not compute metric for this iteration.")
+
+        except Exception as e:
+            print(f"Alignment experiment error: {e}")
+        finally:
+            self.is_running = False
+            print("\n" + "=" * 60)
+            print("  MOT FLUORESCENCE ALIGNMENT — finished")
+            print(f"  Total iterations completed: {self.shot_count}")
+            if self.results:
+                print(f"  Final {self.current_result_label}: {self.results[-1]:.6f}")
+                print(f"  All results: {[f'{v:.6f}' for v in self.results]}")
+            print("=" * 60)
+
+    def _analyse_shot(self, shot_folder: Path, analyser: object | None) -> float | None:
+        """Analyse scope data from a single alignment shot.
+
+        Returns the computed metric (F_norm or F_img), or ``None`` if
+        analysis fails (e.g. no scope data files found).
+        """
+        try:
+            from data_analysis_functions.unified_fluorescence_analysis import (
+                FluorescenceAnalyser,
+                UnifiedFluorescenceProcessor,
+            )
+        except ImportError:
+            print("WARNING: unified_fluorescence_analysis not available.")
+            return None
+
+        try:
+            processor = UnifiedFluorescenceProcessor(str(shot_folder))
+            extracted = processor.process_single_shot(shot_folder)
+
+            F_max_act = extracted["F_max"]  # noqa: N806
+            F_max_act_sem = extracted["F_max_sem"]  # noqa: N806
+            F_img_act = extracted["F_img"]  # noqa: N806
+            F_img_act_sem = extracted["F_img_sem"]  # noqa: N806
+
+            if analyser is not None and isinstance(analyser, FluorescenceAnalyser):
+                result = analyser.analyse_single_point(
+                    F_max_act, F_max_act_sem, F_img_act, F_img_act_sem
+                )
+                self.current_result_label = "F_norm"
+                return float(result.F_norm)
+            else:
+                self.current_result_label = "F_img"
+                return float(F_img_act)
+
+        except Exception as e:
+            print(f"Analysis failed for {shot_folder}: {e}")
+            return None
 
 
 class PhotonProductionDataSaver:

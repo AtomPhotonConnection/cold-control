@@ -9,7 +9,7 @@ Run with:  pytest tests/test_experimental_runner.py -v
 
 import threading
 
-from classes.experimental_runner import MotFluoresceExperiment
+from classes.experimental_runner import MotFluoresceExperiment, MotFluorescenceAlignmentExperiment
 from instruments.dummy import DummyOscilloscopeManager
 
 # ===========================================================================
@@ -158,3 +158,68 @@ class TestMotFluoresceExperimentThreadExecution:
         assert not t.is_alive(), (
             "Scope experiment did not finish within 10 seconds in development mode"
         )
+
+
+# ===========================================================================
+# Group E - MotFluorescenceAlignmentExperiment
+# ===========================================================================
+
+
+class TestMotFluorescenceAlignmentExperiment:
+    def test_stop_sets_flag(self, dummy_daq, alignment_config):
+        """stop() sets stop_requested to True."""
+        expt = MotFluorescenceAlignmentExperiment(
+            alignment_config, dummy_daq, development_mode=True
+        )
+        assert expt.stop_requested is False
+        expt.stop()
+        assert expt.stop_requested is True
+
+    def test_run_in_thread_returns_thread(self, dummy_daq, alignment_config):
+        """run_in_thread(start_thread=False) returns a Thread without starting it."""
+        expt = MotFluorescenceAlignmentExperiment(
+            alignment_config, dummy_daq, development_mode=True
+        )
+        t = expt.run_in_thread(start_thread=False)
+        assert isinstance(t, threading.Thread)
+        assert not t.is_alive()
+
+    def test_run_in_thread_is_named(self, dummy_daq, alignment_config):
+        """The thread returned by run_in_thread has the expected name."""
+        expt = MotFluorescenceAlignmentExperiment(
+            alignment_config, dummy_daq, development_mode=True
+        )
+        t = expt.run_in_thread(start_thread=False)
+        assert "Alignment" in t.name
+
+    def test_immediate_stop_yields_no_results(self, dummy_daq, alignment_config):
+        """If stop() is called before run(), the loop exits with 0 iterations."""
+        expt = MotFluorescenceAlignmentExperiment(
+            alignment_config, dummy_daq, development_mode=True
+        )
+        expt.stop()  # pre-set stop flag
+        expt.run()  # should exit immediately
+
+        assert expt.shot_count == 0
+        assert len(expt.results) == 0
+        assert expt.is_running is False
+
+    def test_stop_during_run_exits_loop(self, dummy_daq, alignment_config):
+        """Calling stop() from another thread causes run() to finish."""
+        expt = MotFluorescenceAlignmentExperiment(
+            alignment_config, dummy_daq, development_mode=True
+        )
+        # Start the experiment, then stop after a short delay
+        t = expt.run_in_thread(start_thread=True)
+        import time
+
+        time.sleep(0.5)
+        expt.stop()
+        t.join(timeout=10)
+
+        assert not t.is_alive(), (
+            "Alignment experiment did not stop within 10 seconds after stop() was called"
+        )
+        assert expt.is_running is False
+        # At least one iteration should have started (mot_reload=0, iterations=1)
+        assert expt.shot_count >= 1

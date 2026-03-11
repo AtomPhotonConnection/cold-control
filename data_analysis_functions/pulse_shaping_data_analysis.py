@@ -358,7 +358,7 @@ class ExperimentalDataProcessor:
         integration_data = channel4_data[int_mask] - bg_average  # Subtract background average
 
         # Numerical integration using trapezoidal rule
-        integral_value = np.trapz(integration_data, integration_time)
+        integral_value = np.trapezoid(integration_data, integration_time)
 
         # Uncertainty estimation based on background std
         integration_duration = integration_time_range[1] - integration_time_range[0]

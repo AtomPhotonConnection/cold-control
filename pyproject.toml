@@ -69,3 +69,57 @@ reportUnknownMemberType = false
 # Diagnostic settings to match your Ruff style
 reportUnusedImport = "warning"
 reportUnusedVariable = "warning"
+
+
+
+# --- LOGGING ---
+#prod
+[tool.my_instrument_app.logging.prod]
+version = 1
+disable_existing_loggers = false
+
+[tool.my_instrument_app.logging.prod.formatters.console_fmt]
+format = "%(levelname)s: %(message)s"
+
+[tool.my_instrument_app.logging.prod.formatters.file_fmt]
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[tool.my_instrument_app.logging.prod.handlers.console]
+class = "logging.StreamHandler"
+level = "INFO"
+formatter = "console_fmt"
+stream = "ext://sys.stdout"
+
+[tool.my_instrument_app.logging.prod.handlers.file]
+class = "logging.FileHandler"
+level = "DEBUG"
+formatter = "file_fmt"
+filename = "instrument_run.log"
+mode = "a"
+
+[tool.my_instrument_app.logging.prod.loggers.pyvisa]
+level = "DEBUG"
+handlers = ["file"]
+propagate = false
+
+[tool.my_instrument_app.logging.prod.root]
+level = "INFO"
+handlers = ["console", "file"]
+
+#dev
+[tool.my_instrument_app.logging.dev]
+version = 1
+disable_existing_loggers = false
+
+[tool.my_instrument_app.logging.dev.formatters.detailed_fmt]
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[tool.my_instrument_app.logging.dev.handlers.console]
+class = "logging.StreamHandler"
+level = "DEBUG"
+formatter = "detailed_fmt"
+stream = "ext://sys.stdout"
+
+[tool.my_instrument_app.logging.dev.root]
+level = "DEBUG"
+handlers = ["console"]
