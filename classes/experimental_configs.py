@@ -670,7 +670,11 @@ class MotFluoresceConfigurationSweep:
             mod_freqs = self.sweep_params["modulation_frequencies"]
             waveforms_paths = self.sweep_params["waveforms"]
             calib_paths = self.sweep_params["calibration_paths"]
-            channel_lags = self.sweep_params.get("channel_lags", [0.0] * len(wave_idxs))
+            channel_lags = self.sweep_params.get(
+                "channel_lags",
+                [0.0]
+                * len(cast(AwgConfiguration, self.base_config.awg_config).waveform_output_channels),
+            )
             all_sweeps = self.sweep_params["sweeps"]
 
             self.__configure_awg_sweep(

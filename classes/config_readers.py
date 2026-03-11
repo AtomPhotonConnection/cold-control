@@ -949,10 +949,13 @@ class ExperimentConfigReader:
                 for key, value in sweep.items():
                     if key == "title":
                         continue
-                    elif key in ["rabi_frequencies", "modulation_frequencies", "channel_lags"]:
+                    elif key in ["rabi_frequencies", "modulation_frequencies"]:
                         sweep_changes[key] = to_float_list(value)
                     elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
+                    elif key == "channel_lags":
+                        sweep_changes[key] = to_float_list(value)
+                        continue
                     if wave_idxs is not None:
                         assert len(sweep_changes[key]) == len(wave_idxs), (
                             f"Length mismatch for {key} in sweep {sweep_idx}"
