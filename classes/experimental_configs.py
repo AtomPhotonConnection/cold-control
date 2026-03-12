@@ -856,6 +856,14 @@ class MotFluoresceConfigurationSweep:
                 self.sequences.append(new_sequence)
 
     def __configure_imaging_sweep(self, beam_powers, beam_frequencies, pulse_lengths, pulse_times):
+        """Configure the imaging sweep experiment.
+
+        The DAQ channel numbers for the frequency and power channels can be
+        overridden via ``sweep_params``:
+
+        * ``sweep_params["freq_channel"]`` – DAQ channel for frequency (default 2)
+        * ``sweep_params["power_channel"]`` – DAQ channel for power (default 6)
+        """
         to_sweep = []
         if len(beam_powers) > 1:
             to_sweep.append("beam_powers")
