@@ -22,7 +22,7 @@ class TestDummyDAQControllerProtocol:
     @pytest.fixture
     def controller(self):
         channels = [DAQChannel(i) for i in range(4)]
-        return DummyDAQController(channels=channels, dios=[], continuous_ouput=False)
+        return DummyDAQController(channels=channels, dios=[], continuous_output=False)
 
     def test_is_protocol_compatible(self, controller):
         """DummyDAQController must structurally match DAQControllerProtocol."""

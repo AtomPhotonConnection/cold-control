@@ -63,7 +63,7 @@ def dummy_daq():
         DAQChannel(ch_num=0, ch_name="Test Ch 0", ch_limits=(-10, 10), default_value=0.0),
         DAQChannel(ch_num=1, ch_name="Test Ch 1", ch_limits=(-10, 10), default_value=0.0),
     ]
-    return DummyDAQController(channels=channels, continuous_ouput=False)
+    return DummyDAQController(channels=channels, continuous_output=False)
 
 
 # ---------------------------------------------------------------------------

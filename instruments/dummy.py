@@ -30,7 +30,7 @@ class DummyDAQController:
     Stores channel state in memory and prints writes to stdout.
     """
 
-    def __init__(self, channels: list, dios: list | None = None, continuous_ouput: bool = False):
+    def __init__(self, channels: list, dios: list | None = None, continuous_output: bool = False):
         """
         Parameters
         ----------
@@ -45,7 +45,7 @@ class DummyDAQController:
         self._slaves: list = []
         self.channels = list(channels)
         self.dios = list(dios) if dios else []
-        self.continuousOutput = continuous_ouput
+        self.continuousOutput = continuous_output
 
         # Build the same channelValues dict as the real controller
         self.channelValues: dict[int, float] = {ch.chNum: ch.defaultValue for ch in self.channels}

@@ -5,6 +5,7 @@ Created on 25 Mar 2016
 """
 
 import copy
+import logging
 import math
 import tkinter as tk
 from pathlib import Path
@@ -22,6 +23,8 @@ from UI_classes.UI_helpers import ImageButton, arrow_key_increment
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+logger = logging.getLogger(__name__)
+
 
 class DaqUI(tk.Frame):
     def __init__(
@@ -34,7 +37,7 @@ class DaqUI(tk.Frame):
         if not development_mode:
             self.daq_controller: DAQController = self.reader.load_daq_controller()
         else:
-            print("Running in development mode...\nLoading Dummy DAQ cards")
+            logger.info("Running in development mode...\nLoading Dummy DAQ cards")
             self.daq_controller = self.reader.load_dummy_daq_controller()  # type: ignore
 
         self.Frame_Channels = tk.LabelFrame(self, text="DAQ channels", font=font)
@@ -251,12 +254,11 @@ class DaqChannelEntry(tk.Entry):
             else self.channel.calibrationFromVFunc(self.channel.defaultValue)
         )
         if not self.chLimits[0] <= self.defaultValue <= self.chLimits[1]:
-            print(
-                "WARNING: Default value for DAQ channel of",
+            logger.warning(
+                "Default value for DAQ channel of %s is not within set limits of %s. "
+                "Channel will be set to mid-range of limits.",
                 self.defaultValue,
-                "is not within set limits of",
                 self.chLimits,
-                "\nChannel will be set to mid-range of limits",
             )
             self.defaultValue = sum(self.chLimits) / 2
         self.chValue = float(self.defaultValue)
@@ -632,7 +634,7 @@ class DaqConfigUI:
         widget - the checkbox widget clicked on
         cardNumber - the card number assosiated with the widget
         state - 0/1, checkbox is now deselected/selected"""
-        print(widget, card_number, state.get())
+        logger.debug("master_selected: %s card=%s state=%s", widget, card_number, state.get())
 
     def channel_selected(self, channel_label):
         for _, wid in self.channels.items():

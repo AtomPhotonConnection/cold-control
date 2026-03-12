@@ -434,7 +434,7 @@ class ExperimentalUI(tk.LabelFrame):
                 self.daq_ui.daq_controller,
                 development_mode=self.development_mode,
             )
-            print("Running MOT Fluoresce Sweep experiment")
+            logger.info("Running MOT Fluoresce Sweep experiment")
             sweep_experiment.run_in_thread()
             return
 
@@ -445,7 +445,7 @@ class ExperimentalUI(tk.LabelFrame):
                 self.daq_ui.daq_controller,
                 development_mode=self.development_mode,
             )
-            print("Running MOT Fluorescence Alignment experiment")
+            logger.info("Running MOT Fluorescence Alignment experiment")
             experiment_thread = alignment_experiment.run_in_thread()
             time.sleep(0.1)
             alignment_ui = AlignmentLiveUI(self, alignment_experiment)
@@ -546,20 +546,20 @@ class ExperimentalUI(tk.LabelFrame):
 
         if self.run_tone_awg is None:
             # AWG not connected
-            print("No connection to AWG was opened")
+            logger.info("No connection to AWG was opened")
             return
 
         # Turns off run tones on all active channels
         for i, channel in enumerate([1, 2, 3, 4]):
             if self.run_tone_output_states[i]:
-                print(f"Turning off run tone on {channel}")
+                logger.info("Turning off run tone on %d", channel)
                 self.run_tone_awg.disable_channel(channel)
                 self.run_tone_output_states[i] = False
                 self.run_tone_awg.set_output_mode("USER")
 
         # Disconnects from awg
         self.run_tone_awg.close()
-        print("Connection to AWG closed.")
+        logger.info("Connection to AWG closed.")
         self.run_tone_awg = None
 
     def experiment_config_button(self):
@@ -640,7 +640,7 @@ class ExperimentalUI(tk.LabelFrame):
         _flash_step(0, True)
 
     def configure_flash_channel(self):
-        print("Configuring flash channel")
+        logger.debug("Configuring flash channel")
         inputs = simpledialog.askstring(
             "Flash channel configuration",
             "Enter channel, duration (s), low value, high value, repeats (comma separated):",
