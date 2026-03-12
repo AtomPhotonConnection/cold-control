@@ -87,7 +87,9 @@ class ColdControlUI(tk.Frame):
 
         self.master: tk.Misc = parent
 
-        self.config_reader = ConfigReader(str(Path.cwd() / "configs" / "rootConfig.ini"))
+        self.config_reader = ConfigReader(
+            str(Path.cwd() / "configs" / "rootConfig.ini")
+        )
         self.development_mode = self.config_reader.is_development_mode()
 
         self.master.wm_title("Cold Control Heavy")
@@ -96,7 +98,9 @@ class ColdControlUI(tk.Frame):
 
         """Load DAQ channels and cards from the config file.  Set up the DAQ_controller with these."""
         self.daq_config_fname = self.config_reader.get_daq_config_fname()
-        self.daq_UI = DaqUI(self, self.daq_config_fname, development_mode=self.development_mode)
+        self.daq_UI = DaqUI(
+            self, self.daq_config_fname, development_mode=self.development_mode
+        )
 
         """Load a sequence — prefer from experiment config, fall back to rootConfig."""
         self.experiment_config_fname = self.config_reader.get_experiment_config_fname()
@@ -149,7 +153,9 @@ class ColdControlUI(tk.Frame):
         grid_opts: dict[str, Any] = {"padx": 10, "pady": 10}
 
         self.title.grid(row=0, column=0, columnspan=3, **grid_opts)
-        self.daq_UI.grid(row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **grid_opts)
+        self.daq_UI.grid(
+            row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **grid_opts
+        )
         self.experimental_UI.grid(row=2, column=1, columnspan=2, sticky=tk.N)
         self.camera_UI.grid(row=1, column=0, sticky=tk.N + tk.E + tk.W)
         self.labbook_UI.grid(row=1, column=3, sticky=tk.N + tk.E + tk.W)
@@ -181,20 +187,20 @@ class ColdControlUI(tk.Frame):
             icon="warning",
         )
         if exit_confirmation == "yes":
-            print("Disconnecting from AWG...")
+            logger.info("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
-            print("Closing camera connections...")
+            logger.info("Closing camera connections...")
             self.camera_UI.close_cameras()
-            print("...all camera connections closed.")
-            print("Releasing DAQ cards...")
+            logger.info("...all camera connections closed.")
+            logger.info("Releasing DAQ cards...")
             if not self.development_mode:
                 self.daq_UI.daq_controller.release_all()
-            print("...all cards released.")
-            print("Saving labbook...")
+            logger.info("...all cards released.")
+            logger.info("Saving labbook...")
             self.labbook_UI.write()
-            print("...labbook saved")
+            logger.info("...labbook saved")
             root.destroy()
-            print("Cold Control closed - bye!")
+            logger.info("Cold Control closed - bye!")
 
 
 if __name__ == "__main__":
