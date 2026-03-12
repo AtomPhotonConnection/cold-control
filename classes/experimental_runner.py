@@ -82,6 +82,14 @@ from instruments.pyicic.ic_exception import ICError
 logger = logging.getLogger(__name__)
 
 
+class HardwareConnectionError(RuntimeError):
+    """Raised when a required hardware instrument cannot be reached."""
+
+
+class ExperimentStateError(RuntimeError):
+    """Raised when an experiment is in an invalid state for the requested operation."""
+
+
 def make_property(attr_name):
     return property(
         fget=lambda self: getattr(self, attr_name),

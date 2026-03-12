@@ -53,6 +53,29 @@ from classes.experimental_configs import (  # noqa: E402
 
 GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
+__all__ = [
+    "ConfigReader",
+    "ConfigWriter",
+    "ConfigValidationError",
+    "DaqReader",
+    "DaqWriter",
+    "ExperimentConfigReader",
+    "ExperimentalAutomationReader",
+    "ExperimentalAutomationWriter",
+    "MyConfig",
+    "SequenceReader",
+    "SequenceWriter",
+    "ScopeConfigReader",
+    "AwgConfigReader",
+    "get_config_root",
+    "resolve_config_path",
+    "to_bool",
+    "to_int_list",
+    "to_float_list",
+    "to_float_tuple",
+    "to_int_tuple",
+]
+
 
 def get_config_root() -> str:
     """Return the directory used as the base for resolving relative config paths.
@@ -262,10 +285,13 @@ class DaqReader:
         channels = []
         for _, v in self.config["DAQ channels"].items():
             channel_args: tuple[int, str, tuple[float, float], float, bool, str] = (
-                int(v["chNum"]),  # chNum (int)
+                _parse_config_value(int, v["chNum"], "chNum", self.fname),
                 str(v["chName"]),  # chName (str)
-                (float(v["chLimits"][0]), float(v["chLimits"][1])),  # chLimits (tuple[float,float])
-                float(v["default value"]),  # default value (float)
+                (
+                    _parse_config_value(float, v["chLimits"][0], "chLimits[0]", self.fname),
+                    _parse_config_value(float, v["chLimits"][1], "chLimits[1]", self.fname),
+                ),
+                _parse_config_value(float, v["default value"], "default value", self.fname),
                 bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
                 str(v["calibrationFname"]),  # calibrationFname (str)
             )
@@ -679,10 +705,10 @@ class ScopeConfigReader:
 
     def load_scope_configuration(self) -> ScopeConfiguration:
         """Parse the config file and return a ``ScopeConfiguration`` object."""
-        return self._parse_scope_config(self.config)
+        return self._parse_scope_config(self.config, self.fname)
 
     @staticmethod
-    def _parse_scope_config(cfg) -> ScopeConfiguration:
+    def _parse_scope_config(cfg, fname: str = "") -> ScopeConfiguration:
         """Build a ``ScopeConfiguration`` from a config section or standalone config.
 
         This static method is also used internally by ``ExperimentConfigReader`` to
@@ -705,15 +731,15 @@ class ScopeConfigReader:
             if isinstance(coupling, list):
                 coupling = coupling[0] if coupling else "DC"
             coupling = str(coupling).strip().upper()
-            data_chs[int(ch_idx)] = {
+            data_chs[_parse_config_value(int, ch_idx, "data_channels key", fname)] = {
                 "range": (low, high),
                 "impedance": impedance,
                 "coupling": coupling,
             }
         return ScopeConfiguration(
-            trigger_channel=int(cfg["trigger_channel"]),
-            trigger_level=float(cfg["trigger_level"]),
-            sample_rate=float(cfg["sample_rate"]),
+            trigger_channel=_parse_config_value(int, cfg["trigger_channel"], "trigger_channel", fname),
+            trigger_level=_parse_config_value(float, cfg["trigger_level"], "trigger_level", fname),
+            sample_rate=_parse_config_value(float, cfg["sample_rate"], "sample_rate", fname),
             time_range=cast(tuple[float, float], to_float_tuple(cfg["time_range"])),
             data_channels=data_chs,
         )
@@ -808,14 +834,14 @@ class ExperimentConfigReader:
 
         tdc_config = TdcConfiguration(
             counter_channels=list(map(ast.literal_eval, self.config["TDC"]["counter channels"])),
-            marker_channel=int(self.config["TDC"]["marker channel"]),
-            timestamp_buffer_size=int(self.config["TDC"]["timestamp buffer size"]),
+            marker_channel=_parse_config_value(int, self.config["TDC"]["marker channel"], "marker channel", self.fname),
+            timestamp_buffer_size=_parse_config_value(int, self.config["TDC"]["timestamp buffer size"], "timestamp buffer size", self.fname),
         )
 
         photon_production_config = PhotonProductionConfiguration(
             save_location=self.config["save location"],
-            mot_reload=ast.literal_eval(self.config["mot reload"]),
-            iterations=int(self.config["iterations"]),
+            mot_reload=_parse_config_value(ast.literal_eval, self.config["mot reload"], "mot reload", self.fname),
+            iterations=_parse_config_value(int, self.config["iterations"], "iterations", self.fname),
             waveform_sequence=awg_config.waveform_sequence,
             waveforms=awg_config.waveforms,
             waveform_stitch_delays=None,  # deprecated, should be set to None and ignored by AWG control code
@@ -861,7 +887,7 @@ class ExperimentConfigReader:
                 stacklevel=2,
             )
             scope_section = self.config["scope_settings"]
-            scope_config = ScopeConfigReader._parse_scope_config(scope_section)
+            scope_config = ScopeConfigReader._parse_scope_config(scope_section, self.fname)
 
         # --- AWG ---
         awg_config: AwgConfiguration | None = None
@@ -887,11 +913,11 @@ class ExperimentConfigReader:
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
-                "cam_exposure": int(camera["cam_exposure"]),
-                "cam_gain": int(camera["cam_gain"]),
-                "camera_trig_ch": int(camera["camera_trig_ch"]),
+                "cam_exposure": _parse_config_value(int, camera["cam_exposure"], "cam_exposure", self.fname),
+                "cam_gain": _parse_config_value(int, camera["cam_gain"], "cam_gain", self.fname),
+                "camera_trig_ch": _parse_config_value(int, camera["camera_trig_ch"], "camera_trig_ch", self.fname),
                 "camera_trig_levs": to_float_tuple(camera["camera_trig_levs"]),
-                "camera_pulse_width": float(camera["camera_pulse_width"]),
+                "camera_pulse_width": _parse_config_value(float, camera["camera_pulse_width"], "camera_pulse_width", self.fname),
                 "save_images": to_bool(camera["save_images"]),
             }
 
@@ -910,8 +936,8 @@ class ExperimentConfigReader:
 
         mot_fluoresce_config = MotFluoresceConfiguration(
             save_location=self.config["save location"],
-            mot_reload=ast.literal_eval(self.config["mot reload"]),
-            iterations=int(self.config["iterations"]),
+            mot_reload=_parse_config_value(ast.literal_eval, self.config["mot reload"], "mot reload", self.fname),
+            iterations=_parse_config_value(int, self.config["iterations"], "iterations", self.fname),
             scope_config=scope_config,
             awg_config=awg_config,
             awg_config_path=awg_config_path,
@@ -932,9 +958,9 @@ class ExperimentConfigReader:
         """
 
         def generate_int_list(section):
-            start = float(self.config[section]["start"])
-            stop = float(self.config[section]["stop"])
-            step = float(self.config[section]["step"])
+            start = _parse_config_value(float, self.config[section]["start"], f"{section}.start", self.fname)
+            stop = _parse_config_value(float, self.config[section]["stop"], f"{section}.stop", self.fname)
+            step = _parse_config_value(float, self.config[section]["step"], f"{section}.step", self.fname)
 
             if step == 0:
                 return [round(start)]
@@ -942,9 +968,9 @@ class ExperimentConfigReader:
             return list(np.round(np.arange(start, stop + step, step)).astype(int))
 
         def generate_float_list(section):
-            start = float(self.config[section]["start"])
-            stop = float(self.config[section]["stop"])
-            num_points = int(self.config[section]["num_points"])
+            start = _parse_config_value(float, self.config[section]["start"], f"{section}.start", self.fname)
+            stop = _parse_config_value(float, self.config[section]["stop"], f"{section}.stop", self.fname)
+            num_points = _parse_config_value(int, self.config[section]["num_points"], f"{section}.num_points", self.fname)
 
             if num_points == 1:
                 return [start] if start == stop else []
@@ -961,7 +987,7 @@ class ExperimentConfigReader:
                 return [value]
 
         sweep_type = self.config["sweep_type"]
-        num_shots = int(self.config["num_shots"])
+        num_shots = _parse_config_value(int, self.config["num_shots"], "num_shots", self.fname)
 
         if sweep_type == "awg_sequence":
             defaults = self.config["defaults"]
@@ -1019,21 +1045,21 @@ class ExperimentConfigReader:
     def get_absorbtion_imaging_configuration(self):
 
         return AbsorbtionImagingConfiguration(
-            scan_abs_img_freq=ast.literal_eval(self.config["scan_abs_img_freq"]),
-            abs_img_freq_ch=int(self.config["abs_img_freq_ch"]),
+            scan_abs_img_freq=_parse_config_value(ast.literal_eval, self.config["scan_abs_img_freq"], "scan_abs_img_freq", self.fname),
+            abs_img_freq_ch=_parse_config_value(int, self.config["abs_img_freq_ch"], "abs_img_freq_ch", self.fname),
             abs_img_freqs=to_float_list(self.config["abs_img_freqs"]),
-            camera_trig_ch=int(self.config["camera_trig_ch"]),
-            imag_power_ch=int(self.config["imag_power_ch"]),
+            camera_trig_ch=_parse_config_value(int, self.config["camera_trig_ch"], "camera_trig_ch", self.fname),
+            imag_power_ch=_parse_config_value(int, self.config["imag_power_ch"], "imag_power_ch", self.fname),
             camera_trig_levs=to_float_tuple(self.config["camera_trig_levs"]),
             imag_power_levs=to_float_tuple(self.config["imag_power_levs"]),
-            camera_pulse_width=float(self.config["camera_pulse_width"]),
-            imag_pulse_width=float(self.config["imag_pulse_width"]),
+            camera_pulse_width=_parse_config_value(float, self.config["camera_pulse_width"], "camera_pulse_width", self.fname),
+            imag_pulse_width=_parse_config_value(float, self.config["imag_pulse_width"], "imag_pulse_width", self.fname),
             t_imgs=to_float_list(self.config["t_imgs"]),
-            mot_reload=float(self.config["mot_reload_time"]),
-            n_backgrounds=int(self.config["n_backgrounds"]),
+            mot_reload=_parse_config_value(float, self.config["mot_reload_time"], "mot_reload_time", self.fname),
+            n_backgrounds=_parse_config_value(int, self.config["n_backgrounds"], "n_backgrounds", self.fname),
             bkg_off_channels=to_int_list(self.config["bkg_off_channels"]),
-            cam_gain=int(self.config["cam_gain"]),
-            cam_exposure=int(self.config["cam_exposure"]),
+            cam_gain=_parse_config_value(int, self.config["cam_gain"], "cam_gain", self.fname),
+            cam_exposure=_parse_config_value(int, self.config["cam_exposure"], "cam_exposure", self.fname),
             cam_gain_lims=to_int_tuple(self.config["cam_gain_lims"]),
             cam_exposure_lims=to_int_tuple(self.config["cam_exposure_lims"]),
             save_location=self.config["save_location"],

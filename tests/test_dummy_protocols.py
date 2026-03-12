@@ -53,9 +53,9 @@ class TestDummyDAQControllerProtocol:
         assert controller.get_dios() == []
 
     def test_toggle_continuous_output(self, controller):
-        assert not controller.continuousOutput
+        assert not controller.continuous_output
         controller.toggle_continuous_output()
-        assert controller.continuousOutput
+        assert controller.continuous_output
 
     def test_get_channel_number_name_dict(self, controller):
         d = controller.get_channel_number_name_dict()

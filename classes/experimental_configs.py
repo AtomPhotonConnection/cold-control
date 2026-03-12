@@ -17,6 +17,7 @@ import re
 import shutil
 import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from itertools import product
 from pathlib import Path
@@ -28,6 +29,24 @@ from classes.daq_sequence import DaqSequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "AwgConfiguration",
+    "CameraConfiguration",
+    "ExperimentSessionConfig",
+    "GenericConfiguration",
+    "MotFluoresceConfiguration",
+    "MotFluoresceConfigurationSweep",
+    "MotFluorescenceAlignmentConfiguration",
+    "PhotonProductionConfiguration",
+    "ScopeConfiguration",
+    "SingleExperimentConfig",
+    "TdcConfiguration",
+    "Waveform",
+    "AbsorbtionImagingConfiguration",
+    "make_property",
+    "sanitize_filename",
+]
 
 
 def make_property(attr_name):
@@ -43,6 +62,34 @@ def sanitize_filename(name: str) -> str:
     name = Path(name).stem
     # Remove all non-alphanumeric or underscore characters
     return re.sub(r"[^A-Za-z0-9_]+", "_", name)
+
+
+@dataclass
+class CameraConfiguration:
+    """Typed container for camera settings, replacing the raw ``cam_dict``.
+
+    Attributes
+    ----------
+    cam_exposure : int
+        Camera exposure parameter (1/x seconds).
+    cam_gain : int
+        Camera gain setting.
+    camera_trig_ch : int
+        DAQ channel number for the camera trigger.
+    camera_trig_levs : tuple[float, ...]
+        Trigger voltage levels for the camera.
+    camera_pulse_width : float
+        Width of the camera trigger pulse in microseconds.
+    save_images : bool
+        Whether to save captured images to disk.
+    """
+
+    cam_exposure: int
+    cam_gain: int
+    camera_trig_ch: int
+    camera_trig_levs: tuple[float, ...]
+    camera_pulse_width: float
+    save_images: bool = True
 
 
 class Waveform:
@@ -461,11 +508,11 @@ class ExperimentSessionConfig:
 
     def __init__(
         self,
-        save_location,
-        summary_fname,
-        automated_experiment_configurations,
-        daq_channel_update_steps,
-        daq_channel_update_delay,
+        save_location: str,
+        summary_fname: str,
+        automated_experiment_configurations: list[SingleExperimentConfig],
+        daq_channel_update_steps: float,
+        daq_channel_update_delay: float,
     ):
 
         self._save_location = save_location
@@ -489,9 +536,9 @@ class GenericConfiguration:
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
     ):
 
         self._save_location = save_location
@@ -531,13 +578,13 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
         scope_config: ScopeConfiguration | None = None,
         awg_config: AwgConfiguration | None = None,
         awg_config_path: str | None = None,
-        cam_dict: dict | None = None,
+        cam_dict: CameraConfiguration | dict | None = None,
         sequence_config_path: str | None = None,
         background_mode: bool = False,
         background_iterations: int | None = None,
@@ -562,13 +609,15 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_cam = cam_dict is not None
 
         if self.use_cam:
-            cam_dict = cast(dict, cam_dict)
-            self.cam_exposure = cam_dict["cam_exposure"]
-            self.cam_gain = cam_dict["cam_gain"]
-            self.camera_trigger_channel = cam_dict["camera_trig_ch"]
-            self.camera_trigger_level = cam_dict["camera_trig_levs"]
-            self.camera_pulse_width = cam_dict["camera_pulse_width"]
-            self.save_images = cam_dict["save_images"]
+            if isinstance(cam_dict, dict):
+                cam_dict = CameraConfiguration(**cam_dict)
+            cam_config = cast(CameraConfiguration, cam_dict)
+            self.cam_exposure = cam_config.cam_exposure
+            self.cam_gain = cam_config.cam_gain
+            self.camera_trigger_channel = cam_config.camera_trig_ch
+            self.camera_trigger_level = cam_config.camera_trig_levs
+            self.camera_pulse_width = cam_config.camera_pulse_width
+            self.save_images = cam_config.save_images
         else:
             logger.info("No camera will be used.")
 
@@ -846,9 +895,9 @@ class MotFluoresceConfigurationSweep:
                     / f"shot{i}"
                 )
 
-                # Modifies the sequence
-                freq_ch = 2  # These values shouldn't be hardcoded
-                power_ch = 6
+                # Channel numbers come from sweep params or fall back to defaults
+                freq_ch = self.sweep_params.get("freq_channel", 2)
+                power_ch = self.sweep_params.get("power_channel", 6)
                 new_sequence.update_channel(
                     freq_ch,
                     [
@@ -924,15 +973,15 @@ class PhotonProductionConfiguration(GenericConfiguration):
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
-        waveform_sequence,
-        waveforms,
-        interleave_waveforms,
-        waveform_stitch_delays,
-        awg_configuration,
-        tdc_configuration,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
+        waveform_sequence: list[list[int]],
+        waveforms: dict[int, Waveform],
+        interleave_waveforms: bool | None,
+        waveform_stitch_delays: tuple | None,
+        awg_configuration: AwgConfiguration,
+        tdc_configuration: TdcConfiguration,
     ):
 
         super().__init__(save_location, mot_reload, iterations)
@@ -1056,13 +1105,13 @@ class SingleExperimentConfig(GenericConfiguration):
 
     def __init__(
         self,
-        daq_channel_static_values,
-        sequence_fname,
-        sequence,
-        iterations,
-        mot_reload,
-        modulation_frequencies,
-        save_location=None,
+        daq_channel_static_values: list[tuple[int, float]],
+        sequence_fname: str,
+        sequence: DaqSequence,
+        iterations: int,
+        mot_reload: float,
+        modulation_frequencies: list[float],
+        save_location: str | None = None,
     ):
 
         self._daq_channel_static_values = daq_channel_static_values
