@@ -144,16 +144,66 @@ class GenericExperiment[T: GenericConfiguration]:
         """
         Run the experiment with the experimental loop in a separate thread.
         """
-        # def run_and_close():
-        #     self.run()
-        #     self.close()
-        # the experiment should close itself in run() method, so we don't need to close it here.
-
         thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
 
         if start_thread:
             thread.start()
         return thread
+
+    @staticmethod
+    def _configure_camera_common(
+        ic_ic: ICImagingControl,
+        cam_gain: int,
+        cam_exposure: int,
+        cam_frame_timeout: int = 5000,
+    ) -> ICCamera:
+        """Open and configure the first available camera.
+
+        This shared helper eliminates duplication between
+        ``AbsorbtionImagingExperiment`` and ``MotFluoresceExperiment``.
+
+        Returns the configured :class:`ICCamera` instance.
+        """
+        cam_names = ic_ic.get_unique_device_names()
+        if not cam_names:
+            raise RuntimeError(
+                "No cameras found. Ensure a camera is connected and the imaging "
+                "control library is initialised."
+            )
+        cam: ICCamera = ic_ic.get_device(cam_names[0])
+        logger.info("Timeout set to %dms", cam_frame_timeout)
+        logger.info("Opened connection to camera %s", cam_names[0])
+
+        if not cam.is_open():
+            cam.open()
+
+        cam.gain.auto = False
+        cam.exposure.auto = False
+        cam.gain.value = cam_gain
+        cam.exposure.value = cam_exposure
+        formats = cam.list_video_formats()
+        cam.set_video_format(formats[0])
+        cam.enable_continuous_mode(True)
+        cam.start_live(show_display=False)
+        cam.enable_trigger(True)
+
+        if not cam.callback_registered:
+            cam.register_frame_ready_callback()
+
+        # Clear out any rogue image still in memory
+        try:
+            cam.wait_til_frame_ready(cam_frame_timeout)
+            cam.get_image_data()
+        except ICError as err:
+            logger.error("Caught ICError with error: %s", err.message)
+        cam.reset_frame_ready()
+
+        return cam
+
+    def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
+        """Sleep for the MOT reload period, converting from milliseconds to seconds."""
+        logger.info("Loading MOT for %sms...", mot_reload_ms)
+        sleep(mot_reload_ms * 10**-3)
 
 
 class AbsorbtionImagingExperiment(GenericExperiment):
@@ -389,42 +439,13 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         super().daq_cards_on()
 
     def __configure_camera(self):
-        # open first available camera device
-        cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: ICCamera
-        cam: ICCamera
-        self.cam = cam = self.ic_ic.get_device(cam_names[0])
-        #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
         self.cam_frame_timeout = 5000
-        logger.info(f"Timeout set to {self.cam_frame_timeout}ms")
-        logger.info(f"Opened connection to camera {cam_names[0]}")
-
-        if not cam.is_open():
-            cam.open()
-
-        # change camera settings
-        cam.gain.auto = False
-        cam.exposure.auto = False
-        cam.gain.value = self.config.cam_gain
-        cam.exposure.value = self.config.cam_exposure
-        formats = cam.list_video_formats()
-        cam.set_video_format(formats[0])  # use first available video format
-        cam.enable_continuous_mode(True)  # image in continuous mode
-        cam.start_live(show_display=False)  # start imaging
-
-        # print cam.is_triggerable()
-        cam.enable_trigger(True)  # camera will wait for trigger
-
-        if not cam.callback_registered:
-            cam.register_frame_ready_callback()  # needed to wait for frame ready callback
-
-        # Clear out the memory of any rogue image still in there
-        try:
-            cam.wait_til_frame_ready(self.cam_frame_timeout)
-            cam.get_image_data()
-        except ICError as err:
-            logger.error(f"Caught ICError with error: {err.message}")
-        cam.reset_frame_ready()
+        self.cam = self._configure_camera_common(
+            self.ic_ic,
+            self.config.cam_gain,
+            self.config.cam_exposure,
+            self.cam_frame_timeout,
+        )
 
     def __take_images(self, save_raw_images):
         img_arrs = []
@@ -438,8 +459,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
             # Write the persistance values and wait for the MOT to reload
             self.daq_controller.load(seq.get_array())
             self.daq_controller.write_channel_values()
-            logger.info(f"Loading MOT for {self.config.mot_reload}ms...")
-            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
+            self._wait_for_mot_reload(self.config.mot_reload)
 
             if save_raw_images:
                 # Make dirs for saving pictures
@@ -567,8 +587,8 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def save_processed_images(self, notes=None):
         if not self.results_ready:
-            raise Exception(
-                "The abosrbtion imaging experiment has not been run yet. There are no results to save."
+            raise RuntimeError(
+                "The absorption imaging experiment has not been run yet. There are no results to save."
             )
         bkg_dir = Path(self.save_location) / "backgrounds"
         bkg_dir.mkdir(parents=True, exist_ok=True)
@@ -611,7 +631,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def get_results(self):
         if not self.results_ready:
-            raise Exception("The absorption imaging experiment has not been run yet.")
+            raise RuntimeError("The absorption imaging experiment has not been run yet.")
         logger.info("Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs)))
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
@@ -701,7 +721,7 @@ class PhotonProductionExperiment(GenericExperiment):
         while i <= self.iterations and self.is_live:
             logger.info(f"iter: {i}")
 
-            sleep(self.mot_reload_time * 10**-3)  # convert from ms to s
+            self._wait_for_mot_reload(self.mot_reload_time)
 
             if tdc_read_thread:
                 tdc_read_thread.join(timeout=5000)
@@ -849,7 +869,7 @@ class PhotonProductionExperiment(GenericExperiment):
         Calculates the total time of all the waveforms loaded onto the AWG in seconds.
         """
         if self.awg_config is None:
-            raise Exception("AWG configuration is not set. Cannot calculate total waveform time.")
+            raise ValueError("AWG configuration is not set. Cannot calculate total waveform time.")
         else:
             return self.awg_config.get_total_time()
 
@@ -963,43 +983,13 @@ class MotFluoresceExperiment(GenericExperiment):
         """
         Private method to configure the camera for the MOT fluorescence experiment.
         """
-        # open first available camera device
-        cam_names = self.ic_ic.get_unique_device_names()
-        self.cam: ICCamera
-        cam: ICCamera
-        self.cam = cam = self.ic_ic.get_device(cam_names[0])
-        #         self.cam_frame_timeout = int(self.sequences[0].getLength()*10**-3 + (1./self.config.cam_exposure)*10**3)
-        # is this in milliseconds? and does it match the MOT reload time? I think so
         self.cam_frame_timeout = 5000
-        logger.info(f"Timeout set to {self.cam_frame_timeout}ms")
-        logger.info(f"Opened connection to camera {cam_names[0]}")
-
-        if not cam.is_open():
-            cam.open()
-
-        # change camera settings
-        cam.gain.auto = False
-        cam.exposure.auto = False
-        cam.gain.value = self.cam_gain
-        cam.exposure.value = self.cam_exposure
-        formats = cam.list_video_formats()
-        cam.set_video_format(formats[0])  # use first available video format
-        cam.enable_continuous_mode(True)  # image in continuous mode
-        cam.start_live(show_display=False)  # start imaging
-
-        # print cam.is_triggerable()
-        cam.enable_trigger(True)  # camera will wait for trigger
-
-        if not cam.callback_registered:
-            cam.register_frame_ready_callback()  # needed to wait for frame ready callback
-
-        # Clear out the memory of any rogue image still in there
-        try:
-            cam.wait_til_frame_ready(self.cam_frame_timeout)
-            cam.get_image_data()
-        except ICError as err:
-            logger.error(f"Caught ICError with error: {cast(ICError, err).message}")
-        cam.reset_frame_ready()
+        self.cam = self._configure_camera_common(
+            self.ic_ic,
+            self.cam_gain,
+            self.cam_exposure,
+            self.cam_frame_timeout,
+        )
 
     def configure(self):
         """
@@ -1104,9 +1094,7 @@ class MotFluoresceExperiment(GenericExperiment):
         # self.scope.set_to_run()
         while i <= self.config.iterations:
             logger.info(f"Iteration {i}")
-            logger.info(f"loading mot for {self.config.mot_reload}ms")
-            # self.scope.set_to_digitize(self.scope_config.data_channels)
-            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
+            self._wait_for_mot_reload(self.config.mot_reload)
 
             self.scope.arm_scope()
 
@@ -1156,8 +1144,7 @@ class MotFluoresceExperiment(GenericExperiment):
         i = 1
         while i <= self.config.iterations:
             logger.info(f"Iteration {i} of experiment {experiment_name}")
-            logger.info(f"loading mot for {self.config.mot_reload}ms")
-            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
+            self._wait_for_mot_reload(self.config.mot_reload)
 
             logger.info("playing sequence")
             self.daq_controller.play(float(self.sequence.t_step), clear_cards=False)
@@ -1180,8 +1167,7 @@ class MotFluoresceExperiment(GenericExperiment):
         i = 1
         while i <= self.config.iterations:
             logger.info(f"Iteration {i}")
-            logger.info(f"loading mot for {self.config.mot_reload}ms")
-            sleep(self.config.mot_reload * 10**-3)  # convert from ms to s
+            self._wait_for_mot_reload(self.config.mot_reload)
 
             logger.info("playing sequence")
             self.daq_controller.play(float(self.sequence.t_step), clear_cards=False)
@@ -1229,7 +1215,7 @@ class MotFluoresceExperiment(GenericExperiment):
                 logger.error("Cannot run experiment with both camera and scope.")
 
         except Exception as e:
-            logger.error(f"An error occurred during the experiment: {e}")
+            logger.error("An error occurred during the experiment: %s", e, exc_info=True)
         finally:
             self.close()
 
@@ -1270,7 +1256,8 @@ class MotFluoresceSweepExperiment:
         self.daq_controller = daq_controller
         self.development_mode = development_mode
 
-    def run_in_thread(self, start_thread=True):
+    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
+        """Run the sweep experiment in a separate thread."""
         thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
         if start_thread:
             thread.start()
@@ -1348,6 +1335,7 @@ class MotFluorescenceAlignmentExperiment:
         self.stop_requested = True
 
     def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
+        """Run the alignment loop in a separate thread."""
         thread = threading.Thread(name="Cold Control Alignment Thread", target=self.run)
         if start_thread:
             thread.start()
@@ -1374,7 +1362,7 @@ class MotFluorescenceAlignmentExperiment:
                 analyser = FluorescenceAnalyser(bg_data)
                 logger.info(f"Background data loaded from {background_folder}")
             except Exception as e:
-                logger.warning(f"Could not load background data: {e}")
+                logger.warning("Could not load background data: %s", e, exc_info=True)
                 logger.warning("Falling back to raw F_img display.")
                 analyser = None
 
@@ -1439,7 +1427,7 @@ class MotFluorescenceAlignmentExperiment:
                     logger.warning("Could not compute metric for this iteration.")
 
         except Exception as e:
-            logger.error(f"Alignment experiment error: {e}")
+            logger.error("Alignment experiment error: %s", e, exc_info=True)
         finally:
             self.is_running = False
             logger.info("\n" + "=" * 60)
@@ -1485,7 +1473,7 @@ class MotFluorescenceAlignmentExperiment:
                 return float(F_img_act)
 
         except Exception as e:
-            logger.error(f"Analysis failed for {shot_folder}: {e}")
+            logger.error("Analysis failed for %s: %s", shot_folder, e, exc_info=True)
             return None
 
 

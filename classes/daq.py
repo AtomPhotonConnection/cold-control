@@ -12,6 +12,7 @@ This module can be imported safely on machines without the D2K-Dask64 DLL.
 from __future__ import annotations
 
 import functools
+import logging
 import operator
 import re
 from ctypes import c_double, c_float, c_long, c_short, c_ubyte, c_ulong, c_ushort
@@ -20,6 +21,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Conditional import of hardware-dependent code from DAQ_dll.py
@@ -40,7 +43,7 @@ else:
         DAQ2502 = _DAQ2502
         Daq2502Error = _Daq2502Error
 
-        print("[DAQ] D2K-Dask64 DLL not available — running with stub DAQ2502.")
+        logger.info("D2K-Dask64 DLL not available — running with stub DAQ2502.")
 
 # DAQ2000 Device
 DAQ_2010 = 1
@@ -157,96 +160,6 @@ warning_code = {
     -217: "ErrorPMIntSetIoctl",
     -301: "ErrorNotSuportOldDriver",
 }
-
-# NoError = 0
-# ErrorUnknownCardType = -1
-# ErrorInvalidCardNumber = -2
-# ErrorTooManyCardRegistered = -3
-# ErrorCardNotRegistered = -4
-# ErrorFuncNotSupport = -5
-# ErrorInvalidIoChannel = -6
-# ErrorInvalidAdRange = -7
-# ErrorContIoNotAllowed = -8
-# ErrorDiffRangeNotSupport = -9
-# ErrorLastChannelNotZero = -10
-# ErrorChannelNotDescending = -11
-# ErrorChannelNotAscending = -12
-# ErrorOpenDriverFailed = -13
-# ErrorOpenEventFailed = -14
-# ErrorTransferCountTooLarge = -15
-# ErrorNotDoubleBufferMode = -16
-# ErrorInvalidSampleRate = -17
-# ErrorInvalidCounterMode = -18
-# ErrorInvalidCounter = -19
-# ErrorInvalidCounterState = -20
-# ErrorInvalidBinBcdParam = -21
-# ErrorBadCardType = -22
-# ErrorInvalidDaRefVoltage = -23
-# ErrorAdTimeOut = -24
-# ErrorNoAsyncAI = -25
-# ErrorNoAsyncAO = -26
-# ErrorNoAsyncDI = -27
-# ErrorNoAsyncDO = -28
-# ErrorNotInputPort = -29
-# ErrorNotOutputPort = -30
-# ErrorInvalidDioPort = -31
-# ErrorInvalidDioLine = -32
-# ErrorContIoActive = -33
-# ErrorDblBufModeNotAllowed = -34
-# ErrorConfigFailed = -35
-# ErrorInvalidPortDirection = -36
-# ErrorBeginThreadError = -37
-# ErrorInvalidPortWidth = -38
-# ErrorInvalidCtrSource = -39
-# ErrorOpenFile = -40
-# ErrorAllocateMemory = -41
-# ErrorDaVoltageOutOfRange = -42
-# ErrorInvalidSyncMode = -43
-# ErrorInvalidBufferID = -44
-# ErrorInvalidCNTInterval  = -45
-# ErrorReTrigModeNotAllowed = -46
-# ErrorResetBufferNotAllowed = -47
-# ErrorAnaTriggerLevel = -48
-# ErrorDAQEvent = -49
-# ErrorInvalidCounterValue = -50
-# ErrorOffsetCalibration = -51
-# ErrorGainCalibration = -52
-# ErrorCountOutofSDRAMSize = -53
-# ErrorNotStartTriggerModule = -54
-# ErrorInvalidRouteLine = -55
-# ErrorInvalidSignalCode = -56
-# ErrorInvalidSignalDirection = -57
-# ErrorTRGOSCalibration = -58
-# ErrorNoSDRAM = -59
-# ErrorIntegrationGain = -60
-# ErrorAcquisitionTiming = -61
-# ErrorIntegrationTiming = -62
-# ErrorInvalidTimeBase = -70
-# ErrorUndefinedParameter = -71
-#
-## Error number for calibration API
-# ErrorCalAddress = -110
-# ErrorInvalidCalBank = -111
-#
-## Error number for driver API
-# ErrorConfigIoctl = -201
-# ErrorAsyncSetIoctl = -202
-# ErrorDBSetIoctl = -203
-# ErrorDBHalfReadyIoctl = -204
-# ErrorContOPIoctl = -205
-# ErrorContStatusIoctl = -206
-# ErrorPIOIoctl = -207
-# ErrorDIntSetIoctl = -208
-# ErrorWaitEvtIoctl = -209
-# ErrorOpenEvtIoctl = -210
-# ErrorCOSIntSetIoctl = -211
-# ErrorMemMapIoctl = -212
-# ErrorMemUMapSetIoctl = -213
-# ErrorCTRIoctl = -214
-# ErrorGetResIoctl = -215
-# ErrorCalIoctl = -216
-# ErrorPMIntSetIoctl = -217
-# ErrorNotSuportOldDriver = -301
 
 TRUE = 1
 FALSE = 0
@@ -623,8 +536,8 @@ class DAQChannel:
         WARNING: THIS METHOD IS DEPRECATED. USE CALIBRATE (WHICH TAKES A CSV FILE AS INPUT) INSTEAD.
         """
 
-        print(
-            "WARNING: calibrate_from_txt() METHOD IS DEPRECATED. USE CALIBRATE WITH CSV FILES INSTEAD."
+        logger.warning(
+            "calibrate_from_txt() is deprecated. Use calibrate() with CSV files instead."
         )
 
         # calibrationFname = os.path.join(REPO_PATH, calibrationFname)
@@ -641,7 +554,7 @@ class DAQChannel:
         if cal_data[0] <= cal_data[-1]:
             self.calibrationToVFunc = lambda x: np.interp(x, cal_data, v_data)
         else:
-            print(self.chName, ": calibration to Voltage being reversed...")
+            logger.info("%s: calibration to Voltage being reversed...", self.chName)
             self.calibrationToVFunc = lambda x: np.interp(
                 x, [x for x in reversed(cal_data)], [x for x in reversed(v_data)]
             )
@@ -649,7 +562,7 @@ class DAQChannel:
         if v_data[0] <= v_data[-1]:
             self.calibrationFromVFunc = lambda x: np.interp(x, v_data, cal_data)
         else:
-            print(self.chName, ": calibration from Voltage being reversed...")
+            logger.info("%s: calibration from Voltage being reversed...", self.chName)
             self.calibrationFromVFunc = lambda x: np.interp(
                 x, [x for x in reversed(v_data)], [x for x in reversed(cal_data)]
             )
@@ -676,7 +589,7 @@ class DAQChannel:
         try:
             df = pd.read_csv(calibration_fname)
         except FileNotFoundError:
-            print(f"Calibration file not found: {calibration_fname}")
+            logger.error("Calibration file not found: %s", calibration_fname)
             return
 
         try:
@@ -684,7 +597,7 @@ class DAQChannel:
             data_col = df.columns[1]  # get the column containing the calibration data
             units = str(data_col).split(" ")[-1].strip("()")  # Extract units
         except IndexError:
-            print(f"Invalid calibration file format: {calibration_fname}")
+            logger.error("Invalid calibration file format: %s", calibration_fname)
             return
 
         self.calibrationUnits = units
@@ -755,12 +668,12 @@ class DAQDio:
 
     def write(self, value):
         if self.write_fn is None:
-            raise Exception("No write function has been registered for this digital IO.")
+            raise RuntimeError("No write function has been registered for this digital IO.")
         return self.write_fn(value)
 
     def read(self):
         if self.read_fn is None:
-            raise Exception("No read function has been registered for this digital IO.")
+            raise RuntimeError("No read function has been registered for this digital IO.")
         return self.read_fn()
 
     def toggle_state(self, return_state=False):
@@ -840,14 +753,11 @@ class DAQCard(DAQ2502):  # type: ignore
         by the DAQ card."""
         num_chs, num_samps = sequence_array.shape
         if num_chs != self.numChs:
-            print(
-                "WARNING: the sequence being loaded is for",
+            logger.warning(
+                "The sequence being loaded is for %d channels but DAQ card %s has %d channels.",
                 num_chs,
-                "but DAQ card",
                 self.card,
-                "has",
                 self.numChs,
-                "channels.",
             )
 
         # The digital values representing the sequence that will be put to the card (note the data type is predetermined as uint16).
@@ -916,13 +826,15 @@ class DAQCard(DAQ2502):  # type: ignore
         # Check we have the right number of channels registered
         reg_chs = len(channels)
         if self.numChs < reg_chs:
-            print(
-                "WARNING: more DAQ channels were registered than are available. Ignoring additional channel definitions."
+            logger.warning(
+                "More DAQ channels were registered than are available. "
+                "Ignoring additional channel definitions."
             )
             channels = channels[: self.numChs]
         elif self.numChs > reg_chs:
-            print(
-                "WARNING: fewer DAQ channels were registered than are available. Unassigned channels will use default labelling and values."
+            logger.warning(
+                "Fewer DAQ channels were registered than are available. "
+                "Unassigned channels will use default labelling and values."
             )
             channels += [DAQChannel(i) for i in range(reg_chs, self.numChs)]
 
@@ -932,7 +844,7 @@ class DAQCard(DAQ2502):  # type: ignore
         if [ch.chNum for ch in channels] != [
             i for i in range(channels[0].chNum, channels[0].chNum + self.numChs)
         ]:
-            raise Exception(
+            raise ValueError(
                 "Unexpected channels registered.\nRegistered channel numbers: "
                 + str([ch.chNum for ch in channels])
                 + "\nExpected channel numbers: "
@@ -967,8 +879,13 @@ class DAQCard(DAQ2502):  # type: ignore
                 registered_lines.append(dio)
 
             except Daq2502Error:
-                print(
-                    f"Error configuring digital line ('{dio.dio_name}') on card {dio.dio_name}, port {self.card}, line {dio.port}.  Not registering line."
+                logger.error(
+                    "Error configuring digital line ('%s') on card %s, port %s, line %s. "
+                    "Not registering line.",
+                    dio.dio_name,
+                    self.card,
+                    dio.port,
+                    dio.line,
                 )
 
         return registered_lines
@@ -1050,21 +967,19 @@ class DAQController:
         seq_chs, num_samps = control_array.shape
         tot_chs = sum([card.numChs for card in [self.master, *self.slaves]])
         if seq_chs < tot_chs:
-            print(
-                "WARNING: Attempting to load an array for",
-                seq_chs,
-                "channels when there are",
-                tot_chs,
+            logger.warning(
+                "Attempting to load an array for %d channels when there are %d "
                 "channels available. Extra channels will be set to zero.",
+                seq_chs,
+                tot_chs,
             )
             control_array = np.vstack([control_array, np.zeros([tot_chs - seq_chs, num_samps])])
         elif seq_chs > tot_chs:
-            print(
-                "WARNING: Attempting to load an array for",
-                seq_chs,
-                "channels when there are",
-                tot_chs,
+            logger.warning(
+                "Attempting to load an array for %d channels when there are %d "
                 "channels available. Extra channels will be ignored.",
+                seq_chs,
+                tot_chs,
             )
             control_array = control_array[:tot_chs]
 
@@ -1130,7 +1045,7 @@ class DAQController:
 
     def enslave(self, slave):
         """Enslave a card to the master"""
-        print(f"Enslaved card {slave.card} to card {self.master.card}")
+        logger.info("Enslaved card %s to card %s", slave.card, self.master.card)
         if dll is None:
             return
         #         dll.D2K_AO_Config(slave.card, DAQ2K_DA_WRSRC_SSI, DAQ2K_DA_TRSRC_SSI | DAQ2K_DA_TRGMOD_POST, 0, 0, 0, 0) # OLD and depricated by Tom 1/9/16
@@ -1147,7 +1062,7 @@ class DAQController:
 
     def emancipate(self, slave):
         """Free a card from the master"""
-        print(f"Freed card {slave.card} from card {self.master.card}")
+        logger.info("Freed card %s from card %s", slave.card, self.master.card)
         if dll is None:
             return
         # Should the second argument be DAQ2K_DA_WRSRC_Int | DA_Group_AB for consistancy with enslave()?
