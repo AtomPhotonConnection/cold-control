@@ -8,6 +8,7 @@ Classes:
         swap experiment config files.
 """
 
+import ast
 import copy
 import tkinter as tk
 from tkinter import filedialog as tk_file_dialog
@@ -392,10 +393,10 @@ class AbsorptionImagingConfigurationUi:
         try:
             flash_col = "green"
             try:
-                entered_freqs = list(map(float, eval(imaging_freqs_widget.get())))
+                entered_freqs = list(map(float, ast.literal_eval(imaging_freqs_widget.get())))
             except TypeError:
                 # If a single value is entered, map() will throw a TypeError as the second arg is not iterable.
-                entered_freqs = [float(eval(imaging_freqs_widget.get()))]
+                entered_freqs = [float(ast.literal_eval(imaging_freqs_widget.get()))]
             # Check only two levels were entered
             if len(entered_freqs) == 0:
                 raise ValueError
@@ -469,7 +470,7 @@ class AbsorptionImagingConfigurationUi:
         # If the entered values can be converted to the correct form, do so and update the stored values.
         try:
             flash_col = "green"
-            entered_trig_levs = tuple(map(float, eval(trig_levs_widget.get())))
+            entered_trig_levs = tuple(map(float, ast.literal_eval(trig_levs_widget.get())))
             # Check only two levels were entered
             if len(entered_trig_levs) != 2:
                 raise ValueError
@@ -544,10 +545,10 @@ class AbsorptionImagingConfigurationUi:
         try:
             flash_col = "green"
             try:
-                entered_t_imgs = list(map(float, eval(widget.get())))
+                entered_t_imgs = list(map(float, ast.literal_eval(widget.get())))
             except TypeError:
                 # If a single value is entered, map() will throw a TypeError as the second arg is not iterable.
-                entered_t_imgs = [float(eval(widget.get()))]
+                entered_t_imgs = [float(ast.literal_eval(widget.get()))]
             new_t_imgs = [t for t in entered_t_imgs if 0 <= t <= self.sequence_length]
             # If the values were removed to fit the sequence length, flash the widget yellow as a warning.
             if entered_t_imgs != new_t_imgs:
@@ -615,11 +616,11 @@ class AbsorptionImagingConfigurationUi:
             flash_col = "green"
             # Try to convert the entered string into a list of channel numbers
             try:
-                entered_bkg_off_channels = list(map(int, eval(widget.get())))
+                entered_bkg_off_channels = list(map(int, ast.literal_eval(widget.get())))
             except TypeError:
                 # A type error can be thrown when converting a single interger as a string to a list. Add a comma to avoid this,
-                # i.e. list(eval('7')) -> TypeError, list(eval('7,')) = [7]
-                entered_bkg_off_channels = list(map(int, eval(widget.get() + ",")))
+                # i.e. list(ast.literal_eval('7')) -> TypeError, list(ast.literal_eval('7,')) = [7]
+                entered_bkg_off_channels = list(map(int, ast.literal_eval(widget.get() + ",")))
             new_bkg_off_channels = [
                 x
                 for x in entered_bkg_off_channels
