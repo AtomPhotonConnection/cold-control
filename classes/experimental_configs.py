@@ -86,8 +86,10 @@ class Waveform:
         # Infer modulated flag when not explicitly provided
         if modulated is None:
             self.__modulated = mod_frequency != 0.0
-            print(
-                f"WARNING: Modulated flag not provided for waveform '{fname}'; inferred as {self.__modulated} based on mod_frequency."
+            logger.warning(
+                "Modulated flag not provided for waveform '%s'; inferred as %s based on mod_frequency.",
+                fname,
+                self.__modulated,
             )
         else:
             self.__modulated = modulated
@@ -378,7 +380,7 @@ class AwgConfiguration:
 
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
+        logger.debug("Setting waveform sequence to %s %s", value, [type(x) for x in value])
         self._waveform_sequence = value
 
     @waveform_sequence.deleter
@@ -568,13 +570,13 @@ class MotFluoresceConfiguration(GenericConfiguration):
             self.camera_pulse_width = cam_dict["camera_pulse_width"]
             self.save_images = cam_dict["save_images"]
         else:
-            print("No camera will be used.")
+            logger.info("No camera will be used.")
 
         if not self.use_scope:
-            print("No scope will be used.")
+            logger.info("No scope will be used.")
 
         if not self.use_awg:
-            print("No AWG will be used.")
+            logger.info("No AWG will be used.")
 
     # ------------------------------------------------------------------
     # Backward-compatible property aliases for scope settings.
@@ -651,18 +653,17 @@ class MotFluoresceConfigurationSweep:
         self.base_sequence = base_sequence
         self.sweep_type = sweep_type
         self.sweep_params = sweep_params
-        # print(self.sweep_params)
         self.num_shots = num_shots
 
         now = datetime.now()
         self.current_date = now.strftime("%Y-%m-%d")
         self.current_time = now.strftime("%H-%M-%S")
-        print(f"[DEBUG] date: {self.current_date}")
-        print(f"[DEBUG] time: {self.current_time}")
+        logger.debug("date: %s", self.current_date)
+        logger.debug("time: %s", self.current_time)
 
         self.configs: list[MotFluoresceConfiguration] = []
         self.sequences: list[DaqSequence] = []
-        print("Creating all MOT fluorescence configurations for the sweep...")
+        logger.info("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
             wave_idxs = self.sweep_params["waveform_indices"]
@@ -814,7 +815,7 @@ class MotFluoresceConfigurationSweep:
             to_sweep.append("pulse_lengths")
         if len(pulse_times) > 1:
             to_sweep.append("pulse_times")
-        print(f"Sweeping over the following parameters: {to_sweep}")
+        logger.info("Sweeping over the following parameters: %s", to_sweep)
 
         for i in range(self.num_shots):
             for power, freq, length, time in product(
@@ -858,7 +859,7 @@ class MotFluoresceConfigurationSweep:
                     ],
                 )
                 tv_pairs = list(new_sequence.get_tv_pairs(power_ch))
-                print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
+                logger.debug("The old tv pairs for the imaging channel are: %s", tv_pairs)
                 # HACK to change the correct power value and pulse length
                 # img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
                 img_end_tv = tv_pairs[3]
@@ -866,7 +867,7 @@ class MotFluoresceConfigurationSweep:
                 new_end_tv = (time + length, img_end_tv[1])
                 tv_pairs[2] = new_start_tv
                 tv_pairs[3] = new_end_tv
-                print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
+                logger.debug("The new tv pairs for the imaging channel are: %s", tv_pairs)
                 new_vint_styles = new_sequence.get_v_interval_styles(power_ch)
                 new_sequence.update_channel(power_ch, tv_pairs, new_vint_styles)
 
@@ -951,7 +952,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
 
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
+        logger.debug("Setting waveform sequence to %s %s", value, [type(x) for x in value])
         self._waveform_sequence = value
 
     @waveform_sequence.deleter

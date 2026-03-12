@@ -53,7 +53,7 @@ if __name__ == "__main__" and CALIB_TYPE == "absolute_power":
     config_reader = ConfigReader(str(Path.cwd() / "configs" / "rootConfig.ini"))
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_controller = DaqReader(daq_config_fname).load_daq_controller()
-    daq_controller.continuousOutput = True
+    daq_controller.continuous_output = True
 
     calibrate.daq_driven_aom_response(
         daq_controller,

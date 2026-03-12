@@ -9,23 +9,27 @@ Classes:
 """
 
 import contextlib
+import logging
 import queue
 import threading
 import time
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 
 class PhotonProductionBufferedDataHandler:
-    def __init__(self, n_hist_bins=30, t_stirap_length: float = 800):
+    def __init__(self, n_hist_bins: int = 30, t_stirap_length: float = 800):
 
-        self.data_queue = queue.Queue()  # A buffer for data to be added to waiting to be analysed.
-        self.analysis_buffer = []  # A buffer for the next analysis loop to analyse.
+        self.data_queue: queue.Queue = queue.Queue()
+        self.analysis_buffer: list = []
         self.data_analysis_thread = threading.Thread()
 
+        self._lock = threading.Lock()
         self.new_data_waiting = False
         self.completed_iterations = 0
-        self.count_rate = [0]
+        self.count_rate: list[int] = [0]
 
         # Configure the stirap histogram: n_bins and total length (in microseconds).
         self.n_hist_bins = n_hist_bins
@@ -38,8 +42,9 @@ class PhotonProductionBufferedDataHandler:
         self.keep_polling_queue = True
         self.polling_thread = self.start_polling_queue()
 
-    def poll_queue(self, delay_ms=1):
-        """
+    def poll_queue(self, delay_ms: int = 1) -> None:
+        """Poll the data queue and start analysis if data is available.
+
         Data will be tuple of (throw_number, [(channel, t_Stirap, t_mot, pulse_number),...])
         """
         if not self.data_analysis_thread.is_alive():
@@ -50,12 +55,13 @@ class PhotonProductionBufferedDataHandler:
                     self.analysis_buffer.append(self.data_queue.get_nowait())
                 self.data_analysis_thread = threading.Thread(
                     name="Photon_production_buffered_data_handler.__analyse_buffer",
-                    target=self.__analyse_buffer(),
+                    target=self.__analyse_buffer,
                 )
 
                 self.data_analysis_thread.start()
 
-    def start_polling_queue(self, delay_ms=1):
+    def start_polling_queue(self, delay_ms: int = 1) -> threading.Thread:
+        """Start a background thread that continuously polls the data queue."""
 
         def poll_loop():
             while self.keep_polling_queue:
@@ -68,13 +74,16 @@ class PhotonProductionBufferedDataHandler:
         thread.start()
         return thread
 
-    def stop_polling_queue(self):
+    def stop_polling_queue(self) -> None:
+        """Signal the polling thread to stop."""
         self.keep_polling_queue = False
 
-    def __analyse_buffer(self):
+    def __analyse_buffer(self) -> None:
+        """Analyse the current analysis buffer, updating shared state under a lock."""
 
-        self.completed_iterations = self.analysis_buffer[-1][0]
-        self.count_rate += [len(data[1]) for data in self.analysis_buffer]
+        with self._lock:
+            self.completed_iterations = self.analysis_buffer[-1][0]
+            self.count_rate += [len(data[1]) for data in self.analysis_buffer]
 
         # Get histogram contributions from new data.  list slicing is to get t_Stirap only
         # and *10**6 converts from picoseconds to microseconds.
@@ -88,17 +97,21 @@ class PhotonProductionBufferedDataHandler:
                 )
                 * 10**-6
             )
-            self.hist_stirap += np.histogram(
-                t_stiraps, bins=self.n_hist_bins, range=(0, self.t_stirap_length)
-            )[0]
-            self.new_data_waiting = True
+            with self._lock:
+                self.hist_stirap += np.histogram(
+                    t_stiraps, bins=self.n_hist_bins, range=(0, self.t_stirap_length)
+                )[0]
+                self.new_data_waiting = True
         else:
-            print("No detections on counter channels in buffer.")
+            logger.debug("No detections on counter channels in buffer.")
 
-    def get_last_count_rate(self):
-        # TODO: thread safety with reading lock
-        return self.count_rate[-1]
+    def get_last_count_rate(self) -> int:
+        """Return the most recent count rate (thread-safe)."""
+        with self._lock:
+            return self.count_rate[-1]
 
-    def get_completed_iterations(self):
-        print("returning comp iters:", self.completed_iterations)
-        return self.completed_iterations
+    def get_completed_iterations(self) -> int:
+        """Return the number of completed iterations (thread-safe)."""
+        with self._lock:
+            logger.debug("returning comp iters: %d", self.completed_iterations)
+            return self.completed_iterations

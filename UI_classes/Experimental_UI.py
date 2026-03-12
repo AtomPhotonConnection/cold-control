@@ -4,7 +4,7 @@ Created on 13 Aug 2016
 @author: apc
 """
 
-import math
+import logging
 import time
 import tkinter as tk
 from tkinter import messagebox as tk_message_box
@@ -37,9 +37,29 @@ except (ImportError, ModuleNotFoundError):
 from UI_classes.DAQ_UI import DaqUI
 from UI_classes.Sequence_UI import DaqSequenceUI
 from UI_classes.ToolTip_UI import ToolTip
-from UI_classes.UI_helpers import ImageButton, load_icon
+from UI_classes.UI_helpers import ImageButton, arrow_key_increment, load_icon
+
+logger = logging.getLogger(__name__)
 
 AWG_TRIG_BUTTON = False
+
+# Default run-tone frequencies (Hz) for AWG channels 1-4 and a DC offset level.
+DEFAULT_RUN_TONE_FREQS: list[float] = [
+    60.8558e6,
+    80e6,
+    54.8558e6,
+    10e6,
+    2.6,
+]
+
+# DAQ channel/value pairs used by toggle_run_tone for special channel 4 mode.
+RUN_TONE_CH4_CHANNEL_22_VALUE = 2.0
+
+# Default AWG sample rate for run tones (Hz).
+RUN_TONE_AWG_SAMPLE_RATE = 1.25e9
+
+# Default run-tone amplitude (V) — kept moderate to avoid saturating AOMs.
+RUN_TONE_AMPLITUDE = 0.5
 
 
 # =======================================================================================
@@ -218,7 +238,7 @@ class ExperimentalUI(tk.LabelFrame):
         self.run_tones_frame = rtf = tk.LabelFrame(self, text="Run tones", font=("Helvetica", 12))
 
         self.run_tone_awg = None
-        self.run_tone_freqs = [60.8558 * 10**6, 80 * 10**6, 54.8558 * 10**6, 10 * 10**6, 2.6]
+        self.run_tone_freqs = list(DEFAULT_RUN_TONE_FREQS)
         self.run_tone_output_states = [False, False, False, False, False]
         self.run_tone_buttons: dict[int, tk.Button | None] = {
             0: None,
@@ -411,7 +431,7 @@ class ExperimentalUI(tk.LabelFrame):
                 self.daq_ui.daq_controller,
                 development_mode=self.development_mode,
             )
-            print("Running MOT Fluoresce Sweep experiment")
+            logger.info("Running MOT Fluoresce Sweep experiment")
             sweep_experiment.run_in_thread()
             return
 
@@ -422,7 +442,7 @@ class ExperimentalUI(tk.LabelFrame):
                 self.daq_ui.daq_controller,
                 development_mode=self.development_mode,
             )
-            print("Running MOT Fluorescence Alignment experiment")
+            logger.info("Running MOT Fluorescence Alignment experiment")
             experiment_thread = alignment_experiment.run_in_thread()
             time.sleep(0.1)
             alignment_ui = AlignmentLiveUI(self, alignment_experiment)
@@ -460,13 +480,9 @@ class ExperimentalUI(tk.LabelFrame):
     def toggle_run_tone(self, button: tk.Button, i_ch):
         if i_ch == 4:
             daq_controller = self.daq_ui.daq_controller
-            daq_controller.update_channel_value(14, 2.485)
-            daq_controller.update_channel_value(8, 0.0048)
             for _i in range(10):
-                daq_controller.continuousOutput = True
-                daq_controller.update_channel_value(
-                    22, 2.0
-                )  # for manual control of amplitude input (in V)
+                daq_controller.continuous_output = True
+                daq_controller.update_channel_value(22, RUN_TONE_CH4_CHANNEL_22_VALUE)
                 daq_controller.update_channel_value(22, 0)
                 time.sleep(0.5)
             return
@@ -487,17 +503,14 @@ class ExperimentalUI(tk.LabelFrame):
                 for i in [1, 2, 3, 4]:
                     awg.disable_channel(i)
 
-                awg.set_sample_rate(1.25 * 10**9)
+                awg.set_sample_rate(RUN_TONE_AWG_SAMPLE_RATE)
 
             else:
                 awg = self.run_tone_awg
 
             freq = self.run_tone_freqs[i_ch]
 
-            print(f"Sending run tone to {channel} at {freq * 10**-6}MHz")
-
-            # reduce amplitude so as not to saturate the AOM
-            awg.play_sine_wave(channel, freq, amplitude=0.5)
+            awg.play_sine_wave(channel, freq, amplitude=RUN_TONE_AMPLITUDE)
             awg.set_continuous(True)
             awg.enable_channel(channel)
 
@@ -507,7 +520,6 @@ class ExperimentalUI(tk.LabelFrame):
 
         else:
             assert self.run_tone_awg, "AWG not connected, can't turn off run tone!"
-            print(f"Turning off run tone on {channel}")
             self.run_tone_awg.disable_channel(channel)
             self.run_tone_output_states[i_ch] = False
 
@@ -517,7 +529,6 @@ class ExperimentalUI(tk.LabelFrame):
                     self.run_tone_awg.set_output_mode("USER")
 
                 self.run_tone_awg.close()
-                print("Connection to AWG closed.")
                 self.run_tone_awg = None
 
             button.configure(bg="red", image=self.off_icon, relief=tk.RAISED)
@@ -530,20 +541,20 @@ class ExperimentalUI(tk.LabelFrame):
 
         if self.run_tone_awg is None:
             # AWG not connected
-            print("No connection to AWG was opened")
+            logger.info("No connection to AWG was opened")
             return
 
         # Turns off run tones on all active channels
         for i, channel in enumerate([1, 2, 3, 4]):
             if self.run_tone_output_states[i]:
-                print(f"Turning off run tone on {channel}")
+                logger.info("Turning off run tone on %d", channel)
                 self.run_tone_awg.disable_channel(channel)
                 self.run_tone_output_states[i] = False
                 self.run_tone_awg.set_output_mode("USER")
 
         # Disconnects from awg
         self.run_tone_awg.close()
-        print("Connection to AWG closed.")
+        logger.info("Connection to AWG closed.")
         self.run_tone_awg = None
 
     def experiment_config_button(self):
@@ -592,33 +603,39 @@ class ExperimentalUI(tk.LabelFrame):
 
         duration = self.flash_channel_config["duration"]
         repeats = self.flash_channel_config["repeats"]
+        duration_ms = int(duration * 1000)
 
         if channel == "dio":
             dio: DAQDio = self.daq_ui.daq_controller.get_dios()[
                 0
             ]  # Assuming we flash the first DIO
-            for i in range(repeats):
+
+            def _flash_dio(i):
+                if i >= repeats:
+                    return
                 dio.toggle_state()
-                time.sleep(duration)
-                print(f"Flash number {i + 1} complete for DIO channel {dio.dio_name}")
+                self.after(duration_ms, lambda: _flash_dio(i + 1))
+
+            _flash_dio(0)
             return
-
-        num_name_dict = self.daq_ui.daq_controller.get_channel_number_name_dict()
-
-        print(f"Flashing channel {channel}, {num_name_dict[channel]}")
 
         low_val = self.flash_channel_config["low_val"]
         high_val = self.flash_channel_config["high_val"]
 
-        for i in range(repeats):
-            self.daq_ui.daq_controller.update_channel_value(channel, low_val)
-            time.sleep(duration)
-            self.daq_ui.daq_controller.update_channel_value(channel, high_val)
-            time.sleep(duration)
-            print(f"Flash number {i + 1} complete")
+        def _flash_step(i, go_low):
+            if i >= repeats:
+                return
+            if go_low:
+                self.daq_ui.daq_controller.update_channel_value(channel, low_val)
+                self.after(duration_ms, lambda: _flash_step(i, False))
+            else:
+                self.daq_ui.daq_controller.update_channel_value(channel, high_val)
+                self.after(duration_ms, lambda: _flash_step(i + 1, True))
+
+        _flash_step(0, True)
 
     def configure_flash_channel(self):
-        print("Configuring flash channel")
+        logger.debug("Configuring flash channel")
         inputs = simpledialog.askstring(
             "Flash channel configuration",
             "Enter channel, duration (s), low value, high value, repeats (comma separated):",
@@ -661,7 +678,7 @@ class ExperimentalParamFrame(tk.Frame):
         self,
         parent,
         label,
-        initial_value=1,
+        initial_value: float = 1.0,
         data_type: type = int,
         help_text=None,
         action=None,
@@ -734,40 +751,9 @@ class ExperimentalParamFrame(tk.Frame):
         Increments the value on the DAQ channel accordingly.
         """
         if self.dataType in (int, float):
-            #       Count the number of places between the decimal place in the float and the cursor index
-            #       to calculate the order of the incrementation, i.e 0.01,0.1,1,10,...ect.
-            #       Try/Except to handle the case when there is no decimal point shown.
-            try:
-                decimal_index = self.entryWid.get().index(".")
-            except ValueError:
-                decimal_index = len(self.entryWid.get())
-            cursor_index = self.entryWid.index(tk.INSERT)
-            increment_order = decimal_index - cursor_index
-
-            # If the increment order is -1 the cursor is on the decimal point so do nothing.
-            if increment_order != -1:
-                if increment_order < -1:
-                    increment_order += 1
-                # Caculate the amount to change the value by.  The sign is determined by the key pressed.
-                iterator = (
-                    math.pow(10, increment_order)
-                    if event.keysym == "Up"
-                    else -1 * math.pow(10, increment_order)
-                )
-
-                current_value = self.entryWid.get()
-                # We have to count the number of decimal points of the number and found the iterated
-                # value back to this level due to Python's imprecision with floats.
-                ndp = current_value[::-1].find(".")
-                if ndp < 0:
-                    ndp = 0
-
-                self.entryWid.delete(0, tk.END)
-                self.entryWid.insert(
-                    0, str(self.dataType(round(float(current_value) + iterator, ndp)))
-                )
-                self.validate(event)
-                self.entryWid.icursor(cursor_index)
+            arrow_key_increment(
+                self.entryWid, event, data_type=self.dataType, validate_fn=self.validate
+            )
 
 
 # ---------------------------------------------------------------------------

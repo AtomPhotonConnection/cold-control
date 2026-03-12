@@ -1,7 +1,12 @@
+import math
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox as tk_message_box
 
 from PIL import Image, ImageTk
+
+# Resolve icon paths relative to the project root (parent of UI_classes/).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class ImageButton(tk.Button):
@@ -17,10 +22,82 @@ class ImageButton(tk.Button):
 def load_icon(path: str, size: tuple[int, int] = (30, 30)) -> ImageTk.PhotoImage:
     """Load an icon from *path*, resize it to *size*, and return a PhotoImage.
 
+    If *path* is relative it is resolved against the project root directory so
+    that icon loading works regardless of the current working directory.
+
     The caller must keep a reference to the returned object to prevent
     garbage collection (e.g. ``widget.image_ref = load_icon(...)``).
     """
-    return ImageTk.PhotoImage(Image.open(path).resize(size))
+    resolved = Path(path)
+    if not resolved.is_absolute():
+        resolved = _PROJECT_ROOT / resolved
+    return ImageTk.PhotoImage(Image.open(resolved).resize(size))
+
+
+def arrow_key_increment(widget: tk.Entry, event, data_type: type = float, validate_fn=None):
+    """Shared arrow-key increment logic for numeric entry widgets.
+
+    Increments or decrements the value in *widget* based on the cursor position
+    relative to the decimal point. The digit under the cursor determines the
+    order of magnitude of the change.
+
+    Parameters
+    ----------
+    widget : tk.Entry
+        The entry widget containing the numeric value.
+    event : tk.Event
+        The key event (must have ``keysym`` of ``"Up"`` or ``"Down"``).
+    data_type : type
+        ``int`` or ``float`` — controls rounding of the result.
+    validate_fn : callable or None
+        Optional callback invoked after the value is updated (e.g. to write
+        the new value to hardware).
+    """
+    current_text = widget.get()
+    try:
+        decimal_index = current_text.index(".")
+    except ValueError:
+        decimal_index = len(current_text)
+
+    cursor_index = widget.index(tk.INSERT)
+    increment_order = decimal_index - cursor_index
+
+    # Track the cursor offset relative to the decimal point so it can be
+    # restored correctly even when the number of digits changes.
+    offset_from_decimal = cursor_index - decimal_index
+
+    # If the increment order is -1 the cursor is on the decimal point — do nothing.
+    if increment_order == -1:
+        return
+
+    if increment_order < -1:
+        increment_order += 1
+
+    iterator = (
+        math.pow(10, increment_order)
+        if event.keysym == "Up"
+        else -1 * math.pow(10, increment_order)
+    )
+
+    ndp = current_text[::-1].find(".")
+    if ndp < 0:
+        ndp = 0
+
+    new_value = data_type(round(float(current_text) + iterator, ndp))
+    widget.delete(0, tk.END)
+    widget.insert(0, str(new_value))
+
+    if validate_fn is not None:
+        validate_fn(event)
+
+    # Restore cursor at the same position relative to the decimal point.
+    new_text = widget.get()
+    try:
+        new_decimal_index = new_text.index(".")
+    except ValueError:
+        new_decimal_index = len(new_text)
+    new_cursor_index = max(0, min(len(new_text), new_decimal_index + offset_from_decimal))
+    widget.icursor(new_cursor_index)
 
 
 class BaseConfigDialog:

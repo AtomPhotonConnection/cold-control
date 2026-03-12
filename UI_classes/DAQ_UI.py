@@ -5,8 +5,9 @@ Created on 25 Mar 2016
 """
 
 import copy
-import math
+import logging
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog as tk_file_dialog
 from tkinter import messagebox as tk_message_box
 from typing import Any
@@ -17,7 +18,11 @@ from PIL import Image, ImageTk
 import UI_classes.ToolTip_UI as tooltip
 from classes.config_readers import DaqReader
 from classes.daq import DAQChannel, DAQController
-from UI_classes.UI_helpers import ImageButton
+from UI_classes.UI_helpers import ImageButton, arrow_key_increment
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+logger = logging.getLogger(__name__)
 
 
 class DaqUI(tk.Frame):
@@ -31,7 +36,7 @@ class DaqUI(tk.Frame):
         if not development_mode:
             self.daq_controller: DAQController = self.reader.load_daq_controller()
         else:
-            print("Running in development mode...\nLoading Dummy DAQ cards")
+            logger.info("Running in development mode...\nLoading Dummy DAQ cards")
             self.daq_controller = self.reader.load_dummy_daq_controller()  # type: ignore
 
         self.Frame_Channels = tk.LabelFrame(self, text="DAQ channels", font=font)
@@ -64,7 +69,7 @@ class DaqUI(tk.Frame):
 
         grid_size = self.Frame_Channels.grid_size()
 
-        icon = Image.open("icons/config_icon.png").resize((20, 20))
+        icon = Image.open(_PROJECT_ROOT / "icons" / "config_icon.png").resize((20, 20))
         icon = ImageTk.PhotoImage(icon)
         self.configButton = ImageButton(
             self.Frame_Channels, image=icon, command=self.daq_config_button, height=20, width=20
@@ -75,7 +80,7 @@ class DaqUI(tk.Frame):
         )
         tooltip.create_tool_tip(self.configButton, "Configure DAQ channels", open_delay=2000)
 
-        icon = Image.open("icons/power_icon.png").resize((20, 20))
+        icon = Image.open(_PROJECT_ROOT / "icons" / "power_icon.png").resize((20, 20))
         icon = ImageTk.PhotoImage(icon)
         self.daqOutputButton = ImageButton(
             self.Frame_Channels,
@@ -133,7 +138,7 @@ class DaqUI(tk.Frame):
 
     def toggle_daq_button(self):
         self.daq_controller.toggle_continuous_output()
-        if self.daq_controller.continuousOutput:
+        if self.daq_controller.continuous_output:
             self.daqOutputButton.configure(bg="green")
         else:
             self.daqOutputButton.configure(bg="red")
@@ -145,7 +150,7 @@ class DaqUI(tk.Frame):
         if daq_config_ui.triggerDAQUpdates:
             self.update_for_new_daq_config()
             """TODO : NOT WORKING"""
-            if self.daq_controller.continuousOutput:
+            if self.daq_controller.continuous_output:
                 self.daq_controller.write_channel_values()
 
 
@@ -200,8 +205,12 @@ class DioLineFrame(tk.Frame):
 
         self.lab = tk.Label(self, width=22, text=self.daq_dio.dio_name, anchor="w")
 
-        self.on_icon = ImageTk.PhotoImage(Image.open("icons/toggle_on_icon.png").resize((25, 20)))
-        self.off_icon = ImageTk.PhotoImage(Image.open("icons/toggle_off_icon.png").resize((25, 20)))
+        self.on_icon = ImageTk.PhotoImage(
+            Image.open(_PROJECT_ROOT / "icons" / "toggle_on_icon.png").resize((25, 20))
+        )
+        self.off_icon = ImageTk.PhotoImage(
+            Image.open(_PROJECT_ROOT / "icons" / "toggle_off_icon.png").resize((25, 20))
+        )
 
         self.button = tk.Button(self, command=self.toggle_button, height=20, width=30)
         self.daq_dio.write(not self.daq_dio.enabled_state)
@@ -248,12 +257,11 @@ class DaqChannelEntry(tk.Entry):
             else self.channel.calibrationFromVFunc(self.channel.defaultValue)
         )
         if not self.chLimits[0] <= self.defaultValue <= self.chLimits[1]:
-            print(
-                "WARNING: Default value for DAQ channel of",
+            logger.warning(
+                "Default value for DAQ channel of %s is not within set limits of %s. "
+                "Channel will be set to mid-range of limits.",
                 self.defaultValue,
-                "is not within set limits of",
                 self.chLimits,
-                "\nChannel will be set to mid-range of limits",
             )
             self.defaultValue = sum(self.chLimits) / 2
         self.chValue = float(self.defaultValue)
@@ -280,44 +288,7 @@ class DaqChannelEntry(tk.Entry):
         Called when the Up or Down arrow key is pressed.
         Increments the value on the DAQ channel accordingly.
         """
-
-        # Count the number of places between the decimal place in the float and the cursor index
-        # to calculate the order of the incrementation, i.e 0.01, 0.1, 1, 10, ...
-        current_text = self.widget.get()
-        decimal_index = current_text.index(".")
-        cursor_index = self.widget.index(tk.INSERT)
-        increment_order = decimal_index - cursor_index
-
-        # Track the cursor offset relative to the decimal point so it can be restored correctly
-        # even when the number of digits changes (e.g. 9.5 -> 10.5 or -0.5 -> 0.5).
-        offset_from_decimal = cursor_index - decimal_index
-
-        # If the increment order is -1 the cursor is on the decimal point so do nothing.
-        if increment_order != -1:
-            if increment_order < -1:
-                increment_order += 1
-            # Calculate the amount to change the value by.  The sign is determined by the key pressed.
-            iterator = (
-                math.pow(10, increment_order)
-                if event.keysym == "Up"
-                else -1 * math.pow(10, increment_order)
-            )
-
-            # We have to count the number of decimal places of the number and round the iterated
-            # value back to this level due to Python's imprecision with floats.
-            ndp = current_text[::-1].find(".")
-
-            self.widget.delete(0, tk.END)
-            self.widget.insert(0, str(round(float(current_text) + iterator, ndp)))
-            self.focus_out(event)
-
-            # Restore the cursor at the same position relative to the decimal point so that
-            # repeated arrow key presses continue to increment the same digit, regardless of
-            # whether the string length changed (e.g. 9 -> 10 or 10 -> 9).
-            new_text = self.widget.get()
-            new_decimal_index = new_text.index(".")
-            new_cursor_index = max(0, min(len(new_text), new_decimal_index + offset_from_decimal))
-            self.widget.icursor(new_cursor_index)
+        arrow_key_increment(self.widget, event, data_type=float, validate_fn=self.focus_out)
 
     def focus_out(self, params):
         flash_col = None
@@ -666,7 +637,7 @@ class DaqConfigUI:
         widget - the checkbox widget clicked on
         cardNumber - the card number assosiated with the widget
         state - 0/1, checkbox is now deselected/selected"""
-        print(widget, card_number, state.get())
+        logger.debug("master_selected: %s card=%s state=%s", widget, card_number, state.get())
 
     def channel_selected(self, channel_label):
         for _, wid in self.channels.items():
