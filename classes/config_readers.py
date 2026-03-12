@@ -36,7 +36,6 @@ from classes.daq import (  # noqa: E402
     DAQController,
     DAQDio,
 )
-
 from classes.daq_sequence import DaqSequence  # noqa: E402
 from classes.experimental_configs import (  # noqa: E402
     AbsorbtionImagingConfiguration,
