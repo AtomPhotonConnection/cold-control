@@ -4,6 +4,7 @@ Created on 25 Mar 2016
 @author: tombarrett
 """
 
+import logging
 import tkinter as tk
 
 # import cv2
@@ -18,6 +19,12 @@ try:
 except (OSError, FileNotFoundError, ImportError):
     ICImagingControl = None  # type: ignore[assignment, misc]
 from UI_classes.UI_helpers import ImageButton
+
+logger = logging.getLogger(__name__)
+
+# Default camera settings — extracted from hardcoded values for clarity.
+DEFAULT_CAMERA_EXPOSURE = 60
+DEFAULT_CAMERA_FRAME_RATE = 30.00
 
 
 class CameraUI(tk.LabelFrame):
@@ -56,8 +63,11 @@ class CameraUI(tk.LabelFrame):
 
         # Select the first available camera - TODO make camera dropdown
         self.cam_names = self.ic_ic.get_unique_device_names() if self.ic_ic else []
-        if self.cam_names != []:
+        if self.cam_names:
             self.cam = self.ic_ic.get_device(self.cam_names[0])
+        else:
+            self.cam = None
+            logger.warning("No cameras found. Camera features will be unavailable.")
         self.is_live = False
 
         # Make a frame for the camera image.  By disabling pack_propagate and manually setting the height and width
@@ -126,25 +136,27 @@ class CameraUI(tk.LabelFrame):
         self.take_frame(1000)
         self.startCameraButton.config(bg="SystemButtonFace")
         self.stopCameraButton.config(bg="red")
-        print("Camera is live")
+        logger.info("Camera is live")
 
     def prepare_camera(self, cam):
         """
         Gets the camera ready to stream live.
-        TODO - move these values into the UI and away from being hardcoded.
         """
+        if self.cam is None:
+            logger.error("Cannot prepare camera: no camera device available.")
+            return
         self.cam.open()
 
         # change camera properties
         self.cam.gain.auto = True  # enable auto gain
-        self.cam.exposure.value = 60  # disables auto exposure and sets value to half of range
+        self.cam.exposure.value = DEFAULT_CAMERA_EXPOSURE
 
         # change camera settings
         formats = self.cam.list_video_formats()
         self.cam.set_video_format(formats[0])  # use first available video format
         self.cam.enable_continuous_mode(True)  # image in continuous mode
 
-        self.cam.set_frame_rate(30.00)
+        self.cam.set_frame_rate(DEFAULT_CAMERA_FRAME_RATE)
 
         # Store frames per ms to stop us having to constantly poll the camera for it.
         self.cam_fpms = int(10.0**3 / self.cam.get_frame_rate())
@@ -155,7 +167,7 @@ class CameraUI(tk.LabelFrame):
         self.after(self.cam_fpms, self.cam.stop_live())
         self.startCameraButton.config(bg="green")
         self.stopCameraButton.config(bg="SystemButtonFace")
-        print("Camera is stopped")
+        logger.info("Camera is stopped")
 
     def take_frame(self, cam_frame_timeout):
         """
