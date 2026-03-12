@@ -57,6 +57,7 @@ from classes.experimental_configs import (
     TdcConfiguration,
     Waveform,
 )
+from instruments.protocols import DAQControllerProtocol
 
 try:
     import instruments.quTAU.tdc_manager as tdc_module
@@ -101,14 +102,36 @@ def make_property(attr_name):
 T = TypeVar("T", bound=GenericConfiguration)
 
 
-class GenericExperiment[T: GenericConfiguration]:
+class ThreadedExperimentMixin:
+    """Mixin providing :meth:`run_in_thread` for any experiment with a ``run()`` method."""
+
+    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
+        """Run the experiment in a separate thread.
+
+        Parameters
+        ----------
+        start_thread : bool
+            If ``True`` (default), the thread is started immediately.
+
+        Returns
+        -------
+        threading.Thread
+            The thread running the experiment.
+        """
+        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
+        if start_thread:
+            thread.start()
+        return thread
+
+
+class GenericExperiment[T: GenericConfiguration](ThreadedExperimentMixin):
     """
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     """
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         configuration: T,
         development_mode: bool = False,
@@ -122,6 +145,11 @@ class GenericExperiment[T: GenericConfiguration]:
         self.development_mode = development_mode
 
     def configure(self):
+        """Configure hardware before running the experiment.
+
+        Subclasses must override this method to set up instruments
+        (DAQ cards, oscilloscopes, AWGs, etc.) before the main run loop.
+        """
         raise NotImplementedError()
 
     def daq_cards_on(self):
@@ -134,9 +162,15 @@ class GenericExperiment[T: GenericConfiguration]:
             self.daq_controller.toggle_continuous_output()
 
     def run(self):
+        """Execute the main experimental loop.
+
+        Subclasses must override this method with the concrete
+        experiment logic.
+        """
         raise NotImplementedError()
 
     def daq_cards_off(self):
+        """Restore DAQ card output to its pre-experiment state."""
         if self.daq_continuous_ouput:
             logger.info("Returning to free running DAQ values.")
             self.daq_controller.write_channel_values()
@@ -146,17 +180,12 @@ class GenericExperiment[T: GenericConfiguration]:
             self.daq_controller.write_channel_values()
 
     def close(self):
+        """Release hardware resources after the experiment completes.
+
+        Subclasses must override this method to properly shut down
+        instruments and free any acquired resources.
+        """
         raise NotImplementedError()
-
-    def run_in_thread(self, start_thread=True):
-        """
-        Run the experiment with the experimental loop in a separate thread.
-        """
-        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
-
-        if start_thread:
-            thread.start()
-        return thread
 
     @staticmethod
     def _configure_camera_common(
@@ -208,10 +237,32 @@ class GenericExperiment[T: GenericConfiguration]:
 
         return cam
 
-    def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
-        """Sleep for the MOT reload period, converting from milliseconds to seconds."""
+    def _start_mot_load(self) -> None:
+        """Prepare hardware for MOT loading.
+
+        Override in subclasses to trigger hardware actions (e.g. shutter
+        control) before the reload wait begins.  The default implementation
+        is a no-op.
+        """
+
+    def _wait_mot_load(self, mot_reload_ms: float) -> None:
+        """Sleep for the MOT reload period, converting from milliseconds to seconds.
+
+        Override in subclasses for non-blocking or hardware-aware reload waits.
+        """
         logger.info("Loading MOT for %sms...", mot_reload_ms)
         sleep(mot_reload_ms * 10**-3)
+
+    def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
+        """Run full MOT reload sequence: start then wait.
+
+        .. deprecated::
+            Use :meth:`_start_mot_load` and :meth:`_wait_mot_load` directly
+            for finer-grained control.  This method remains for backward
+            compatibility.
+        """
+        self._start_mot_load()
+        self._wait_mot_load(mot_reload_ms)
 
 
 class AbsorptionImagingExperiment(GenericExperiment):
@@ -1259,23 +1310,16 @@ class MotFluoresceExperiment(GenericExperiment):
         super().daq_cards_off()
 
 
-class MotFluoresceSweepExperiment:
+class MotFluoresceSweepExperiment(ThreadedExperimentMixin):
     def __init__(
         self,
         sweep_config: MotFluoresceConfigurationSweep,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         development_mode: bool = False,
     ):
         self.sweep_config = sweep_config
         self.daq_controller = daq_controller
         self.development_mode = development_mode
-
-    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
-        """Run the sweep experiment in a separate thread."""
-        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
-        if start_thread:
-            thread.start()
-        return thread
 
     def run(self):
         """
@@ -1299,7 +1343,7 @@ class MotFluoresceSweepExperiment:
             logger.info(f"Experiment {i} completed and closed.")
 
 
-class MotFluorescenceAlignmentExperiment:
+class MotFluorescenceAlignmentExperiment(ThreadedExperimentMixin):
     """Repeatedly runs the same MOT fluorescence experiment for live alignment.
 
     After each iteration (a full single-shot experiment with *n* scope traces),
@@ -1321,7 +1365,7 @@ class MotFluorescenceAlignmentExperiment:
     alignment_config : MotFluorescenceAlignmentConfiguration
         Wraps the single-shot config, DAQ sequence, and optional background
         folder.
-    daq_controller : DAQController
+    daq_controller : DAQControllerProtocol
         The DAQ controller for running DAQ channels.
     development_mode : bool
         If ``True``, uses dummy instrument drivers.
@@ -1330,7 +1374,7 @@ class MotFluorescenceAlignmentExperiment:
     def __init__(
         self,
         alignment_config: MotFluorescenceAlignmentConfiguration,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         development_mode: bool = False,
     ):
         self.alignment_config = alignment_config
