@@ -72,26 +72,59 @@ def resolve_config_path(path: str, base: str | None = None) -> str:
     return str((Path(base) / path).resolve())
 
 
-def to_bool(string):
+def to_bool(string: str) -> bool:
     return string.lower() in GLOB_TRUE_BOOL_STRINGS
 
 
-def to_int_list(arg):
+def _parse_config_value(parser, value, key: str = "", fname: str = ""):
+    """Wrap a parsing function with clear error reporting for malformed config values.
+
+    Parameters
+    ----------
+    parser : callable
+        A callable that converts *value* (e.g. ``int``, ``float``, ``ast.literal_eval``).
+    value : Any
+        The raw config value to parse.
+    key : str
+        The config key name (for error messages).
+    fname : str
+        The config file path (for error messages).
+
+    Raises
+    ------
+    ConfigValidationError
+        When parsing fails, with a message identifying the offending key and file.
+    """
+    try:
+        return parser(value)
+    except (ValueError, SyntaxError, TypeError) as exc:
+        msg = f"Invalid config value for key '{key}'"
+        if fname:
+            msg += f" in file '{fname}'"
+        msg += f": {value!r} ({exc})"
+        raise ConfigValidationError(msg) from exc
+
+
+class ConfigValidationError(ValueError):
+    """Raised when a configuration value cannot be parsed or validated."""
+
+
+def to_int_list(arg) -> list[int] | None:
     if arg is None:
         return None
     else:
         return list(map(int, arg))
 
 
-def to_float_tuple(arg):
+def to_float_tuple(arg) -> tuple[float, ...]:
     return tuple(to_float_list(arg))
 
 
-def to_int_tuple(arg):
+def to_int_tuple(arg) -> tuple[int, ...]:
     return tuple(map(int, arg))
 
 
-def to_float_list(arg):
+def to_float_list(arg) -> list[float]:
     if isinstance(arg, str):
         warnings.warn(
             "to_float_list received a string input. This may lead to unexpected behavior.",
@@ -793,7 +826,7 @@ class ExperimentConfigReader:
 
         return photon_production_config
 
-    def get_mot_flourescence_configuration(self):
+    def get_mot_fluorescence_configuration(self):
         """
         Method to extract the mot fluorescence configuration from the config file.
 
@@ -888,7 +921,7 @@ class ExperimentConfigReader:
 
         return mot_fluoresce_config
 
-    def get_mot_flourescence_configuration_sweep(self) -> tuple[str, int, dict[str, Any]]:
+    def get_mot_fluorescence_configuration_sweep(self) -> tuple[str, int, dict[str, Any]]:
         """
         Method to extract the MOT fluorescence configuration for sweep experiments.
         First determines the sweep type, and then does different things from there.
@@ -1027,7 +1060,7 @@ class ExperimentConfigReader:
         if expt_type == "photon production":
             return self.get_photon_production_configuration()
         elif expt_type == "mot fluorescence":
-            return self.get_mot_flourescence_configuration()
+            return self.get_mot_fluorescence_configuration()
         elif expt_type == "mot fluorescence sweep":
             return self.get_full_sweep_configuration()
         elif expt_type == "mot fluorescence alignment":
@@ -1061,7 +1094,7 @@ class ExperimentConfigReader:
         a directory of background measurement data.  If present, the alignment
         loop will compute F_norm; otherwise it shows raw F_img.
         """
-        base_config = self.get_mot_flourescence_configuration()
+        base_config = self.get_mot_fluorescence_configuration()
         sequence = self.get_sequence()
 
         background_folder: str | None = None
@@ -1083,14 +1116,13 @@ class ExperimentConfigReader:
         plus a ``[sweep]`` section with ``[[defaults]]`` and ``[[sweeps]]`` sub-sections,
         and ``sweep_type`` / ``num_shots`` at the top-level or inside ``[sweep]``.
         """
-        # Build the base experiment config (reuses get_mot_flourescence_configuration)
-        base_config = self.get_mot_flourescence_configuration()
+        base_config = self.get_mot_fluorescence_configuration()
 
         # Load the sequence from the experiment config
         sequence = self.get_sequence()
 
-        # Parse sweep params (reuses existing logic from get_mot_flourescence_configuration_sweep)
-        sweep_type, num_shots, sweep_params = self.get_mot_flourescence_configuration_sweep()
+        # Parse sweep params
+        sweep_type, num_shots, sweep_params = self.get_mot_fluorescence_configuration_sweep()
 
         return MotFluoresceConfigurationSweep.from_config_reader(
             experiment_config=base_config,
@@ -1100,55 +1132,26 @@ class ExperimentConfigReader:
             sweep_params=sweep_params,
         )
 
-
-class PhotonProductionWriter:
-    def __init__(self, fname):
+    # Deprecation aliases for the old misspelling
+    def get_mot_flourescence_configuration(self):
+        """Deprecated: use ``get_mot_fluorescence_configuration`` instead."""
         warnings.warn(
-            "PhotonProductionWriter is deprecated.",
+            "get_mot_flourescence_configuration() is deprecated due to a spelling error; "
+            "use get_mot_fluorescence_configuration() instead.",
             DeprecationWarning,
             stacklevel=2,
         )
-        self.fname = fname
-        self.config = MyConfig(fname)
+        return self.get_mot_fluorescence_configuration()
 
-    def save(self, photon_producion_config: PhotonProductionConfiguration):
-
-        self.config["date"] = time.strftime("%d/%m/%y")
-        self.config["time"] = time.strftime("%H:%M:%S")
-
-        self.config["save location"] = photon_producion_config.save_location
-        self.config["mot reload"] = photon_producion_config.mot_reload
-        self.config["iterations"] = photon_producion_config.iterations
-
-        self.config["waveform sequence"] = photon_producion_config.waveform_sequence
-        self.config["waveforms"] = photon_producion_config.waveforms
-        self.config["waveform stitch delays"] = photon_producion_config.waveform_stitch_delays
-
-        awg_config: AwgConfiguration = photon_producion_config.awg_configuration
-
-        self.config["AWG"] = {}
-        self.config["AWG"]["sample rate"] = awg_config.sample_rate
-        self.config["AWG"]["burst count"] = awg_config.burst_count
-
-        tdc_config = photon_producion_config.tdc_configuration
-
-        self.config["TDC"]["counter channels"] = tdc_config.counter_channels
-        self.config["TDC"]["marker channel"] = tdc_config.marker_channels
-        self.config["TDC"]["timestamp buffer size"] = tdc_config.timestamp_buffer_size
-
-        self.config.write()
-
-
-class AbsorbtionImagingWriter:
-    def __init__(self, fname):
-        self.fname = fname
-        self.config = ConfigObj(fname)
-
-    def save(self, sequence_fname, daq_config_fname, absorbtion_imaging_config_fname):
-
-        # TODO
-
-        self.config.write()
+    def get_mot_flourescence_configuration_sweep(self) -> tuple[str, int, dict[str, Any]]:
+        """Deprecated: use ``get_mot_fluorescence_configuration_sweep`` instead."""
+        warnings.warn(
+            "get_mot_flourescence_configuration_sweep() is deprecated due to a spelling error; "
+            "use get_mot_fluorescence_configuration_sweep() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_mot_fluorescence_configuration_sweep()
 
 
 class ExperimentalAutomationReader:
@@ -1163,20 +1166,20 @@ class ExperimentalAutomationReader:
         for _, v in sorted(self.config["experiments"].items()):
             automated_experiment_configurations.append(
                 SingleExperimentConfig(
-                    daq_channel_static_values=map(
+                    daq_channel_static_values=list(map(
                         lambda x: (int(ast.literal_eval(x)[0]), float(ast.literal_eval(x)[1])),
                         v["daq_channel_static_values"]
                         if v["daq_channel_static_values"] != []
                         else [],
-                    ),
+                    )),
                     sequence=SequenceReader(v["sequence_fname"]).load_sequence(),
                     sequence_fname=v["sequence_fname"],
                     iterations=int(v["iterations"]),
                     mot_reload=ast.literal_eval(v["mot_reload"]),
-                    modulation_frequencies=map(
+                    modulation_frequencies=list(map(
                         float,
                         v["modulation_frequencies"] if v["modulation_frequencies"] != [] else [],
-                    ),
+                    )),
                 )
             )
 
@@ -1194,6 +1197,5 @@ class ExperimentalAutomationWriter:
         self.fname = fname
         self.config = ConfigObj(fname)
 
-    def save(self, photon_producion_config):
-        # TODO
-        pass
+    def save(self, photon_production_config):
+        raise NotImplementedError("ExperimentalAutomationWriter.save() is not yet implemented.")
