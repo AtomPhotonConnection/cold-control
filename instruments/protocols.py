@@ -126,7 +126,7 @@ class AWGProtocol(Protocol):
 class DAQControllerProtocol(Protocol):
     """Minimal interface expected of a DAQ controller."""
 
-    continuousOutput: bool
+    continuous_output: bool
 
     def load(self, sequence_array: np.ndarray) -> None: ...
     def play(self, t_step: float = ..., clear_cards: bool = ...) -> None: ...

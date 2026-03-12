@@ -6,7 +6,6 @@ Created on 25 Mar 2016
 
 import copy
 import logging
-import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog as tk_file_dialog
@@ -139,7 +138,7 @@ class DaqUI(tk.Frame):
 
     def toggle_daq_button(self):
         self.daq_controller.toggle_continuous_output()
-        if self.daq_controller.continuousOutput:
+        if self.daq_controller.continuous_output:
             self.daqOutputButton.configure(bg="green")
         else:
             self.daqOutputButton.configure(bg="red")
@@ -151,7 +150,7 @@ class DaqUI(tk.Frame):
         if daq_config_ui.triggerDAQUpdates:
             self.update_for_new_daq_config()
             """TODO : NOT WORKING"""
-            if self.daq_controller.continuousOutput:
+            if self.daq_controller.continuous_output:
                 self.daq_controller.write_channel_values()
 
 
@@ -206,8 +205,12 @@ class DioLineFrame(tk.Frame):
 
         self.lab = tk.Label(self, width=22, text=self.daq_dio.dio_name, anchor="w")
 
-        self.on_icon = ImageTk.PhotoImage(Image.open(_PROJECT_ROOT / "icons" / "toggle_on_icon.png").resize((25, 20)))
-        self.off_icon = ImageTk.PhotoImage(Image.open(_PROJECT_ROOT / "icons" / "toggle_off_icon.png").resize((25, 20)))
+        self.on_icon = ImageTk.PhotoImage(
+            Image.open(_PROJECT_ROOT / "icons" / "toggle_on_icon.png").resize((25, 20))
+        )
+        self.off_icon = ImageTk.PhotoImage(
+            Image.open(_PROJECT_ROOT / "icons" / "toggle_off_icon.png").resize((25, 20))
+        )
 
         self.button = tk.Button(self, command=self.toggle_button, height=20, width=30)
         self.daq_dio.write(not self.daq_dio.enabled_state)

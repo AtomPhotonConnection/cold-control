@@ -126,6 +126,9 @@ class CameraUI(tk.LabelFrame):
         Set up the camera, start streaming and start updating the displayed frame.
         """
         self.prepare_camera(self.cam)
+        if self.cam is None:
+            logger.error("Cannot start camera: no camera device available.")
+            return
 
         if not self.cam.callback_registered:
             self.cam.register_frame_ready_callback()
@@ -162,6 +165,9 @@ class CameraUI(tk.LabelFrame):
         self.cam_fpms = int(10.0**3 / self.cam.get_frame_rate())
 
     def stop_camera(self):
+        if self.cam is None:
+            logger.error("Cannot stop camera: no camera device available.")
+            return
         self.is_live = False
         self.parent.camera_live = False
         self.after(self.cam_fpms, self.cam.stop_live())
@@ -173,6 +179,9 @@ class CameraUI(tk.LabelFrame):
         """
         Wait until the camera has a fresh frame, poll for it, convert it to greyscale, rotate it to the correct orientation and display it
         """
+        if self.cam is None:
+            logger.error("Cannot take frame: no camera device available.")
+            return
         self.cam.wait_til_frame_ready(cam_frame_timeout)
         self.cam.reset_frame_ready()
         data = self.cam.get_image_data()
@@ -208,7 +217,7 @@ class CameraUI(tk.LabelFrame):
         """
         Closes any live cameras.
         """
-        if self.is_live:
+        if self.is_live and self.cam is not None:
             self.cam.stop_live()
             self.cam.close()
         if self.ic_ic is not None:

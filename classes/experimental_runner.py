@@ -120,8 +120,8 @@ class GenericExperiment[T: GenericConfiguration]:
         """
         Function to turn on the DAQ card output.  This is required to run a sequence.
         """
-        self.isDaqContinuousOutput = self.daq_controller.continuousOutput
-        if not self.isDaqContinuousOutput:
+        self.daq_continuous_ouput = self.daq_controller.continuous_output
+        if not self.daq_continuous_ouput:
             logger.warning("DAQ output must be on to run a sequence - turning it on.")
             self.daq_controller.toggle_continuous_output()
 
@@ -129,7 +129,7 @@ class GenericExperiment[T: GenericConfiguration]:
         raise NotImplementedError()
 
     def daq_cards_off(self):
-        if self.isDaqContinuousOutput:
+        if self.daq_continuous_ouput:
             logger.info("Returning to free running DAQ values.")
             self.daq_controller.write_channel_values()
         else:
@@ -632,7 +632,9 @@ class AbsorbtionImagingExperiment(GenericExperiment):
     def get_results(self):
         if not self.results_ready:
             raise RuntimeError("The absorption imaging experiment has not been run yet.")
-        logger.info("Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs)))
+        logger.info(
+            "Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs))
+        )
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
     def close(self):
@@ -1550,7 +1552,9 @@ class PhotonProductionDataSaver:
             time.sleep(1)
             t += 1
             if t > 60:
-                logger.warning("Timed-out waiting for save-threads to finish. Abandoning combine_saves().")
+                logger.warning(
+                    "Timed-out waiting for save-threads to finish. Abandoning combine_saves()."
+                )
                 return
 
         with (self.save_location / (self.experiment_time + ".txt")).open("w") as combined_file:
@@ -1717,13 +1721,15 @@ class ExperimentalAutomationRunner:
 
         self.original_daq_channel_values = daq_controller.get_channel_values()
 
-        if not self.daq_controller.continuousOutput:
+        if not self.daq_controller.continuous_output:
             logger.warning("DAQ output must be on to run an experiement - turning it on.")
             self.daq_controller.toggle_continuous_output()
 
     def get_next_experiment(self) -> tuple[PhotonProductionExperiment, str, list[float]]:
 
-        logger.info(f"Configuring experiment {self.experiements_iter + 1} of {self.experiements_to_run}")
+        logger.info(
+            f"Configuring experiment {self.experiements_iter + 1} of {self.experiements_to_run}"
+        )
 
         config: SingleExperimentConfig = (
             self.experimental_automation_configuration.automated_experiment_configurations[

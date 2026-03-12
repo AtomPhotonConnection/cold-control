@@ -38,14 +38,14 @@ class DummyDAQController:
             DAQChannel objects (real objects — only their metadata is used).
         dios : list[DAQDio] | None
             DAQDio objects, may be ``None`` or empty.
-        continuousOutput : bool
+        continuous_output : bool
             Mirror of the real flag (no effect in dummy mode).
         """
         self._master = None
         self._slaves: list = []
         self.channels = list(channels)
         self.dios = list(dios) if dios else []
-        self.continuousOutput = continuous_output
+        self.continuous_output = continuous_output
 
         # Build the same channelValues dict as the real controller
         self.channelValues: dict[int, float] = {ch.chNum: ch.defaultValue for ch in self.channels}
@@ -91,8 +91,8 @@ class DummyDAQController:
         return np.array([[v] for _, v in sorted(self.channelValues.items())])
 
     def toggle_continuous_output(self) -> None:
-        self.continuousOutput = not self.continuousOutput
-        _log.info("[DummyDAQ] continuousOutput → %s", self.continuousOutput)
+        self.continuous_output = not self.continuous_output
+        _log.info("[DummyDAQ] continuousOutput → %s", self.continuous_output)
 
     # -- DIO --
 
@@ -375,9 +375,7 @@ class DummyAWGManager:
 
     # -- clock / sample rate --
 
-    def set_sample_rate(
-        self, sample_rate: float, channels: tuple[int, ...] | None = None
-    ) -> None:
+    def set_sample_rate(self, sample_rate: float, channels: tuple[int, ...] | None = None) -> None:
         self._sample_rate = sample_rate
         self._log.info(
             f"[DummyAWG] set_sample_rate {sample_rate:.2e} on channels {channels or 'all'}"
@@ -388,9 +386,7 @@ class DummyAWGManager:
 
     # -- output mode --
 
-    def set_output_mode(
-        self, mode: str = "USER", channels: tuple[int, ...] | None = None
-    ) -> None:
+    def set_output_mode(self, mode: str = "USER", channels: tuple[int, ...] | None = None) -> None:
         self._log.info("[DummyAWG] set_output_mode %s on channels %s", mode, channels or "all")
 
     # -- run mode --

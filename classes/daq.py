@@ -917,7 +917,7 @@ class DAQController:
         for slave in self.slaves:
             self.enslave(slave)
 
-        self.continuousOutput = continuous_output
+        self.continuous_output = continuous_output
 
         self.channelValues = {ch.chNum: ch.defaultValue for ch in self.get_channels()}
         if continuous_output:
@@ -925,7 +925,7 @@ class DAQController:
 
     def update_channel_value(self, ch_num, new_value):
         self.channelValues[ch_num] = new_value
-        if self.continuousOutput:
+        if self.continuous_output:
             # TODO : WHY DO I NEED THIS HACK???
             self.write(np.array([[v] for _, v in sorted(self.channelValues.items())]))
             self.write(np.array([[v] for _, v in sorted(self.channelValues.items())]))
@@ -956,8 +956,8 @@ class DAQController:
         return np.array([[v] for _, v in sorted(self.channelValues.items())])
 
     def toggle_continuous_output(self):
-        self.continuousOutput = not self.continuousOutput
-        if self.continuousOutput:
+        self.continuous_output = not self.continuous_output
+        if self.continuous_output:
             self.write(np.array([[v] for _, v in sorted(self.channelValues.items())]))
         else:
             self.write(np.zeros((len(self.get_channels()), 1)))

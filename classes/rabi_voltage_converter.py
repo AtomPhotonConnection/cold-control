@@ -6,10 +6,10 @@ Authors: Jan Ole Ernst, Matt King
 Date: 23 June 2025
 """
 
+import logging
 from pathlib import Path
 from typing import Any, cast
 
-import logging
 import matplotlib.pylab as plt
 import numpy as np
 import pandas as pd
@@ -131,7 +131,7 @@ class RabiFreqVoltageConverter:
         df = pd.read_csv(csv_in, header=None)
 
         # Step 2: Normalize to [0, 1]
-        values = df.iloc[0].values.astype(float)
+        values = np.asarray(df.iloc[0].values, dtype=float)
         if normalised:
             norm_values = values
         elif (np.max(values) - np.min(values)) == 0:  # Avoid division by zero

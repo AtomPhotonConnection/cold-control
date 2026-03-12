@@ -12,7 +12,6 @@ from classes.daq import DAQChannel
 from instruments.dummy import DummyAWGManager, DummyDAQController, DummyOscilloscopeManager
 from instruments.protocols import AWGProtocol, DAQControllerProtocol, OscilloscopeProtocol
 
-
 # ---------------------------------------------------------------------------
 #  Protocol compliance
 # ---------------------------------------------------------------------------

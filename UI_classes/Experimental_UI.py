@@ -5,7 +5,6 @@ Created on 13 Aug 2016
 """
 
 import logging
-import math
 import time
 import tkinter as tk
 from tkinter import messagebox as tk_message_box
@@ -54,8 +53,6 @@ DEFAULT_RUN_TONE_FREQS: list[float] = [
 ]
 
 # DAQ channel/value pairs used by toggle_run_tone for special channel 4 mode.
-RUN_TONE_CH4_CHANNEL_14_VALUE = 2.485
-RUN_TONE_CH4_CHANNEL_8_VALUE = 0.0048
 RUN_TONE_CH4_CHANNEL_22_VALUE = 2.0
 
 # Default AWG sample rate for run tones (Hz).
@@ -483,10 +480,8 @@ class ExperimentalUI(tk.LabelFrame):
     def toggle_run_tone(self, button: tk.Button, i_ch):
         if i_ch == 4:
             daq_controller = self.daq_ui.daq_controller
-            daq_controller.update_channel_value(14, RUN_TONE_CH4_CHANNEL_14_VALUE)
-            daq_controller.update_channel_value(8, RUN_TONE_CH4_CHANNEL_8_VALUE)
             for _i in range(10):
-                daq_controller.continuousOutput = True
+                daq_controller.continuous_output = True
                 daq_controller.update_channel_value(22, RUN_TONE_CH4_CHANNEL_22_VALUE)
                 daq_controller.update_channel_value(22, 0)
                 time.sleep(0.5)
@@ -683,7 +678,7 @@ class ExperimentalParamFrame(tk.Frame):
         self,
         parent,
         label,
-        initial_value=1,
+        initial_value: float = 1.0,
         data_type: type = int,
         help_text=None,
         action=None,
