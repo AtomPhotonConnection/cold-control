@@ -187,20 +187,20 @@ class ColdControlUI(tk.Frame):
             icon="warning",
         )
         if exit_confirmation == "yes":
-            print("Disconnecting from AWG...")
+            logger.info("Disconnecting from AWG...")
             self.experimental_UI.exit_run_tones()
-            print("Closing camera connections...")
+            logger.info("Closing camera connections...")
             self.camera_UI.close_cameras()
-            print("...all camera connections closed.")
-            print("Releasing DAQ cards...")
+            logger.info("...all camera connections closed.")
+            logger.info("Releasing DAQ cards...")
             if not self.development_mode:
                 self.daq_UI.daq_controller.release_all()
-            print("...all cards released.")
-            print("Saving labbook...")
+            logger.info("...all cards released.")
+            logger.info("Saving labbook...")
             self.labbook_UI.write()
-            print("...labbook saved")
+            logger.info("...labbook saved")
             root.destroy()
-            print("Cold Control closed - bye!")
+            logger.info("Cold Control closed - bye!")
 
 
 if __name__ == "__main__":
