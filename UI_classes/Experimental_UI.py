@@ -22,7 +22,7 @@ from classes.experimental_configs import (
     PhotonProductionConfiguration,
 )
 from classes.experimental_runner import (
-    AbsorbtionImagingExperiment,
+    AbsorptionImagingExperiment,
     GenericExperiment,
     MotFluoresceExperiment,
     MotFluorescenceAlignmentExperiment,
@@ -72,7 +72,7 @@ class ExperimentalUI(tk.LabelFrame):
         daq_ui: DaqUI,
         sequence_ui: DaqSequenceUI,
         experiment_config_fname,
-        absorbtion_imaging_config_fname,
+        absorption_imaging_config_fname,
         ic_imaging_control=None,
         text="Experimental Actions",
         font=("Helvetica", 16),
@@ -84,9 +84,9 @@ class ExperimentalUI(tk.LabelFrame):
         self.parent = parent
         self.daq_ui = daq_ui
         self.sequence_ui = sequence_ui
-        self.absorbtion_imaging_config = ExperimentConfigReader(
-            absorbtion_imaging_config_fname
-        ).get_absorbtion_imaging_configuration()
+        self.absorption_imaging_config = ExperimentConfigReader(
+            absorption_imaging_config_fname
+        ).get_absorption_imaging_configuration()
         self.expt_config_reader = ExperimentConfigReader(experiment_config_fname)
         self.loaded_experiment_config = self.expt_config_reader.get_correct_config()
         self.ic_ic = ic_imaging_control
@@ -466,14 +466,14 @@ class ExperimentalUI(tk.LabelFrame):
 
         assert self.ic_ic, "No IC Imaging Control provided, can't run absobtion imaging experiment."
 
-        experiment = AbsorbtionImagingExperiment(
+        experiment = AbsorptionImagingExperiment(
             daq_controller=self.daq_ui.daq_controller,
             sequence=self.sequence_ui.sequence,
-            absorbtion_imaging_configuration=self.absorbtion_imaging_config,
+            absorption_imaging_configuration=self.absorption_imaging_config,
             ic_imaging_control=self.ic_ic,
         )
         experiment.run(bkg_test=bkg_test)
-        if self.absorbtion_imaging_config.review_processed_images or bkg_test:
+        if self.absorption_imaging_config.review_processed_images or bkg_test:
             absorption_imaging_review_ui = AbsorptionImagingReviewUI(self, experiment)
             self.winfo_toplevel().wait_window(absorption_imaging_review_ui)
 
@@ -585,15 +585,15 @@ class ExperimentalUI(tk.LabelFrame):
     def absorption_imaging_config_button(self):
         config_ui = AbsorptionImagingConfigurationUi(
             self,
-            absorbtion_imaging_configuration=self.absorbtion_imaging_config,
+            absorption_imaging_configuration=self.absorption_imaging_config,
             daq_controller=self.daq_ui.daq_controller,
             sequence_length=self.sequence_ui.sequence.get_length(),
             sequence_t_step=self.sequence_ui.sequence.t_step,
         )
         self.winfo_toplevel().wait_window(config_ui.top)
-        # If the user asked for their changes to be applied, set the absorbtion imaging config accordingly.
+        # If the user asked for their changes to be applied, set the absorption imaging config accordingly.
         if config_ui.apply_changes:
-            self.absorbtion_imaging_config = config_ui.config
+            self.absorption_imaging_config = config_ui.config
 
     def flash_channel(self):
         channel = self.flash_channel_config["channel"]

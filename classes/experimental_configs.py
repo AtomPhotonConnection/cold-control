@@ -43,6 +43,7 @@ __all__ = [
     "SingleExperimentConfig",
     "TdcConfiguration",
     "Waveform",
+    "AbsorptionImagingConfiguration",
     "AbsorbtionImagingConfiguration",
     "make_property",
     "sanitize_filename",
@@ -1012,27 +1013,27 @@ class PhotonProductionConfiguration(GenericConfiguration):
     tdc_configuration = make_property("_tdc_configuration")
 
 
-class AbsorbtionImagingConfiguration(GenericConfiguration):
+class AbsorptionImagingConfiguration(GenericConfiguration):
     """
-    This object stores and presents for editing the settings for absorbtion imaging experiments.
+    This object stores and presents for editing the settings for absorption imaging experiments.
 
         scan_abs_img_freq - TODO
         abs_img_freq_ch - TODO
         abs_img_freqs - TODO
         camera_trig_ch, imag_power_ch - The DAQ channels that trigger the camera and control the imaging light power.
-        camera_pulse_width, imag_pulse_width - How long to make the trigger pulse and absorbtion imaging flash in microseconds.
+        camera_pulse_width, imag_pulse_width - How long to make the trigger pulse and absorption imaging flash in microseconds.
         t_imgs - The times at which to take images (in microseconds where 0 is the beginning of the sequence).
         mot_reload_time - The MOT reload time in ms
         bkg_off_channels - A list of channels (specified by channel number) to turn off during background pictures.
-        n_backgrounds - The number of background images to take for each absorbtion image.
+        n_backgrounds - The number of background images to take for each absorption image.
         cam_gain - The gain setting for the camera when taking the picture.
         cam_exposure - How long the camera exposure should be.  Passes as an integer x which corresponds to an exposure time of 1/x seconds.
         save_location - The folder to save images to as 'save_location/{date}/{time}/'
-        save_raw_images - Boolean determining whether the raw images (i.e. processed absorbtion images and all background contributing to
+        save_raw_images - Boolean determining whether the raw images (i.e. processed absorption images and all background contributing to
                           the background average) are saved.
-        save_processed_images - Boolean determining whether the processed images (i.e. absorbtion images after background subtraction and
+        save_processed_images - Boolean determining whether the processed images (i.e. absorption images after background subtraction and
                                 average backgrounds) are automatically saved.
-        review_processed_images - Boolean determining whether the Absorbtion_imaging_review_UI is launched after the images are processed
+        review_processed_images - Boolean determining whether the Absorption_imaging_review_UI is launched after the images are processed
                                   to allow the user to review the images, add notes and decide whether to save or not. Note that since the
                                   user is given the chance to review the processed images, the option to automatically save them is disabled
                                   when review_processed_images=True.
@@ -1086,6 +1087,10 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
         self.save_raw_images = save_raw_images
         self.save_processed_images = save_processed_images
         self.review_processed_images = review_processed_images
+
+
+# Backward-compatible alias for the old misspelling
+AbsorbtionImagingConfiguration = AbsorptionImagingConfiguration
 
 
 class SingleExperimentConfig(GenericConfiguration):

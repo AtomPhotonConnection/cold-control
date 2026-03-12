@@ -44,7 +44,7 @@ except (ImportError, ModuleNotFoundError):
 from classes.daq import DAQChannel, DAQController
 from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
-    AbsorbtionImagingConfiguration,
+    AbsorptionImagingConfiguration,
     AwgConfiguration,
     ExperimentSessionConfig,
     GenericConfiguration,
@@ -168,7 +168,7 @@ class GenericExperiment[T: GenericConfiguration]:
         """Open and configure the first available camera.
 
         This shared helper eliminates duplication between
-        ``AbsorbtionImagingExperiment`` and ``MotFluoresceExperiment``.
+        ``AbsorptionImagingExperiment`` and ``MotFluoresceExperiment``.
 
         Returns the configured :class:`ICCamera` instance.
         """
@@ -214,29 +214,29 @@ class GenericExperiment[T: GenericConfiguration]:
         sleep(mot_reload_ms * 10**-3)
 
 
-class AbsorbtionImagingExperiment(GenericExperiment):
+class AbsorptionImagingExperiment(GenericExperiment):
     shutter_lag = 4.8  # The camera response time to the trigger.  Hard coded as it is a physical camera property.
 
     def __init__(
         self,
         daq_controller: DAQController,
         sequence: DaqSequence,
-        absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
+        absorption_imaging_configuration: AbsorptionImagingConfiguration,
         ic_imaging_control: ICImagingControl,
     ):
         """
-        Runs an absorbtion imaging experiment. Takes a number of parameters, namely:
+        Runs an absorption imaging experiment. Takes a number of parameters, namely:
             daq_controller - The DAQ Controller object for running the daq channels
             sequence - The sequence to run whilst taking the images.  Note that the camera trigger and
                        imaging power channels are overwritten by this experiment and so need not be configured
                        in the original sequence.
-            absorbtion_imaging_configuration - An instance of AbsorbtionImagingConfiguration.
+            absorption_imaging_configuration - An instance of AbsorptionImagingConfiguration.
         """
 
-        super().__init__(daq_controller, sequence, absorbtion_imaging_configuration)
+        super().__init__(daq_controller, sequence, absorption_imaging_configuration)
         # the configuration object is called self.config
-        assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c: AbsorbtionImagingConfiguration = self.config
+        assert isinstance(self.config, AbsorptionImagingConfiguration)
+        c: AbsorptionImagingConfiguration = self.config
         self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
         # Use the externally provided ICImagingControl instances if one is provided
@@ -293,7 +293,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         if c.imag_pulse_width is None or c.imag_pulse_width < sequence.t_step:
             c.imag_pulse_width = sequence.t_step
 
-        # Check the absorbtion imaging flash will be on for background images and other sanity checks
+        # Check the absorption imaging flash will be on for background images and other sanity checks
         if c.imag_power_ch in c.bkg_off_channels:
             logger.warning(
                 "You specified not to have the absorption imaging flash on while taking backgrounds. \n"
@@ -309,10 +309,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def run(self, analyse=True, bkg_test=False):
         """
-        Run the absorbtion imaging.  This first generates a series of sequences to run, then
+        Run the absorption imaging.  This first generates a series of sequences to run, then
         opens and configures the camera, takes the images, saves them and closes the camera.
         """
-        logger.info("Running absorbtion imaging experiment")
+        logger.info("Running absorption imaging experiment")
 
         self.__configure_experiment()
 
@@ -346,11 +346,11 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
         self.sequences: list[DaqSequence] = []
         self.bkg_sequences: list[DaqSequence] = []
-        assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c: AbsorbtionImagingConfiguration = self.config
+        assert isinstance(self.config, AbsorptionImagingConfiguration)
+        c: AbsorptionImagingConfiguration = self.config
 
-        t_lag = AbsorbtionImagingExperiment.shutter_lag
-        #         t_offset = AbsorbtionImagingExperiment.flash_offset
+        t_lag = AbsorptionImagingExperiment.shutter_lag
+        #         t_offset = AbsorptionImagingExperiment.flash_offset
         t_offset = ((1.0 / c.cam_exposure) * 10**6) / 2
 
         for t in c.t_imgs:
@@ -641,7 +641,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         if not self.results_ready:
             raise RuntimeError("The absorption imaging experiment has not been run yet.")
         logger.info(
-            "Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs))
+            "Returning absorption imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs))
         )
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
@@ -659,6 +659,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         logger.info("...closed")
 
         super().daq_cards_off()
+
+
+# Backward-compatible alias for the old misspelling
+AbsorbtionImagingExperiment = AbsorptionImagingExperiment
 
 
 class PhotonProductionExperiment(GenericExperiment):

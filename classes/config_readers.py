@@ -38,7 +38,7 @@ from classes.daq import (  # noqa: E402
 )
 from classes.daq_sequence import DaqSequence  # noqa: E402
 from classes.experimental_configs import (  # noqa: E402
-    AbsorbtionImagingConfiguration,
+    AbsorptionImagingConfiguration,
     AwgConfiguration,
     ExperimentSessionConfig,
     MotFluoresceConfiguration,
@@ -188,8 +188,18 @@ class ConfigReader:
     def get_daq_config_fname(self):
         return self._resolve(self.config["daq_config_filename"])
 
-    def get_absorbtion_imaging_config_fname(self):
+    def get_absorption_imaging_config_fname(self):
         return self._resolve(self.config["absorbtion_images_config_filename"])
+
+    def get_absorbtion_imaging_config_fname(self):
+        """Deprecated: use ``get_absorption_imaging_config_fname`` instead."""
+        warnings.warn(
+            "get_absorbtion_imaging_config_fname() is deprecated due to a spelling error; "
+            "use get_absorption_imaging_config_fname() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_absorption_imaging_config_fname()
 
     def get_experiment_config_fname(self):
         """Preferred: returns experiment config path (experiment_config_filename with fallback to photon_production_config_filename)."""
@@ -229,7 +239,7 @@ class ConfigWriter:
         self,
         sequence_fname,
         daq_config_fname,
-        absorbtion_imaging_config_fname,
+        absorption_imaging_config_fname,
         photon_production_config_fname,
     ):
 
@@ -238,7 +248,7 @@ class ConfigWriter:
 
         self.config["sequence_filename"] = sequence_fname
         self.config["daq_config_filename"] = daq_config_fname
-        self.config["absorbtion_images_config_filename"] = absorbtion_imaging_config_fname
+        self.config["absorbtion_images_config_filename"] = absorption_imaging_config_fname
         self.config["photon_production_config_filename"] = photon_production_config_fname
         self.config["experiment_config_filename"] = photon_production_config_fname
 
@@ -1042,9 +1052,9 @@ class ExperimentConfigReader:
         else:
             raise ValueError(f"Unknown sweep type: {sweep_type}")
 
-    def get_absorbtion_imaging_configuration(self):
+    def get_absorption_imaging_configuration(self):
 
-        return AbsorbtionImagingConfiguration(
+        return AbsorptionImagingConfiguration(
             scan_abs_img_freq=_parse_config_value(ast.literal_eval, self.config["scan_abs_img_freq"], "scan_abs_img_freq", self.fname),
             abs_img_freq_ch=_parse_config_value(int, self.config["abs_img_freq_ch"], "abs_img_freq_ch", self.fname),
             abs_img_freqs=to_float_list(self.config["abs_img_freqs"]),
@@ -1068,6 +1078,16 @@ class ExperimentConfigReader:
             review_processed_images=to_bool(self.config["review_processed_images"]),
         )
 
+    def get_absorbtion_imaging_configuration(self):
+        """Deprecated: use ``get_absorption_imaging_configuration`` instead."""
+        warnings.warn(
+            "get_absorbtion_imaging_configuration() is deprecated due to a spelling error; "
+            "use get_absorption_imaging_configuration() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_absorption_imaging_configuration()
+
     def get_correct_config(self):
         """
         Method to extract the correct configuration object based on the experiment type
@@ -1078,7 +1098,7 @@ class ExperimentConfigReader:
         - ``"mot fluorescence sweep"`` → ``MotFluoresceConfigurationSweep``
         - ``"mot fluorescence alignment"`` → ``MotFluorescenceAlignmentConfiguration``
         - ``"photon production"`` → ``PhotonProductionConfiguration``
-        - ``"absorbtion imaging"`` → ``AbsorbtionImagingConfiguration``
+        - ``"absorption imaging"`` → ``AbsorptionImagingConfiguration``
         """
 
         expt_type = self.get_expt_type()
@@ -1091,8 +1111,8 @@ class ExperimentConfigReader:
             return self.get_full_sweep_configuration()
         elif expt_type == "mot fluorescence alignment":
             return self.get_mot_fluorescence_alignment_configuration()
-        elif expt_type == "absorbtion imaging":
-            return self.get_absorbtion_imaging_configuration()
+        elif expt_type in ("absorbtion imaging", "absorption imaging"):
+            return self.get_absorption_imaging_configuration()
         else:
             raise ValueError(f"Unknown experiment type: {expt_type}")
 
