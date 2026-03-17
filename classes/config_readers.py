@@ -74,6 +74,7 @@ __all__ = [
     "to_float_tuple",
     "to_int_list",
     "to_int_tuple",
+    "validate_config_file",
 ]
 
 
@@ -231,7 +232,15 @@ class ConfigReader:
 
 
 class ConfigWriter:
-    def __init__(self, fname):
+    def __init__(self, fname: str) -> None:
+        """Initialise a ConfigWriter for the given file.
+
+        Parameters
+        ----------
+        fname:
+            Path to the configuration file to write.  The file will be
+            created if it does not exist; existing content is updated in-place.
+        """
         self.fname = fname
         self.config = ConfigObj(fname)
 
@@ -286,7 +295,16 @@ class MyConfig:
 
 
 class DaqReader:
-    def __init__(self, fname):
+    def __init__(self, fname: str) -> None:
+        """Initialise a DaqReader for the given DAQ configuration file.
+
+        Parameters
+        ----------
+        fname:
+            Path to the ``.ini`` DAQ configuration file to read.  The file
+            must contain ``[DAQ channels]``, ``[DIOs]``, and ``[DAQ cards]``
+            sections in the format described in ``configs/CONFIG_GUIDE.md``.
+        """
         self.fname = fname
         self.config: dict[str, Any] = ConfigObj(fname)
 
@@ -413,7 +431,16 @@ class DaqReader:
 
 
 class DaqWriter:
-    def __init__(self, fname):
+    def __init__(self, fname: str) -> None:
+        """Initialise a DaqWriter for the given file path.
+
+        Parameters
+        ----------
+        fname:
+            Path to the ``.ini`` DAQ configuration file to write.  Existing
+            content is updated in-place; a new file is created if it does not
+            exist.
+        """
         self.fname = fname
         self.config = ConfigObj(fname)
 
@@ -1306,3 +1333,70 @@ class ExperimentalAutomationWriter:
 
     def save(self, photon_production_config):
         raise NotImplementedError("ExperimentalAutomationWriter.save() is not yet implemented.")
+
+
+# ---------------------------------------------------------------------------
+# Config validation helpers
+# ---------------------------------------------------------------------------
+
+
+def validate_config_file(
+    fname: str,
+    reader_class: type,
+    reader_method: str,
+    *,
+    raise_on_error: bool = False,
+) -> tuple[bool, str]:
+    """Attempt to load a config file using the given reader class and method.
+
+    This is a lightweight smoke-test that catches parse errors, missing keys,
+    and type-conversion failures early — before a real experiment run.
+
+    Parameters
+    ----------
+    fname:
+        Path to the configuration file to validate.
+    reader_class:
+        The reader class to instantiate (e.g. :class:`DaqReader`,
+        :class:`ScopeConfigReader`, :class:`ExperimentConfigReader`).
+    reader_method:
+        Name of the method on the reader to call (e.g.
+        ``"load_daq_controller"``, ``"get_scope_config"``,
+        ``"get_mot_fluoresce_config"``).
+    raise_on_error:
+        If ``True``, re-raise the exception after logging it.  Default is
+        ``False`` (return a ``(False, message)`` tuple instead).
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` on success, or ``(False, error_message)`` on failure.
+
+    Examples
+    --------
+    >>> ok, msg = validate_config_file(
+    ...     "configs/daq.ini",
+    ...     DaqReader,
+    ...     "load_daq_controller",
+    ... )
+    >>> if not ok:
+    ...     print("DAQ config invalid:", msg)
+    """
+    try:
+        reader = reader_class(fname)
+        getattr(reader, reader_method)()
+        logger.info("Config validation passed: %s -> %s.%s", fname, reader_class.__name__, reader_method)
+        return True, "OK"
+    except Exception as exc:  # noqa: BLE001
+        msg = f"{type(exc).__name__}: {exc}"
+        logger.error(
+            "Config validation failed for %s via %s.%s: %s",
+            fname,
+            reader_class.__name__,
+            reader_method,
+            msg,
+            exc_info=True,
+        )
+        if raise_on_error:
+            raise
+        return False, msg

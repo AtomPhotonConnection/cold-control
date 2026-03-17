@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 
 class PhotonProductionBufferedDataHandler:
     def __init__(self, n_hist_bins: int = 30, t_stirap_length: float = 800):
+        """Initialise the buffered data handler and start the background polling thread.
+
+        Parameters
+        ----------
+        n_hist_bins:
+            Number of bins for the STIRAP time histogram.
+        t_stirap_length:
+            Total length of the STIRAP histogram in microseconds.
+        """
 
         self.data_queue: queue.Queue = queue.Queue()
         self.analysis_buffer: list = []

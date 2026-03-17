@@ -57,7 +57,7 @@ from classes.experimental_configs import (
     TdcConfiguration,
     Waveform,
 )
-from instruments.protocols import DAQControllerProtocol
+from instruments.protocols import AWGProtocol, DAQControllerProtocol, OscilloscopeProtocol
 
 try:
     import instruments.quTAU.tdc_manager as tdc_module
@@ -241,32 +241,52 @@ class GenericExperiment[T: GenericConfiguration](ThreadedExperimentMixin):
 
         return cam
 
-    def _start_mot_load(self) -> None:
-        """Prepare hardware for MOT loading.
+    def _start_mot_load(self, mot_reload_ms: float) -> None:
+        """Record the end time of the MOT reload period and prepare hardware.
 
-        Override in subclasses to trigger hardware actions (e.g. shutter
-        control) before the reload wait begins.  The default implementation
-        is a no-op.
+        Calculates and stores a future end timestamp using
+        :func:`time.perf_counter`, so that :meth:`_wait_mot_load` can sleep
+        only for the time that remains after any intervening work has been
+        done.  This allows other setup code to run completely unblocked
+        between ``_start_mot_load`` and ``_wait_mot_load``.
+
+        Override in subclasses to also trigger hardware actions (e.g. shutter
+        control) before calling ``super()._start_mot_load(mot_reload_ms)``.
+
+        Parameters
+        ----------
+        mot_reload_ms:
+            The total MOT reload duration in milliseconds.
         """
+        self._mot_load_end_time: float = time.perf_counter() + mot_reload_ms * 1e-3
 
-    def _wait_mot_load(self, mot_reload_ms: float) -> None:
-        """Sleep for the MOT reload period, converting from milliseconds to seconds.
+    def _wait_mot_load(self) -> None:
+        """Sleep for the remainder of the MOT reload period.
 
-        Override in subclasses for non-blocking or hardware-aware reload waits.
+        Subtracts the current time from the saved end timestamp
+        (set by :meth:`_start_mot_load`).  If time has already elapsed,
+        the sleep is skipped and execution continues immediately.
+
+        Override in subclasses for hardware-aware reload waits, calling
+        ``super()._wait_mot_load()`` to retain the timing logic.
         """
-        logger.info("Loading MOT for %sms...", mot_reload_ms)
-        sleep(mot_reload_ms * 10**-3)
+        remaining = getattr(self, "_mot_load_end_time", time.perf_counter()) - time.perf_counter()
+        if remaining > 0:
+            logger.info("Loading MOT, waiting %.3fs...", remaining)
+            time.sleep(remaining)
+        else:
+            logger.debug("MOT reload timer already elapsed; skipping sleep.")
 
     def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
         """Run full MOT reload sequence: start then wait.
 
-        .. deprecated::
-            Use :meth:`_start_mot_load` and :meth:`_wait_mot_load` directly
-            for finer-grained control.  This method remains for backward
-            compatibility.
+        Calls :meth:`_start_mot_load` immediately (recording the end
+        timestamp), then calls :meth:`_wait_mot_load` to sleep for whatever
+        time remains.  Any code executed between these two calls reduces the
+        effective sleep duration.
         """
-        self._start_mot_load()
-        self._wait_mot_load(mot_reload_ms)
+        self._start_mot_load(mot_reload_ms)
+        self._wait_mot_load()
 
 
 class AbsorptionImagingExperiment(GenericExperiment):
@@ -1051,6 +1071,10 @@ class MotFluoresceExperiment(GenericExperiment):
             self.scope_config: ScopeConfiguration = self.mot_fluoresce_config.scope_config  # type: ignore[assignment]
             assert self.scope_config is not None, "scope_config must be set when use_scope is True."
 
+        # Type-annotated instrument handles; set during configure()
+        self.scope: OscilloscopeProtocol | None = None
+        self.awg: AWGProtocol | None = None
+
     def __configure_camera(self):
         """
         Private method to configure the camera for the MOT fluorescence experiment.
@@ -1088,27 +1112,27 @@ class MotFluoresceExperiment(GenericExperiment):
         if self.with_scope:
             logger.info("connecting to scope")
             start_time = time.time()
+            scope: OscilloscopeProtocol
             if self.development_mode:
                 from instruments.dummy import DummyOscilloscopeManager
 
-                self.scope = DummyOscilloscopeManager()
+                scope = DummyOscilloscopeManager()
             else:
                 assert osc is not None, (
                     "osc module is not available. Cannot configure oscilloscope."
                 )
-                self.scope = osc.OscilloscopeManager()
-            # self.scope.reset_scope()
-            self.scope.configure_from_config(self.scope_config)
+                scope = osc.OscilloscopeManager()
+            scope.configure_from_config(self.scope_config)
+            self.scope = scope
             logger.info("scope configured")
             logger.debug(f"configuring scope took {time.time() - start_time}s")
-            # self.scope.set_to_run()
 
         if self.with_awg:
             logger.info("Configuring AWG")
             self._configure_awg()
             logger.info("AWG configured")
 
-    def _configure_awg(self):
+    def _configure_awg(self) -> None:
         """
         Configures the AWG for the experiment, loads data for all channels
         """
@@ -1116,18 +1140,20 @@ class MotFluoresceExperiment(GenericExperiment):
         assert self.awg_config is not None, "AWG config is not set. Cannot configure AWG."
         start_time = time.perf_counter()
         logger.info("Connecting to AWG...")
+        awg: AWGProtocol
         if not self.development_mode:
             assert AWGManager is not None, (
                 "awg_manager module is not available. Cannot configure AWG."
             )
-            self.awg = AWGManager()
+            awg = AWGManager()
 
         else:
             from instruments.dummy import DummyAWGManager
 
-            self.awg = DummyAWGManager()
+            awg = DummyAWGManager()
 
-        self.awg.upload_and_arm(self.awg_config)
+        awg.upload_and_arm(self.awg_config)
+        self.awg = awg
 
         logger.debug(f"AWG configured in {time.perf_counter() - start_time}s")
 
@@ -1288,6 +1314,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
         except Exception as e:
             logger.error("An error occurred during the experiment: %s", e, exc_info=True)
+            raise
         finally:
             self.close()
 
@@ -1493,6 +1520,7 @@ class MotFluorescenceAlignmentExperiment(ThreadedExperimentMixin):
 
         except Exception as e:
             logger.error("Alignment experiment error: %s", e, exc_info=True)
+            raise
         finally:
             self.is_running = False
             logger.info("\n" + "=" * 60)

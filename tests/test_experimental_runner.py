@@ -8,6 +8,7 @@ Run with:  pytest tests/test_experimental_runner.py -v
 """
 
 import threading
+import time
 
 from classes.experimental_runner import MotFluoresceExperiment, MotFluorescenceAlignmentExperiment
 from instruments.dummy import DummyOscilloscopeManager
@@ -223,3 +224,96 @@ class TestMotFluorescenceAlignmentExperiment:
         assert expt.is_running is False
         # At least one iteration should have started (mot_reload=0, iterations=1)
         assert expt.shot_count >= 1
+
+
+# ===========================================================================
+# Group F - GenericExperiment MOT reload timer (non-blocking implementation)
+# ===========================================================================
+
+
+class TestMotReloadTimer:
+    """Verify the perf_counter-based non-blocking MOT reload timer."""
+
+    def test_start_mot_load_records_future_end_time(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """_start_mot_load records an end time approximately reload_ms in the future."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        reload_ms = 200
+        before = time.perf_counter()
+        expt._start_mot_load(reload_ms)
+        after = time.perf_counter()
+
+        assert expt._mot_load_end_time >= before + reload_ms * 1e-3
+        assert expt._mot_load_end_time <= after + reload_ms * 1e-3
+
+    def test_wait_mot_load_sleeps_for_remaining_duration(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """_wait_mot_load sleeps for approximately the requested reload period."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        reload_ms = 100
+        expt._start_mot_load(reload_ms)
+
+        t0 = time.perf_counter()
+        expt._wait_mot_load()
+        elapsed = time.perf_counter() - t0
+
+        # Allow generous tolerance: at least 80% of the reload time must elapse.
+        assert elapsed >= reload_ms * 1e-3 * 0.8, (
+            f"Expected at least {reload_ms * 0.8:.0f} ms sleep, got {elapsed * 1e3:.1f} ms"
+        )
+
+    def test_wait_mot_load_skips_sleep_when_time_already_elapsed(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """_wait_mot_load returns immediately if the reload period has already passed."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        reload_ms = 50
+        expt._start_mot_load(reload_ms)
+        time.sleep(reload_ms * 1e-3 + 0.02)  # let the timer expire
+
+        t0 = time.perf_counter()
+        expt._wait_mot_load()
+        elapsed = time.perf_counter() - t0
+
+        assert elapsed < 0.02, (
+            f"Expected near-instant return, got {elapsed * 1e3:.1f} ms"
+        )
+
+    def test_wait_mot_load_safe_without_prior_start(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """_wait_mot_load does not raise if _start_mot_load was never called."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        expt._wait_mot_load()  # must not raise
+
+    def test_other_work_between_start_and_wait_reduces_sleep(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """Work done between _start_mot_load and _wait_mot_load reduces the sleep."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        reload_ms = 200
+        expt._start_mot_load(reload_ms)
+        time.sleep(0.1)  # simulate ~100 ms of other setup work
+
+        t0 = time.perf_counter()
+        expt._wait_mot_load()
+        remaining_sleep = time.perf_counter() - t0
+
+        # Only ~100 ms should remain — well under the full 200 ms.
+        assert remaining_sleep < 0.15, (
+            f"Expected at most 150 ms remaining sleep, got {remaining_sleep * 1e3:.1f} ms"
+        )
+
+    def test_wait_for_mot_reload_convenience_wrapper(
+        self, dummy_daq, basic_seq, mot_config_no_hw
+    ):
+        """_wait_for_mot_reload completes and takes at least the requested duration."""
+        expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
+        reload_ms = 50
+        t0 = time.perf_counter()
+        expt._wait_for_mot_reload(reload_ms)
+        elapsed = time.perf_counter() - t0
+
+        assert elapsed >= reload_ms * 1e-3 * 0.8

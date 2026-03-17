@@ -516,7 +516,21 @@ class ExperimentSessionConfig:
         daq_channel_update_steps: float,
         daq_channel_update_delay: float,
     ):
+        """Initialise an experiment session configuration.
 
+        Parameters
+        ----------
+        save_location:
+            Root directory for saving all experiment data and summary files.
+        summary_fname:
+            Filename for the session summary output file.
+        automated_experiment_configurations:
+            Ordered list of :class:`SingleExperimentConfig` objects to run.
+        daq_channel_update_steps:
+            Number of discrete steps used when ramping DAQ channel values.
+        daq_channel_update_delay:
+            Time in seconds to wait between each DAQ channel update step.
+        """
         self._save_location = save_location
         self._summary_fname = summary_fname
         self._automated_experiment_configurations = automated_experiment_configurations
@@ -542,7 +556,18 @@ class GenericConfiguration:
         mot_reload: float,
         iterations: int,
     ):
+        """Initialise a generic experiment configuration.
 
+        Parameters
+        ----------
+        save_location:
+            Directory path where experiment data will be saved.
+        mot_reload:
+            Time in milliseconds to wait for the MOT to reload between
+            experimental iterations.
+        iterations:
+            Number of times to repeat the experiment.
+        """
         self._save_location = save_location
         self._mot_reload = mot_reload  # in milliseconds
         self._iterations = iterations
@@ -592,6 +617,38 @@ class MotFluoresceConfiguration(GenericConfiguration):
         background_iterations: int | None = None,
         repump_channel: int | None = None,
     ):
+        """Initialise a MOT fluorescence experiment configuration.
+
+        Parameters
+        ----------
+        save_location:
+            Directory path where experiment data will be saved.
+        mot_reload:
+            Time in milliseconds to wait for the MOT to reload.
+        iterations:
+            Number of times to repeat the experiment.
+        scope_config:
+            Oscilloscope configuration.  Pass ``None`` to run without a scope.
+        awg_config:
+            AWG configuration.  Pass ``None`` to run without an AWG.
+        awg_config_path:
+            Path to the AWG config file (stored for reference only).
+        cam_dict:
+            Camera settings as a :class:`CameraConfiguration` or a plain
+            ``dict`` with the same keys.  Pass ``None`` to run without a camera.
+        sequence_config_path:
+            Path to the sequence config file (stored for reference only).
+        background_mode:
+            When ``True``, the MOT repumping channel is zeroed so that only
+            scattered background light is measured.
+        background_iterations:
+            Override the number of iterations when running in background mode.
+            Defaults to ``iterations`` if not provided.
+        repump_channel:
+            DAQ channel number used for MOT repumping.  Defaults to ``20``
+            when not provided — move this value to your DAQ config file to
+            avoid the hard-coded default.
+        """
         super().__init__(save_location, mot_reload, iterations)
 
         self.scope_config = scope_config
