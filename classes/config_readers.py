@@ -189,7 +189,7 @@ class ConfigReader:
         return self._resolve(self.config["daq_config_filename"])
 
     def get_absorption_imaging_config_fname(self):
-        return self._resolve(self.config["absorbtion_images_config_filename"])
+        return self._resolve(self.config["absorption_images_config_filename"])
 
     def get_absorbtion_imaging_config_fname(self):
         """Deprecated: use ``get_absorption_imaging_config_fname`` instead."""
@@ -248,7 +248,7 @@ class ConfigWriter:
 
         self.config["sequence_filename"] = sequence_fname
         self.config["daq_config_filename"] = daq_config_fname
-        self.config["absorbtion_images_config_filename"] = absorption_imaging_config_fname
+        self.config["absorption_images_config_filename"] = absorption_imaging_config_fname
         self.config["photon_production_config_filename"] = photon_production_config_fname
         self.config["experiment_config_filename"] = photon_production_config_fname
 
