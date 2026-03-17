@@ -55,7 +55,7 @@ exclude = ["**/node_modules",
     "**/measurements",
     "**/temp"]
 
-# venvPath = "C:\\Users\\kingm\\AppData\\Local\\miniforge3\\envs"
+# venvPath = "C:\\Users\\mingw64\\AppData\\Local\\miniforge3\\envs"
 venv = "cold-control"
 
 pythonVersion = "3.12"

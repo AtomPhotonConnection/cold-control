@@ -21,14 +21,14 @@ class TestGenericExperimentDaqControl:
     def test_daq_cards_on_records_initial_state(self, dummy_daq, basic_seq, mot_config_no_hw):
         """daq_cards_on() stores the previous continuousOutput state."""
         expt = MotFluoresceExperiment(dummy_daq, basic_seq, mot_config_no_hw, development_mode=True)
-        assert dummy_daq.continuousOutput is False  # sanity-check starting state
+        assert dummy_daq.continuous_output is False  # sanity-check starting state
 
         expt.daq_cards_on()
 
         # isDaqContinuousOutput should record what it was BEFORE turning on
-        assert expt.isDaqContinuousOutput is False
+        assert expt.daq_continuous_ouput is False
         # DAQ should now be running in continuous output mode
-        assert dummy_daq.continuousOutput is True
+        assert dummy_daq.continuous_output is True
 
     def test_daq_cards_off_restores_to_off(self, dummy_daq, basic_seq, mot_config_no_hw):
         """daq_cards_off() reverts continuous output to its original state."""
@@ -36,7 +36,7 @@ class TestGenericExperimentDaqControl:
         expt.daq_cards_on()  # turns DAQ on (was off)
         expt.daq_cards_off()  # should turn it back off
 
-        assert dummy_daq.continuousOutput is False
+        assert dummy_daq.continuous_output is False
 
     def test_run_in_thread_returns_thread_object(self, dummy_daq, basic_seq, mot_config_no_hw):
         """run_in_thread(start_thread=False) returns a Thread without starting it."""

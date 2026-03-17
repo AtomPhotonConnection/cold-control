@@ -918,6 +918,7 @@ class AWGManager:
             The AWG configuration object containing all necessary settings.
         """
         self._upload_core(awg_cfg, continuous=True)
+        self.set_continuous(True)
         self.initiate()
 
         self._log.info("AWG playing continuously.")
