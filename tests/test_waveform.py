@@ -5,10 +5,10 @@ All tests use temporary CSV files — no hardware required.
 Run with:  pytest tests/test_waveform.py -v
 """
 
-import pytest
 import csv
-import math
 from pathlib import Path
+
+import pytest
 
 from classes.experimental_configs import Waveform
 
@@ -16,8 +16,8 @@ from classes.experimental_configs import Waveform
 @pytest.fixture
 def single_row_csv(tmp_path):
     """CSV with a single row of comma-separated values."""
-    f = tmp_path / "single_row.csv"
-    with open(f, "w", newline="") as fp:
+    f: Path = tmp_path / "single_row.csv"
+    with f.open("w", newline="") as fp:
         writer = csv.writer(fp)
         writer.writerow([0.0, 0.5, 1.0, 0.5, 0.0])
     return f
@@ -26,8 +26,8 @@ def single_row_csv(tmp_path):
 @pytest.fixture
 def single_column_csv(tmp_path):
     """CSV with one value per line."""
-    f = tmp_path / "single_col.csv"
-    with open(f, "w", newline="") as fp:
+    f: Path = tmp_path / "single_col.csv"
+    with f.open("w", newline="") as fp:
         writer = csv.writer(fp)
         for val in [0.0, 0.25, 0.5, 0.75, 1.0]:
             writer.writerow([val])
@@ -37,8 +37,8 @@ def single_column_csv(tmp_path):
 @pytest.fixture
 def single_value_csv(tmp_path):
     """CSV with a single value."""
-    f = tmp_path / "single_val.csv"
-    with open(f, "w", newline="") as fp:
+    f: Path = tmp_path / "single_val.csv"
+    with f.open("w", newline="") as fp:
         writer = csv.writer(fp)
         writer.writerow([0.42])
     return f
@@ -47,7 +47,7 @@ def single_value_csv(tmp_path):
 @pytest.fixture
 def empty_csv(tmp_path):
     """Empty CSV file."""
-    f = tmp_path / "empty.csv"
+    f: Path = tmp_path / "empty.csv"
     f.write_text("")
     return f
 

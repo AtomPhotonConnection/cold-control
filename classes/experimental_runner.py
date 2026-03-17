@@ -27,7 +27,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -102,7 +102,11 @@ def make_property(attr_name):
 T = TypeVar("T", bound=GenericConfiguration)
 
 
-class ThreadedExperimentMixin:
+class SupportsRun(Protocol):
+    def run(self) -> None: ...
+
+
+class ThreadedExperimentMixin(SupportsRun):
     """Mixin providing :meth:`run_in_thread` for any experiment with a ``run()`` method."""
 
     def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
@@ -270,7 +274,7 @@ class AbsorptionImagingExperiment(GenericExperiment):
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         absorption_imaging_configuration: AbsorptionImagingConfiguration,
         ic_imaging_control: ICImagingControl,
@@ -287,6 +291,9 @@ class AbsorptionImagingExperiment(GenericExperiment):
         super().__init__(daq_controller, sequence, absorption_imaging_configuration)
         # the configuration object is called self.config
         assert isinstance(self.config, AbsorptionImagingConfiguration)
+        self.config: AbsorptionImagingConfiguration = cast(
+            AbsorptionImagingConfiguration, self.config
+        )
         c: AbsorptionImagingConfiguration = self.config
         self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
@@ -719,7 +726,7 @@ AbsorbtionImagingExperiment = AbsorptionImagingExperiment
 class PhotonProductionExperiment(GenericExperiment):
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         photon_production_configuration: PhotonProductionConfiguration,
         development_mode: bool = False,
@@ -969,7 +976,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
         ic_imaging_control: ICImagingControl | None = None,

@@ -54,25 +54,25 @@ from classes.experimental_configs import (  # noqa: E402
 GLOB_TRUE_BOOL_STRINGS = ["true", "t", "yes", "y"]
 
 __all__ = [
+    "AwgConfigReader",
     "ConfigReader",
-    "ConfigWriter",
     "ConfigValidationError",
+    "ConfigWriter",
     "DaqReader",
     "DaqWriter",
     "ExperimentConfigReader",
     "ExperimentalAutomationReader",
     "ExperimentalAutomationWriter",
     "MyConfig",
+    "ScopeConfigReader",
     "SequenceReader",
     "SequenceWriter",
-    "ScopeConfigReader",
-    "AwgConfigReader",
     "get_config_root",
     "resolve_config_path",
     "to_bool",
-    "to_int_list",
     "to_float_list",
     "to_float_tuple",
+    "to_int_list",
     "to_int_tuple",
 ]
 
@@ -302,8 +302,10 @@ class DaqReader:
                     _parse_config_value(float, v["chLimits"][1], "chLimits[1]", self.fname),
                 ),
                 _parse_config_value(float, v["default value"], "default value", self.fname),
-                bool(v["UIvisible"]),  # UIvisible (bool) or use v['UIvisible'] if already bool
-                str(v["calibrationFname"]),  # calibrationFname (str)
+                _parse_config_value(to_bool, v["UIvisible"], "UIvisible", self.fname),
+                _parse_config_value(
+                    str, v["calibrationFname"], "calibrationFname", self.fname
+                ),  # calibrationFname (str)
             )
             channels.append(DAQChannel(*channel_args))
         return channels
@@ -747,7 +749,9 @@ class ScopeConfigReader:
                 "coupling": coupling,
             }
         return ScopeConfiguration(
-            trigger_channel=_parse_config_value(int, cfg["trigger_channel"], "trigger_channel", fname),
+            trigger_channel=_parse_config_value(
+                int, cfg["trigger_channel"], "trigger_channel", fname
+            ),
             trigger_level=_parse_config_value(float, cfg["trigger_level"], "trigger_level", fname),
             sample_rate=_parse_config_value(float, cfg["sample_rate"], "sample_rate", fname),
             time_range=cast(tuple[float, float], to_float_tuple(cfg["time_range"])),
@@ -844,14 +848,25 @@ class ExperimentConfigReader:
 
         tdc_config = TdcConfiguration(
             counter_channels=list(map(ast.literal_eval, self.config["TDC"]["counter channels"])),
-            marker_channel=_parse_config_value(int, self.config["TDC"]["marker channel"], "marker channel", self.fname),
-            timestamp_buffer_size=_parse_config_value(int, self.config["TDC"]["timestamp buffer size"], "timestamp buffer size", self.fname),
+            marker_channel=_parse_config_value(
+                int, self.config["TDC"]["marker channel"], "marker channel", self.fname
+            ),
+            timestamp_buffer_size=_parse_config_value(
+                int,
+                self.config["TDC"]["timestamp buffer size"],
+                "timestamp buffer size",
+                self.fname,
+            ),
         )
 
         photon_production_config = PhotonProductionConfiguration(
             save_location=self.config["save location"],
-            mot_reload=_parse_config_value(ast.literal_eval, self.config["mot reload"], "mot reload", self.fname),
-            iterations=_parse_config_value(int, self.config["iterations"], "iterations", self.fname),
+            mot_reload=_parse_config_value(
+                ast.literal_eval, self.config["mot reload"], "mot reload", self.fname
+            ),
+            iterations=_parse_config_value(
+                int, self.config["iterations"], "iterations", self.fname
+            ),
             waveform_sequence=awg_config.waveform_sequence,
             waveforms=awg_config.waveforms,
             waveform_stitch_delays=None,  # deprecated, should be set to None and ignored by AWG control code
@@ -923,11 +938,17 @@ class ExperimentConfigReader:
         if use_camera:
             camera = self.config["camera_settings"]
             camera_settings_dict = {
-                "cam_exposure": _parse_config_value(int, camera["cam_exposure"], "cam_exposure", self.fname),
+                "cam_exposure": _parse_config_value(
+                    int, camera["cam_exposure"], "cam_exposure", self.fname
+                ),
                 "cam_gain": _parse_config_value(int, camera["cam_gain"], "cam_gain", self.fname),
-                "camera_trig_ch": _parse_config_value(int, camera["camera_trig_ch"], "camera_trig_ch", self.fname),
+                "camera_trig_ch": _parse_config_value(
+                    int, camera["camera_trig_ch"], "camera_trig_ch", self.fname
+                ),
                 "camera_trig_levs": to_float_tuple(camera["camera_trig_levs"]),
-                "camera_pulse_width": _parse_config_value(float, camera["camera_pulse_width"], "camera_pulse_width", self.fname),
+                "camera_pulse_width": _parse_config_value(
+                    float, camera["camera_pulse_width"], "camera_pulse_width", self.fname
+                ),
                 "save_images": to_bool(camera["save_images"]),
             }
 
@@ -946,8 +967,12 @@ class ExperimentConfigReader:
 
         mot_fluoresce_config = MotFluoresceConfiguration(
             save_location=self.config["save location"],
-            mot_reload=_parse_config_value(ast.literal_eval, self.config["mot reload"], "mot reload", self.fname),
-            iterations=_parse_config_value(int, self.config["iterations"], "iterations", self.fname),
+            mot_reload=_parse_config_value(
+                ast.literal_eval, self.config["mot reload"], "mot reload", self.fname
+            ),
+            iterations=_parse_config_value(
+                int, self.config["iterations"], "iterations", self.fname
+            ),
             scope_config=scope_config,
             awg_config=awg_config,
             awg_config_path=awg_config_path,
@@ -968,9 +993,15 @@ class ExperimentConfigReader:
         """
 
         def generate_int_list(section):
-            start = _parse_config_value(float, self.config[section]["start"], f"{section}.start", self.fname)
-            stop = _parse_config_value(float, self.config[section]["stop"], f"{section}.stop", self.fname)
-            step = _parse_config_value(float, self.config[section]["step"], f"{section}.step", self.fname)
+            start = _parse_config_value(
+                float, self.config[section]["start"], f"{section}.start", self.fname
+            )
+            stop = _parse_config_value(
+                float, self.config[section]["stop"], f"{section}.stop", self.fname
+            )
+            step = _parse_config_value(
+                float, self.config[section]["step"], f"{section}.step", self.fname
+            )
 
             if step == 0:
                 return [round(start)]
@@ -978,9 +1009,15 @@ class ExperimentConfigReader:
             return list(np.round(np.arange(start, stop + step, step)).astype(int))
 
         def generate_float_list(section):
-            start = _parse_config_value(float, self.config[section]["start"], f"{section}.start", self.fname)
-            stop = _parse_config_value(float, self.config[section]["stop"], f"{section}.stop", self.fname)
-            num_points = _parse_config_value(int, self.config[section]["num_points"], f"{section}.num_points", self.fname)
+            start = _parse_config_value(
+                float, self.config[section]["start"], f"{section}.start", self.fname
+            )
+            stop = _parse_config_value(
+                float, self.config[section]["stop"], f"{section}.stop", self.fname
+            )
+            num_points = _parse_config_value(
+                int, self.config[section]["num_points"], f"{section}.num_points", self.fname
+            )
 
             if num_points == 1:
                 return [start] if start == stop else []
@@ -1055,21 +1092,39 @@ class ExperimentConfigReader:
     def get_absorption_imaging_configuration(self):
 
         return AbsorptionImagingConfiguration(
-            scan_abs_img_freq=_parse_config_value(ast.literal_eval, self.config["scan_abs_img_freq"], "scan_abs_img_freq", self.fname),
-            abs_img_freq_ch=_parse_config_value(int, self.config["abs_img_freq_ch"], "abs_img_freq_ch", self.fname),
+            scan_abs_img_freq=_parse_config_value(
+                ast.literal_eval, self.config["scan_abs_img_freq"], "scan_abs_img_freq", self.fname
+            ),
+            abs_img_freq_ch=_parse_config_value(
+                int, self.config["abs_img_freq_ch"], "abs_img_freq_ch", self.fname
+            ),
             abs_img_freqs=to_float_list(self.config["abs_img_freqs"]),
-            camera_trig_ch=_parse_config_value(int, self.config["camera_trig_ch"], "camera_trig_ch", self.fname),
-            imag_power_ch=_parse_config_value(int, self.config["imag_power_ch"], "imag_power_ch", self.fname),
+            camera_trig_ch=_parse_config_value(
+                int, self.config["camera_trig_ch"], "camera_trig_ch", self.fname
+            ),
+            imag_power_ch=_parse_config_value(
+                int, self.config["imag_power_ch"], "imag_power_ch", self.fname
+            ),
             camera_trig_levs=to_float_tuple(self.config["camera_trig_levs"]),
             imag_power_levs=to_float_tuple(self.config["imag_power_levs"]),
-            camera_pulse_width=_parse_config_value(float, self.config["camera_pulse_width"], "camera_pulse_width", self.fname),
-            imag_pulse_width=_parse_config_value(float, self.config["imag_pulse_width"], "imag_pulse_width", self.fname),
+            camera_pulse_width=_parse_config_value(
+                float, self.config["camera_pulse_width"], "camera_pulse_width", self.fname
+            ),
+            imag_pulse_width=_parse_config_value(
+                float, self.config["imag_pulse_width"], "imag_pulse_width", self.fname
+            ),
             t_imgs=to_float_list(self.config["t_imgs"]),
-            mot_reload=_parse_config_value(float, self.config["mot_reload_time"], "mot_reload_time", self.fname),
-            n_backgrounds=_parse_config_value(int, self.config["n_backgrounds"], "n_backgrounds", self.fname),
+            mot_reload=_parse_config_value(
+                float, self.config["mot_reload_time"], "mot_reload_time", self.fname
+            ),
+            n_backgrounds=_parse_config_value(
+                int, self.config["n_backgrounds"], "n_backgrounds", self.fname
+            ),
             bkg_off_channels=to_int_list(self.config["bkg_off_channels"]),
             cam_gain=_parse_config_value(int, self.config["cam_gain"], "cam_gain", self.fname),
-            cam_exposure=_parse_config_value(int, self.config["cam_exposure"], "cam_exposure", self.fname),
+            cam_exposure=_parse_config_value(
+                int, self.config["cam_exposure"], "cam_exposure", self.fname
+            ),
             cam_gain_lims=to_int_tuple(self.config["cam_gain_lims"]),
             cam_exposure_lims=to_int_tuple(self.config["cam_exposure_lims"]),
             save_location=self.config["save_location"],
@@ -1212,20 +1267,26 @@ class ExperimentalAutomationReader:
         for _, v in sorted(self.config["experiments"].items()):
             automated_experiment_configurations.append(
                 SingleExperimentConfig(
-                    daq_channel_static_values=list(map(
-                        lambda x: (int(ast.literal_eval(x)[0]), float(ast.literal_eval(x)[1])),
-                        v["daq_channel_static_values"]
-                        if v["daq_channel_static_values"] != []
-                        else [],
-                    )),
+                    daq_channel_static_values=list(
+                        map(
+                            lambda x: (int(ast.literal_eval(x)[0]), float(ast.literal_eval(x)[1])),
+                            v["daq_channel_static_values"]
+                            if v["daq_channel_static_values"] != []
+                            else [],
+                        )
+                    ),
                     sequence=SequenceReader(v["sequence_fname"]).load_sequence(),
                     sequence_fname=v["sequence_fname"],
                     iterations=int(v["iterations"]),
                     mot_reload=ast.literal_eval(v["mot_reload"]),
-                    modulation_frequencies=list(map(
-                        float,
-                        v["modulation_frequencies"] if v["modulation_frequencies"] != [] else [],
-                    )),
+                    modulation_frequencies=list(
+                        map(
+                            float,
+                            v["modulation_frequencies"]
+                            if v["modulation_frequencies"] != []
+                            else [],
+                        )
+                    ),
                 )
             )
 

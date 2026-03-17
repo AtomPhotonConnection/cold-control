@@ -464,7 +464,9 @@ class ExperimentalUI(tk.LabelFrame):
             )
             return
 
-        assert self.ic_ic, "No IC Imaging Control provided, can't run absobtion imaging experiment."
+        assert self.ic_ic, (
+            "No IC Imaging Control provided, can't run absorption imaging experiment."
+        )
 
         experiment = AbsorptionImagingExperiment(
             daq_controller=self.daq_ui.daq_controller,

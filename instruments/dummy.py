@@ -19,9 +19,9 @@ import pandas as pd
 _log = logging.getLogger(__name__)
 
 __all__ = [
+    "DummyAWGManager",
     "DummyDAQController",
     "DummyOscilloscopeManager",
-    "DummyAWGManager",
 ]
 
 

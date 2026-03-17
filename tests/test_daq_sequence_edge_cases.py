@@ -8,13 +8,11 @@ Run with:  pytest tests/test_daq_sequence_edge_cases.py -v
 """
 
 import pytest
-import numpy as np
 
 from classes.daq_sequence import (
     DaqSequence,
     IntervalStyle,
     InvalidSequenceChannelError,
-    MultipleInvalidSequenceChannelError,
 )
 
 
@@ -162,7 +160,8 @@ class TestDaqSequenceEdgeCases:
         )
 
         seq.update_time_steps(
-            200, 5,
+            200,
+            5,
             channels_to_update={
                 0: ([(0.0, 0.0)], [IntervalStyle.FLAT]),
             },

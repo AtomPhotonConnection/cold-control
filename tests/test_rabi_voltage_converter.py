@@ -1,8 +1,8 @@
-import pytest
 import csv
-import math
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
@@ -10,10 +10,10 @@ from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 @pytest.fixture
 def calibration_csv(tmp_path):
     """Create a simple calibration CSV file for testing."""
-    cal_file = tmp_path / "calibration.csv"
+    cal_file: Path = tmp_path / "calibration.csv"
     # Simple monotonically increasing data
     # amplitude_cal (V), rabi_measured_no_ang (MHz), waist_size, cg_ang
-    with open(cal_file, "w", newline="") as f:
+    with cal_file.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["amplitude_cal", "rabi_measured_no_ang", "waist_size", "cg_ang"])
         for v in np.linspace(0.1, 1.0, 10):
@@ -85,9 +85,9 @@ class TestRabiFreqVoltageConverter:
 
     def test_rescale_csv(self, converter, tmp_path):
         """rescale_csv writes a scaled waveform."""
-        csv_in = tmp_path / "waveform_in.csv"
-        csv_out = tmp_path / "waveform_out.csv"
-        with open(csv_in, "w", newline="") as f:
+        csv_in: Path = tmp_path / "waveform_in.csv"
+        csv_out: Path = tmp_path / "waveform_out.csv"
+        with csv_in.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([0.0, 0.5, 1.0, 0.5, 0.0])
 
@@ -95,7 +95,7 @@ class TestRabiFreqVoltageConverter:
         converter.rescale_csv(mid_rabi, str(csv_in), str(csv_out), normalised=True)
 
         assert csv_out.exists()
-        with open(csv_out) as f:
+        with csv_out.open() as f:
             reader = csv.reader(f)
             row = next(reader)
             values = [float(x) for x in row]

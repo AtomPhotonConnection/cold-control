@@ -21,7 +21,7 @@ class AbsorptionImagingReviewUI(tk.Toplevel):
         self, parent, absorption_imaging_experiment: AbsorptionImagingExperiment, **kwargs
     ):
         """
-        This object the absorption images taken and offers the user the chance to save them with notes or discard them.
+        This object displays the absorption images taken and offers the user the chance to save them with notes or discard them.
         """
         tk.Toplevel.__init__(self, parent, **kwargs)
 

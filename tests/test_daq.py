@@ -1,11 +1,9 @@
-import pytest
-import numpy as np
 import csv
-import tempfile
 from pathlib import Path
 
-from classes.daq import DAQChannel, DAQDio, INPUT_LINE, OUTPUT_LINE
+import pytest
 
+from classes.daq import INPUT_LINE, OUTPUT_LINE, DAQChannel, DAQDio
 
 # ===== DAQChannel Tests =====
 
@@ -34,8 +32,8 @@ class TestDAQChannel:
 
     def test_calibrate_from_csv(self, tmp_path):
         """Calibrating from CSV creates bidirectional conversion functions."""
-        cal_file = tmp_path / "cal.csv"
-        with open(cal_file, "w", newline="") as f:
+        cal_file: Path = tmp_path / "cal.csv"
+        with cal_file.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["voltage", "calibrated"])
             writer.writerow([0.0, 0.0])
@@ -48,8 +46,8 @@ class TestDAQChannel:
 
     def test_remove_calibration(self, tmp_path):
         """remove_calibration resets calibration state."""
-        cal_file = tmp_path / "cal.csv"
-        with open(cal_file, "w", newline="") as f:
+        cal_file: Path = tmp_path / "cal.csv"
+        with cal_file.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["voltage", "calibrated"])
             writer.writerow([0.0, 0.0])
@@ -69,8 +67,8 @@ class TestDAQChannel:
 
     def test_get_help_text_calibrated(self, tmp_path):
         """get_help_text for calibrated channel includes calibration info."""
-        cal_file = tmp_path / "cal.csv"
-        with open(cal_file, "w", newline="") as f:
+        cal_file: Path = tmp_path / "cal.csv"
+        with cal_file.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["voltage", "calibrated"])
             writer.writerow([0.0, 0.0])

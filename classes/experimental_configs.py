@@ -25,12 +25,15 @@ from typing import Any, cast
 
 import numpy as np
 
+from classes.daq import DAQChannel
 from classes.daq_sequence import DaqSequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AbsorbtionImagingConfiguration",
+    "AbsorptionImagingConfiguration",
     "AwgConfiguration",
     "CameraConfiguration",
     "ExperimentSessionConfig",
@@ -43,8 +46,6 @@ __all__ = [
     "SingleExperimentConfig",
     "TdcConfiguration",
     "Waveform",
-    "AbsorptionImagingConfiguration",
-    "AbsorbtionImagingConfiguration",
     "make_property",
     "sanitize_filename",
 ]
@@ -861,8 +862,8 @@ class MotFluoresceConfigurationSweep:
         The DAQ channel numbers for the frequency and power channels can be
         overridden via ``sweep_params``:
 
-        * ``sweep_params["freq_channel"]`` – DAQ channel for frequency (default 2)
-        * ``sweep_params["power_channel"]`` – DAQ channel for power (default 6)
+        * ``sweep_params["freq_channel"]`` - DAQ channel for frequency (default 2)
+        * ``sweep_params["power_channel"]`` - DAQ channel for power (default 6)
         """
         to_sweep = []
         if len(beam_powers) > 1:
@@ -997,7 +998,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
 
         self._waveform_sequence = waveform_sequence
         self.waveforms: dict[int, Waveform] = waveforms
-        self.interleave_waveforms: bool = interleave_waveforms
+        self.interleave_waveforms: bool | None = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
         self._awg_configuration: AwgConfiguration = awg_configuration
@@ -1086,7 +1087,7 @@ class AbsorptionImagingConfiguration(GenericConfiguration):
         self.t_imgs = t_imgs
         self.mot_reload_time = mot_reload
         self.n_backgrounds = n_backgrounds
-        self.bkg_off_channels = bkg_off_channels
+        self.bkg_off_channels: list[DAQChannel] = bkg_off_channels
         self.cam_gain = cam_gain
         self.cam_exposure = cam_exposure
         self.cam_gain_lims = cam_gain_lims
@@ -1131,7 +1132,7 @@ class SingleExperimentConfig(GenericConfiguration):
         self._sequence_fname = sequence_fname
         self._sequence = sequence
         self._modulation_frequencies = modulation_frequencies
-        super().__init__(save_location, mot_reload, iterations)
+        super().__init__(cast(str, save_location), mot_reload, iterations)
 
     daq_channel_static_values = make_property("_daq_channel_static_values")
     sequence_fname = make_property("_sequence_fname")

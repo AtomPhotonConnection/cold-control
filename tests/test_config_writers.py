@@ -5,12 +5,11 @@ All tests write to temporary files — no hardware required.
 Run with:  pytest tests/test_config_writers.py -v
 """
 
-import pytest
 from pathlib import Path
+
 from configobj import ConfigObj
 
 from classes.config_readers import ConfigWriter, DaqWriter, SequenceWriter
-from classes.daq import DAQChannel
 from classes.daq_sequence import DaqSequence, IntervalStyle
 
 
@@ -33,7 +32,7 @@ class TestConfigWriter:
         config = ConfigObj(fname)
         assert config["sequence_filename"] == "seq.ini"
         assert config["daq_config_filename"] == "daq.ini"
-        assert config["absorbtion_images_config_filename"] == "abs.ini"
+        assert config["absorption_images_config_filename"] == "abs.ini"
         assert config["photon_production_config_filename"] == "photon.ini"
 
     def test_save_writes_date_time(self, tmp_path):
@@ -66,8 +65,15 @@ class _MockCard:
 class _MockChannel:
     """Channel mock matching the attribute names used by DaqWriter.save()."""
 
-    def __init__(self, ch_num, ch_name="", ch_limits=(-10, 10), default_value=0.0,
-                 is_ui_visible=True, calibration_fname=""):
+    def __init__(
+        self,
+        ch_num,
+        ch_name="",
+        ch_limits=(-10, 10),
+        default_value=0.0,
+        is_ui_visible=True,
+        calibration_fname="",
+    ):
         self.chNum = ch_num
         self.chName = ch_name or f"Ch {ch_num}"
         self.chLimits = ch_limits
@@ -94,9 +100,9 @@ class TestDaqWriter:
         writer.save(master)
 
         config = ConfigObj(fname)
-        assert config["DAQ cards"]["master"]["card number"] == "1"
-        assert config["DAQ channels"]["0"]["chNum"] == "0"
-        assert config["DAQ channels"]["1"]["chNum"] == "1"
+        assert config["DAQ cards"]["master"]["card number"] == "1"  # type: ignore
+        assert config["DAQ channels"]["0"]["chNum"] == "0"  # type: ignore
+        assert config["DAQ channels"]["1"]["chNum"] == "1"  # type: ignore
 
     def test_save_master_and_slave(self, tmp_path):
         """save() writes both master and slave card configurations."""
@@ -113,7 +119,7 @@ class TestDaqWriter:
 
         config = ConfigObj(fname)
         assert "slaves" in config["DAQ cards"]
-        assert config["DAQ cards"]["slaves"]["1"]["card number"] == "2"
+        assert config["DAQ cards"]["slaves"]["1"]["card number"] == "2"  # type: ignore
 
 
 class TestSequenceWriter:
@@ -137,8 +143,8 @@ class TestSequenceWriter:
         # Verify file was written
         config = ConfigObj(fname)
         assert "sequence" in config
-        assert config["sequence"]["n_samples"] == "100"
-        assert config["sequence"]["t_step"] == "10"
+        assert config["sequence"]["n_samples"] == "100"  # type: ignore
+        assert config["sequence"]["t_step"] == "10"  # type: ignore
 
     def test_save_writes_notes(self, tmp_path):
         """save() writes user notes to the config file."""
@@ -151,4 +157,4 @@ class TestSequenceWriter:
         writer.save(seq, {}, [], "My experiment notes")
 
         config = ConfigObj(fname)
-        assert config["notes"]["user"] == "My experiment notes"
+        assert config["notes"]["user"] == "My experiment notes"  # type: ignore
