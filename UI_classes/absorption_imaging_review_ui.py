@@ -13,31 +13,31 @@ from typing import Any
 
 from PIL import Image, ImageTk
 
-from classes.experimental_runner import AbsorbtionImagingExperiment
+from classes.experimental_runner import AbsorptionImagingExperiment
 
 
 class AbsorptionImagingReviewUI(tk.Toplevel):
     def __init__(
-        self, parent, absorbtion_imaging_experiment: AbsorbtionImagingExperiment, **kwargs
+        self, parent, absorption_imaging_experiment: AbsorptionImagingExperiment, **kwargs
     ):
         """
-        This object the abosrbtion images taken and offers the user the chance to save them with notes or discard them.
+        This object displays the absorption images taken and offers the user the chance to save them with notes or discard them.
         """
         tk.Toplevel.__init__(self, parent, **kwargs)
 
-        self.absorbtion_imaging_experiment = absorbtion_imaging_experiment
+        self.absorption_imaging_experiment = absorption_imaging_experiment
 
-        if not self.absorbtion_imaging_experiment.results_ready:
+        if not self.absorption_imaging_experiment.results_ready:
             raise Exception(
-                "The abosrbtion imaging experiment has not been run yet. There are no results to review."
+                "The absorption imaging experiment has not been run yet. There are no results to review."
             )
 
-        self.wm_title("Absorbtion imaging review")
+        self.wm_title("Absorption imaging review")
         self.grab_set()
         # Changes the close button to call my close function.
         self.protocol("WM_DELETE_WINDOW", self.close_window)
 
-        img_arrs, bkg_arrs, raw_images, labels = self.absorbtion_imaging_experiment.get_results()
+        img_arrs, bkg_arrs, raw_images, labels = self.absorption_imaging_experiment.get_results()
 
         if img_arrs is None and bkg_arrs is None:
             raise Exception("There are no images to review")
@@ -207,7 +207,7 @@ class AbsorptionImagingReviewUI(tk.Toplevel):
         """
         Save the images and close the UI.
         """
-        self.absorbtion_imaging_experiment.save_processed_images(
+        self.absorption_imaging_experiment.save_processed_images(
             notes=self.save_notes_wid.get(1.0, tk.END)
         )
         self.close_window(ask_to_save_images=False)
