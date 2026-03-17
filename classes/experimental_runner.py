@@ -27,7 +27,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 import numpy as np
 from PIL import Image
@@ -44,7 +44,7 @@ except (ImportError, ModuleNotFoundError):
 from classes.daq import DAQChannel, DAQController
 from classes.daq_sequence import DaqSequence, IntervalStyle
 from classes.experimental_configs import (
-    AbsorbtionImagingConfiguration,
+    AbsorptionImagingConfiguration,
     AwgConfiguration,
     ExperimentSessionConfig,
     GenericConfiguration,
@@ -57,6 +57,7 @@ from classes.experimental_configs import (
     TdcConfiguration,
     Waveform,
 )
+from instruments.protocols import DAQControllerProtocol
 
 try:
     import instruments.quTAU.tdc_manager as tdc_module
@@ -82,6 +83,14 @@ from instruments.pyicic.ic_exception import ICError
 logger = logging.getLogger(__name__)
 
 
+class HardwareConnectionError(RuntimeError):
+    """Raised when a required hardware instrument cannot be reached."""
+
+
+class ExperimentStateError(RuntimeError):
+    """Raised when an experiment is in an invalid state for the requested operation."""
+
+
 def make_property(attr_name):
     return property(
         fget=lambda self: getattr(self, attr_name),
@@ -93,14 +102,40 @@ def make_property(attr_name):
 T = TypeVar("T", bound=GenericConfiguration)
 
 
-class GenericExperiment[T: GenericConfiguration]:
+class SupportsRun(Protocol):
+    def run(self) -> None: ...
+
+
+class ThreadedExperimentMixin(SupportsRun):
+    """Mixin providing :meth:`run_in_thread` for any experiment with a ``run()`` method."""
+
+    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
+        """Run the experiment in a separate thread.
+
+        Parameters
+        ----------
+        start_thread : bool
+            If ``True`` (default), the thread is started immediately.
+
+        Returns
+        -------
+        threading.Thread
+            The thread running the experiment.
+        """
+        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
+        if start_thread:
+            thread.start()
+        return thread
+
+
+class GenericExperiment[T: GenericConfiguration](ThreadedExperimentMixin):
     """
     A generic base class for all experiments.  This is not intended to be used directly, but is what other experiments should inherit from.
     """
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         configuration: T,
         development_mode: bool = False,
@@ -114,6 +149,11 @@ class GenericExperiment[T: GenericConfiguration]:
         self.development_mode = development_mode
 
     def configure(self):
+        """Configure hardware before running the experiment.
+
+        Subclasses must override this method to set up instruments
+        (DAQ cards, oscilloscopes, AWGs, etc.) before the main run loop.
+        """
         raise NotImplementedError()
 
     def daq_cards_on(self):
@@ -126,9 +166,15 @@ class GenericExperiment[T: GenericConfiguration]:
             self.daq_controller.toggle_continuous_output()
 
     def run(self):
+        """Execute the main experimental loop.
+
+        Subclasses must override this method with the concrete
+        experiment logic.
+        """
         raise NotImplementedError()
 
     def daq_cards_off(self):
+        """Restore DAQ card output to its pre-experiment state."""
         if self.daq_continuous_ouput:
             logger.info("Returning to free running DAQ values.")
             self.daq_controller.write_channel_values()
@@ -138,17 +184,12 @@ class GenericExperiment[T: GenericConfiguration]:
             self.daq_controller.write_channel_values()
 
     def close(self):
+        """Release hardware resources after the experiment completes.
+
+        Subclasses must override this method to properly shut down
+        instruments and free any acquired resources.
+        """
         raise NotImplementedError()
-
-    def run_in_thread(self, start_thread=True):
-        """
-        Run the experiment with the experimental loop in a separate thread.
-        """
-        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
-
-        if start_thread:
-            thread.start()
-        return thread
 
     @staticmethod
     def _configure_camera_common(
@@ -160,7 +201,7 @@ class GenericExperiment[T: GenericConfiguration]:
         """Open and configure the first available camera.
 
         This shared helper eliminates duplication between
-        ``AbsorbtionImagingExperiment`` and ``MotFluoresceExperiment``.
+        ``AbsorptionImagingExperiment`` and ``MotFluoresceExperiment``.
 
         Returns the configured :class:`ICCamera` instance.
         """
@@ -200,35 +241,60 @@ class GenericExperiment[T: GenericConfiguration]:
 
         return cam
 
-    def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
-        """Sleep for the MOT reload period, converting from milliseconds to seconds."""
+    def _start_mot_load(self) -> None:
+        """Prepare hardware for MOT loading.
+
+        Override in subclasses to trigger hardware actions (e.g. shutter
+        control) before the reload wait begins.  The default implementation
+        is a no-op.
+        """
+
+    def _wait_mot_load(self, mot_reload_ms: float) -> None:
+        """Sleep for the MOT reload period, converting from milliseconds to seconds.
+
+        Override in subclasses for non-blocking or hardware-aware reload waits.
+        """
         logger.info("Loading MOT for %sms...", mot_reload_ms)
         sleep(mot_reload_ms * 10**-3)
 
+    def _wait_for_mot_reload(self, mot_reload_ms: float) -> None:
+        """Run full MOT reload sequence: start then wait.
 
-class AbsorbtionImagingExperiment(GenericExperiment):
+        .. deprecated::
+            Use :meth:`_start_mot_load` and :meth:`_wait_mot_load` directly
+            for finer-grained control.  This method remains for backward
+            compatibility.
+        """
+        self._start_mot_load()
+        self._wait_mot_load(mot_reload_ms)
+
+
+class AbsorptionImagingExperiment(GenericExperiment):
     shutter_lag = 4.8  # The camera response time to the trigger.  Hard coded as it is a physical camera property.
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
-        absorbtion_imaging_configuration: AbsorbtionImagingConfiguration,
+        absorption_imaging_configuration: AbsorptionImagingConfiguration,
         ic_imaging_control: ICImagingControl,
     ):
         """
-        Runs an absorbtion imaging experiment. Takes a number of parameters, namely:
+        Runs an absorption imaging experiment. Takes a number of parameters, namely:
             daq_controller - The DAQ Controller object for running the daq channels
             sequence - The sequence to run whilst taking the images.  Note that the camera trigger and
                        imaging power channels are overwritten by this experiment and so need not be configured
                        in the original sequence.
-            absorbtion_imaging_configuration - An instance of AbsorbtionImagingConfiguration.
+            absorption_imaging_configuration - An instance of AbsorptionImagingConfiguration.
         """
 
-        super().__init__(daq_controller, sequence, absorbtion_imaging_configuration)
+        super().__init__(daq_controller, sequence, absorption_imaging_configuration)
         # the configuration object is called self.config
-        assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c: AbsorbtionImagingConfiguration = self.config
+        assert isinstance(self.config, AbsorptionImagingConfiguration)
+        self.config: AbsorptionImagingConfiguration = cast(
+            AbsorptionImagingConfiguration, self.config
+        )
+        c: AbsorptionImagingConfiguration = self.config
         self.results_ready = False  # A flag to determine if the experiment has finished running and the results exist yet
 
         # Use the externally provided ICImagingControl instances if one is provided
@@ -285,7 +351,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         if c.imag_pulse_width is None or c.imag_pulse_width < sequence.t_step:
             c.imag_pulse_width = sequence.t_step
 
-        # Check the absorbtion imaging flash will be on for background images and other sanity checks
+        # Check the absorption imaging flash will be on for background images and other sanity checks
         if c.imag_power_ch in c.bkg_off_channels:
             logger.warning(
                 "You specified not to have the absorption imaging flash on while taking backgrounds. \n"
@@ -301,10 +367,10 @@ class AbsorbtionImagingExperiment(GenericExperiment):
 
     def run(self, analyse=True, bkg_test=False):
         """
-        Run the absorbtion imaging.  This first generates a series of sequences to run, then
+        Run the absorption imaging.  This first generates a series of sequences to run, then
         opens and configures the camera, takes the images, saves them and closes the camera.
         """
-        logger.info("Running absorbtion imaging experiment")
+        logger.info("Running absorption imaging experiment")
 
         self.__configure_experiment()
 
@@ -338,11 +404,11 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         # Make a list of sequences (in time order) to run in order to take the imaging pictures
         self.sequences: list[DaqSequence] = []
         self.bkg_sequences: list[DaqSequence] = []
-        assert isinstance(self.config, AbsorbtionImagingConfiguration)
-        c: AbsorbtionImagingConfiguration = self.config
+        assert isinstance(self.config, AbsorptionImagingConfiguration)
+        c: AbsorptionImagingConfiguration = self.config
 
-        t_lag = AbsorbtionImagingExperiment.shutter_lag
-        #         t_offset = AbsorbtionImagingExperiment.flash_offset
+        t_lag = AbsorptionImagingExperiment.shutter_lag
+        #         t_offset = AbsorptionImagingExperiment.flash_offset
         t_offset = ((1.0 / c.cam_exposure) * 10**6) / 2
 
         for t in c.t_imgs:
@@ -633,7 +699,7 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         if not self.results_ready:
             raise RuntimeError("The absorption imaging experiment has not been run yet.")
         logger.info(
-            "Returning absorbtion imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs))
+            "Returning absorption imaging results. %s", len(cast(list[Any], self.ave_bkg_arrs))
         )
         return self.corr_img_arrs, self.ave_bkg_arrs, self.raw_images, self.sequence_labels
 
@@ -653,10 +719,14 @@ class AbsorbtionImagingExperiment(GenericExperiment):
         super().daq_cards_off()
 
 
+# Backward-compatible alias for the old misspelling
+AbsorbtionImagingExperiment = AbsorptionImagingExperiment
+
+
 class PhotonProductionExperiment(GenericExperiment):
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         photon_production_configuration: PhotonProductionConfiguration,
         development_mode: bool = False,
@@ -906,7 +976,7 @@ class MotFluoresceExperiment(GenericExperiment):
 
     def __init__(
         self,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         sequence: DaqSequence,
         mot_fluoresce_configuration: MotFluoresceConfiguration,
         ic_imaging_control: ICImagingControl | None = None,
@@ -1247,23 +1317,16 @@ class MotFluoresceExperiment(GenericExperiment):
         super().daq_cards_off()
 
 
-class MotFluoresceSweepExperiment:
+class MotFluoresceSweepExperiment(ThreadedExperimentMixin):
     def __init__(
         self,
         sweep_config: MotFluoresceConfigurationSweep,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         development_mode: bool = False,
     ):
         self.sweep_config = sweep_config
         self.daq_controller = daq_controller
         self.development_mode = development_mode
-
-    def run_in_thread(self, start_thread: bool = True) -> threading.Thread:
-        """Run the sweep experiment in a separate thread."""
-        thread = threading.Thread(name="Cold Control Experiment Thread", target=self.run)
-        if start_thread:
-            thread.start()
-        return thread
 
     def run(self):
         """
@@ -1287,7 +1350,7 @@ class MotFluoresceSweepExperiment:
             logger.info(f"Experiment {i} completed and closed.")
 
 
-class MotFluorescenceAlignmentExperiment:
+class MotFluorescenceAlignmentExperiment(ThreadedExperimentMixin):
     """Repeatedly runs the same MOT fluorescence experiment for live alignment.
 
     After each iteration (a full single-shot experiment with *n* scope traces),
@@ -1309,7 +1372,7 @@ class MotFluorescenceAlignmentExperiment:
     alignment_config : MotFluorescenceAlignmentConfiguration
         Wraps the single-shot config, DAQ sequence, and optional background
         folder.
-    daq_controller : DAQController
+    daq_controller : DAQControllerProtocol
         The DAQ controller for running DAQ channels.
     development_mode : bool
         If ``True``, uses dummy instrument drivers.
@@ -1318,7 +1381,7 @@ class MotFluorescenceAlignmentExperiment:
     def __init__(
         self,
         alignment_config: MotFluorescenceAlignmentConfiguration,
-        daq_controller: DAQController,
+        daq_controller: DAQControllerProtocol,
         development_mode: bool = False,
     ):
         self.alignment_config = alignment_config

@@ -27,26 +27,26 @@ class AbsorptionImagingConfigurationUi:
     def __init__(
         self,
         parent,
-        absorbtion_imaging_configuration,
+        absorption_imaging_configuration,
         daq_controller,
         sequence_length,
         sequence_t_step,
     ):
-        """This object presents for editing the settings for absorbtion imaging experiments.  It takes and edits a
-        copy of the Absorbtion Imaging Configuration.  A flag then exists to indicate whether the user wants these
+        """This object presents for editing the settings for absorption imaging experiments.  It takes and edits a
+        copy of the Absorption Imaging Configuration.  A flag then exists to indicate whether the user wants these
         edits to be applied or not when the window is closed."""
 
         # A flag that denotes is the user confirms or cancels edits they make in this window when exiting.
         self.apply_changes = False
 
-        self.config = self.c = copy.copy(absorbtion_imaging_configuration)
+        self.config = self.c = copy.copy(absorption_imaging_configuration)
         self.daq_controller = daq_controller
         self.sequence_length = sequence_length
         self.sequence_t_step = sequence_t_step
 
         self.top = self.configure_window(parent)
 
-        self.top.wm_title("Absorbtion imaging configuration")
+        self.top.wm_title("Absorption imaging configuration")
         self.top.grab_set()
         # Changes the close button to call my close function.
         self.top.protocol("WM_DELETE_WINDOW", self.close_window)
