@@ -1146,13 +1146,21 @@ class MotFluoresceExperiment(GenericExperiment):
 
         directory: Path = self.save_location
 
-        if not self.sweep:
+        if not self.sweep and not self.config.background_mode:
             # Get current date and time
             now = datetime.now()
             date_str = now.strftime("%Y-%m-%d")
             time_str = now.strftime("%H-%M-%S")
             # Create full path with date and time subdirectories
             full_directory = directory / date_str / time_str / "experiment" / "shot0"
+
+        elif self.background_mode and not self.sweep:
+            # Get current date and time
+            now = datetime.now()
+            date_str = now.strftime("%Y-%m-%d")
+            time_str = now.strftime("%H-%M-%S")
+            # Create full path with date and time subdirectories
+            full_directory = directory / date_str / time_str / "background" / "shot0"
         else:
             full_directory = directory
 

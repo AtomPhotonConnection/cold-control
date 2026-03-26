@@ -978,6 +978,7 @@ class ExperimentConfigReader:
             awg_config_path=awg_config_path,
             cam_dict=camera_settings_dict,
             sequence_config_path=sequence_config_path,
+            background_mode=to_bool(self.config.get("background", "False")),
         )
 
         return mot_fluoresce_config
@@ -1043,6 +1044,7 @@ class ExperimentConfigReader:
             mod_freqs = to_float_list(defaults.get("modulation_frequencies", None))
             waveforms = ensure_list(defaults.get("waveforms", None))
             calib_paths = ensure_list(defaults.get("calibration_paths", None))
+            channel_lags = to_float_list(defaults.get("channel_lags", None))
 
             all_sweeps = []
             for sweep_idx in self.config["sweeps"]:
@@ -1051,10 +1053,13 @@ class ExperimentConfigReader:
                 for key, value in sweep.items():
                     if key == "title":
                         continue
-                    elif key == "rabi_frequencies" or key == "modulation_frequencies":
+                    elif key in ["rabi_frequencies", "modulation_frequencies"]:
                         sweep_changes[key] = to_float_list(value)
                     elif key == "waveforms" or key == "calibration_paths":
                         sweep_changes[key] = ensure_list(value)
+                    elif key == "channel_lags":
+                        sweep_changes[key] = to_float_list(value)
+                        continue
                     if wave_idxs is not None:
                         assert len(sweep_changes[key]) == len(wave_idxs), (
                             f"Length mismatch for {key} in sweep {sweep_idx}"
@@ -1070,6 +1075,8 @@ class ExperimentConfigReader:
                 "calibration_paths": calib_paths,
                 "sweeps": all_sweeps,
             }
+            if channel_lags is not None:
+                sweep_dict["channel_lags"] = channel_lags
 
             return sweep_type, num_shots, sweep_dict
 

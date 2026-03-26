@@ -722,9 +722,21 @@ class MotFluoresceConfigurationSweep:
             mod_freqs = self.sweep_params["modulation_frequencies"]
             waveforms_paths = self.sweep_params["waveforms"]
             calib_paths = self.sweep_params["calibration_paths"]
+            channel_lags = self.sweep_params.get(
+                "channel_lags",
+                [0.0]
+                * len(cast(AwgConfiguration, self.base_config.awg_config).waveform_output_channels),
+            )
             all_sweeps = self.sweep_params["sweeps"]
+
             self.__configure_awg_sweep(
-                wave_idxs, rabi_freqs, mod_freqs, waveforms_paths, calib_paths, all_sweeps
+                wave_idxs,
+                rabi_freqs,
+                mod_freqs,
+                waveforms_paths,
+                calib_paths,
+                all_sweeps,
+                channel_lags,
             )
 
         elif sweep_type == "mot_imaging":
@@ -779,7 +791,14 @@ class MotFluoresceConfigurationSweep:
         return len(self.configs)
 
     def __configure_awg_sweep(
-        self, wave_idxs, rabi_freqs, mod_freqs, waveforms_paths, calib_paths, all_sweeps
+        self,
+        wave_idxs,
+        rabi_freqs,
+        mod_freqs,
+        waveforms_paths,
+        calib_paths,
+        all_sweeps,
+        channel_lags,
     ):
         """
         Creates the list of MOTFluoresceConfiguration objects and Sequence objects for each
@@ -801,6 +820,7 @@ class MotFluoresceConfigurationSweep:
                 freqs = sweep_dict.get("modulation_frequencies", mod_freqs)
                 waves = sweep_dict.get("waveforms", waveforms_paths)
                 calibs = sweep_dict.get("calibration_paths", calib_paths)
+                channel_lags = sweep_dict.get("channel_lags", channel_lags)
 
                 new_paths = {}
                 for j, idx in enumerate(wave_idxs):
@@ -832,6 +852,7 @@ class MotFluoresceConfigurationSweep:
                     base_config=cast(AwgConfiguration, new_config.awg_config),
                     waveform_csvs={idx: new_paths[idx] for idx in wave_idxs},
                     mod_freqs={idx: freqs[j] for j, idx in enumerate(wave_idxs)},
+                    _channel_lags=channel_lags,
                 )
 
                 # Update the new config with modified sequence
@@ -944,7 +965,11 @@ class MotFluoresceConfigurationSweep:
 
     @staticmethod
     def modify_awg_sequence_config(
-        *, base_config: AwgConfiguration, waveform_csvs: dict[int, str], mod_freqs: dict[int, float]
+        *,
+        base_config: AwgConfiguration,
+        waveform_csvs: dict[int, str],
+        mod_freqs: dict[int, float],
+        _channel_lags: list[float],
     ) -> AwgConfiguration:
         new_config = deepcopy(base_config)
 
@@ -953,6 +978,8 @@ class MotFluoresceConfigurationSweep:
                 wf.fname = waveform_csvs[idx]
             if idx in mod_freqs:
                 wf.mod_frequency = mod_freqs[idx]
+
+        new_config.waveform_output_channel_lags = tuple(_channel_lags)
 
         return new_config
 
