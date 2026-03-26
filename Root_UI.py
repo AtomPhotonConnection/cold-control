@@ -48,7 +48,7 @@ def setup_logging(env="prod"):
 
 
 # Run the setup function
-setup_logging(env="dev")  # Change to "prod" for production logging settings
+setup_logging(env="prod")  # Change to "prod" for production logging settings
 
 # Standard app logging
 logger = logging.getLogger(__name__)

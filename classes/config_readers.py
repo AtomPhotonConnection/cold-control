@@ -86,7 +86,9 @@ def to_int_list(arg):
 
 
 def to_float_tuple(arg):
-    return tuple(to_float_list(arg))
+    if arg is None:
+        return None
+    return tuple(to_float_list(arg))  # type: ignore
 
 
 def to_int_tuple(arg):
@@ -94,6 +96,8 @@ def to_int_tuple(arg):
 
 
 def to_float_list(arg):
+    if arg is None:
+        return None
     if isinstance(arg, str):
         warnings.warn(
             "to_float_list received a string input. This may lead to unexpected behavior.",
@@ -887,6 +891,7 @@ class ExperimentConfigReader:
             awg_config_path=awg_config_path,
             cam_dict=camera_settings_dict,
             sequence_config_path=sequence_config_path,
+            background_mode=to_bool(self.config.get("background", "False")),
         )
 
         return mot_fluoresce_config
@@ -969,9 +974,10 @@ class ExperimentConfigReader:
                 "modulation_frequencies": mod_freqs,
                 "waveforms": waveforms,
                 "calibration_paths": calib_paths,
-                "channel_lags": channel_lags,
                 "sweeps": all_sweeps,
             }
+            if channel_lags is not None:
+                sweep_dict["channel_lags"] = channel_lags
 
             return sweep_type, num_shots, sweep_dict
 
