@@ -21,7 +21,7 @@ class USBTMC:
         return self.read(length=length).decode("ascii")
 
     def ask_for_value(self, command):
-        return eval(self.query(command).strip())
+        return float(self.query(command).strip())
 
     def get_name(self):
         return self.query("*IDN?")

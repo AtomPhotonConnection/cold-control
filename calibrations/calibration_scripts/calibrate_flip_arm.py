@@ -177,7 +177,7 @@ if __name__ == "__main__":
     daq_config_fname = config_reader.get_daq_config_fname()
     daq_reader = DaqReader(daq_config_fname)
     daq: DAQController = daq_reader.load_daq_controller()
-    daq.continuousOutput = True
+    daq.continuous_output = True
 
     freq_channel = 3
     daq.update_channel_value(int(freq_channel), 3.7409093554844883)  # need to set correct freq

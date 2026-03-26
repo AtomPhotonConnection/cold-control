@@ -6,6 +6,7 @@ Authors: Jan Ole Ernst, Matt King
 Date: 23 June 2025
 """
 
+import logging
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,6 +14,8 @@ import matplotlib.pylab as plt
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
+
+logger = logging.getLogger(__name__)
 
 
 class RabiFreqVoltageConverter:
@@ -30,7 +33,7 @@ class RabiFreqVoltageConverter:
         #   parts[-2] = direct parent
         #   parts[-3] = grandparent
         parent_two = parts[-3:-1]
-        print(f"Loaded calibration for: {'/'.join(parent_two)}")
+        logger.info("Loaded calibration for: %s", "/".join(parent_two))
 
         # Extract amplitude (x) and Rabi frequency (y)
         self.x = np.asarray(self.df["amplitude_cal"].values, dtype=float)
@@ -105,7 +108,7 @@ class RabiFreqVoltageConverter:
         input:
         rabi: Rabi frequency in MHz (not normalised to angular CG)
         """
-        print(f"Rabi frequency limits are {self.get_rabi_limits(print_info=False)}")
+        logger.info("Rabi frequency limits are %s", self.get_rabi_limits(print_info=False))
         rabi = rabi / np.abs(self.cg)
         if not (self.min_rabi <= rabi <= self.max_rabi):
             raise ValueError(
@@ -128,7 +131,7 @@ class RabiFreqVoltageConverter:
         df = pd.read_csv(csv_in, header=None)
 
         # Step 2: Normalize to [0, 1]
-        values = df.iloc[0].values.astype(float)
+        values = np.asarray(df.iloc[0].values, dtype=float)
         if normalised:
             norm_values = values
         elif (np.max(values) - np.min(values)) == 0:  # Avoid division by zero
@@ -143,19 +146,18 @@ class RabiFreqVoltageConverter:
         rescaled_df = pd.DataFrame([rescaled])
         rescaled_df.to_csv(csv_out, index=False, header=False)
 
-        print(f"Processed data saved to: {csv_out}")
+        logger.info("Processed data saved to: %s", csv_out)
 
     def get_rabi_limits(self, print_info=True):
         act_max = np.abs(self.max_rabi * self.cg) / (2 * np.pi)
         act_min = np.abs(self.min_rabi * self.cg) / (2 * np.pi)
 
         if print_info:
-            print(
+            logger.info(
                 "The maximum and minimum values for the transition normalised Rabi frequency are: "
             )
-            print(f"Max: {self.max_rabi}, Min: {self.min_rabi}")
-
-            print("This corresponds to actual Rabi frequencies of:")
-            print(f"Max: {act_max}, Min: {act_min}")
+            logger.info("Max: %s, Min: %s", self.max_rabi, self.min_rabi)
+            logger.info("This corresponds to actual Rabi frequencies of:")
+            logger.info("Max: %s, Min: %s", act_max, act_min)
 
         return (act_max, act_min)

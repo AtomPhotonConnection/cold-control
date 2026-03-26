@@ -17,6 +17,7 @@ import re
 import shutil
 import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from itertools import product
 from pathlib import Path
@@ -24,10 +25,30 @@ from typing import Any, cast
 
 import numpy as np
 
+from classes.daq import DAQChannel
 from classes.daq_sequence import DaqSequence
 from classes.rabi_voltage_converter import RabiFreqVoltageConverter
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "AbsorbtionImagingConfiguration",
+    "AbsorptionImagingConfiguration",
+    "AwgConfiguration",
+    "CameraConfiguration",
+    "ExperimentSessionConfig",
+    "GenericConfiguration",
+    "MotFluoresceConfiguration",
+    "MotFluoresceConfigurationSweep",
+    "MotFluorescenceAlignmentConfiguration",
+    "PhotonProductionConfiguration",
+    "ScopeConfiguration",
+    "SingleExperimentConfig",
+    "TdcConfiguration",
+    "Waveform",
+    "make_property",
+    "sanitize_filename",
+]
 
 
 def make_property(attr_name):
@@ -43,6 +64,34 @@ def sanitize_filename(name: str) -> str:
     name = Path(name).stem
     # Remove all non-alphanumeric or underscore characters
     return re.sub(r"[^A-Za-z0-9_]+", "_", name)
+
+
+@dataclass
+class CameraConfiguration:
+    """Typed container for camera settings, replacing the raw ``cam_dict``.
+
+    Attributes
+    ----------
+    cam_exposure : int
+        Camera exposure parameter (1/x seconds).
+    cam_gain : int
+        Camera gain setting.
+    camera_trig_ch : int
+        DAQ channel number for the camera trigger.
+    camera_trig_levs : tuple[float, ...]
+        Trigger voltage levels for the camera.
+    camera_pulse_width : float
+        Width of the camera trigger pulse in microseconds.
+    save_images : bool
+        Whether to save captured images to disk.
+    """
+
+    cam_exposure: int
+    cam_gain: int
+    camera_trig_ch: int
+    camera_trig_levs: tuple[float, ...]
+    camera_pulse_width: float
+    save_images: bool = True
 
 
 class Waveform:
@@ -86,8 +135,10 @@ class Waveform:
         # Infer modulated flag when not explicitly provided
         if modulated is None:
             self.__modulated = mod_frequency != 0.0
-            print(
-                f"WARNING: Modulated flag not provided for waveform '{fname}'; inferred as {self.__modulated} based on mod_frequency."
+            logger.warning(
+                "Modulated flag not provided for waveform '%s'; inferred as %s based on mod_frequency.",
+                fname,
+                self.__modulated,
             )
         else:
             self.__modulated = modulated
@@ -378,7 +429,7 @@ class AwgConfiguration:
 
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
+        logger.debug("Setting waveform sequence to %s %s", value, [type(x) for x in value])
         self._waveform_sequence = value
 
     @waveform_sequence.deleter
@@ -459,11 +510,11 @@ class ExperimentSessionConfig:
 
     def __init__(
         self,
-        save_location,
-        summary_fname,
-        automated_experiment_configurations,
-        daq_channel_update_steps,
-        daq_channel_update_delay,
+        save_location: str,
+        summary_fname: str,
+        automated_experiment_configurations: list[SingleExperimentConfig],
+        daq_channel_update_steps: float,
+        daq_channel_update_delay: float,
     ):
 
         self._save_location = save_location
@@ -487,9 +538,9 @@ class GenericConfiguration:
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
     ):
 
         self._save_location = save_location
@@ -529,13 +580,13 @@ class MotFluoresceConfiguration(GenericConfiguration):
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
         scope_config: ScopeConfiguration | None = None,
         awg_config: AwgConfiguration | None = None,
         awg_config_path: str | None = None,
-        cam_dict: dict | None = None,
+        cam_dict: CameraConfiguration | dict | None = None,
         sequence_config_path: str | None = None,
         background_mode: bool = False,
         background_iterations: int | None = None,
@@ -560,21 +611,23 @@ class MotFluoresceConfiguration(GenericConfiguration):
         self.use_cam = cam_dict is not None
 
         if self.use_cam:
-            cam_dict = cast(dict, cam_dict)
-            self.cam_exposure = cam_dict["cam_exposure"]
-            self.cam_gain = cam_dict["cam_gain"]
-            self.camera_trigger_channel = cam_dict["camera_trig_ch"]
-            self.camera_trigger_level = cam_dict["camera_trig_levs"]
-            self.camera_pulse_width = cam_dict["camera_pulse_width"]
-            self.save_images = cam_dict["save_images"]
+            if isinstance(cam_dict, dict):
+                cam_dict = CameraConfiguration(**cam_dict)
+            cam_config = cast(CameraConfiguration, cam_dict)
+            self.cam_exposure = cam_config.cam_exposure
+            self.cam_gain = cam_config.cam_gain
+            self.camera_trigger_channel = cam_config.camera_trig_ch
+            self.camera_trigger_level = cam_config.camera_trig_levs
+            self.camera_pulse_width = cam_config.camera_pulse_width
+            self.save_images = cam_config.save_images
         else:
-            print("No camera will be used.")
+            logger.info("No camera will be used.")
 
         if not self.use_scope:
-            print("No scope will be used.")
+            logger.info("No scope will be used.")
 
         if not self.use_awg:
-            print("No AWG will be used.")
+            logger.info("No AWG will be used.")
 
     # ------------------------------------------------------------------
     # Backward-compatible property aliases for scope settings.
@@ -651,18 +704,17 @@ class MotFluoresceConfigurationSweep:
         self.base_sequence = base_sequence
         self.sweep_type = sweep_type
         self.sweep_params = sweep_params
-        # print(self.sweep_params)
         self.num_shots = num_shots
 
         now = datetime.now()
         self.current_date = now.strftime("%Y-%m-%d")
         self.current_time = now.strftime("%H-%M-%S")
-        print(f"[DEBUG] date: {self.current_date}")
-        print(f"[DEBUG] time: {self.current_time}")
+        logger.debug("date: %s", self.current_date)
+        logger.debug("time: %s", self.current_time)
 
         self.configs: list[MotFluoresceConfiguration] = []
         self.sequences: list[DaqSequence] = []
-        print("Creating all MOT fluorescence configurations for the sweep...")
+        logger.info("Creating all MOT fluorescence configurations for the sweep...")
 
         if sweep_type == "awg_sequence":
             wave_idxs = self.sweep_params["waveform_indices"]
@@ -826,6 +878,14 @@ class MotFluoresceConfigurationSweep:
                 self.sequences.append(new_sequence)
 
     def __configure_imaging_sweep(self, beam_powers, beam_frequencies, pulse_lengths, pulse_times):
+        """Configure the imaging sweep experiment.
+
+        The DAQ channel numbers for the frequency and power channels can be
+        overridden via ``sweep_params``:
+
+        * ``sweep_params["freq_channel"]`` - DAQ channel for frequency (default 2)
+        * ``sweep_params["power_channel"]`` - DAQ channel for power (default 6)
+        """
         to_sweep = []
         if len(beam_powers) > 1:
             to_sweep.append("beam_powers")
@@ -835,7 +895,7 @@ class MotFluoresceConfigurationSweep:
             to_sweep.append("pulse_lengths")
         if len(pulse_times) > 1:
             to_sweep.append("pulse_times")
-        print(f"Sweeping over the following parameters: {to_sweep}")
+        logger.info("Sweeping over the following parameters: %s", to_sweep)
 
         for i in range(self.num_shots):
             for power, freq, length, time in product(
@@ -866,9 +926,9 @@ class MotFluoresceConfigurationSweep:
                     / f"shot{i}"
                 )
 
-                # Modifies the sequence
-                freq_ch = 2  # These values shouldn't be hardcoded
-                power_ch = 6
+                # Channel numbers come from sweep params or fall back to defaults
+                freq_ch = self.sweep_params.get("freq_channel", 2)
+                power_ch = self.sweep_params.get("power_channel", 6)
                 new_sequence.update_channel(
                     freq_ch,
                     [
@@ -879,7 +939,7 @@ class MotFluoresceConfigurationSweep:
                     ],
                 )
                 tv_pairs = list(new_sequence.get_tv_pairs(power_ch))
-                print(f"The old tv pairs for the imaging channel are: {tv_pairs}")
+                logger.debug("The old tv pairs for the imaging channel are: %s", tv_pairs)
                 # HACK to change the correct power value and pulse length
                 # img_start_tv = tv_pairs[2]  # This is a tuple representing a time voltage pair
                 img_end_tv = tv_pairs[3]
@@ -887,7 +947,7 @@ class MotFluoresceConfigurationSweep:
                 new_end_tv = (time + length, img_end_tv[1])
                 tv_pairs[2] = new_start_tv
                 tv_pairs[3] = new_end_tv
-                print(f"The new tv pairs for the imaging channel are: {tv_pairs}")
+                logger.debug("The new tv pairs for the imaging channel are: %s", tv_pairs)
                 new_vint_styles = new_sequence.get_v_interval_styles(power_ch)
                 new_sequence.update_channel(power_ch, tv_pairs, new_vint_styles)
 
@@ -950,22 +1010,22 @@ class PhotonProductionConfiguration(GenericConfiguration):
 
     def __init__(
         self,
-        save_location,
-        mot_reload,
-        iterations,
-        waveform_sequence,
-        waveforms,
-        interleave_waveforms,
-        waveform_stitch_delays,
-        awg_configuration,
-        tdc_configuration,
+        save_location: str,
+        mot_reload: float,
+        iterations: int,
+        waveform_sequence: list[list[int]],
+        waveforms: dict[int, Waveform],
+        interleave_waveforms: bool | None,
+        waveform_stitch_delays: tuple | None,
+        awg_configuration: AwgConfiguration,
+        tdc_configuration: TdcConfiguration,
     ):
 
         super().__init__(save_location, mot_reload, iterations)
 
         self._waveform_sequence = waveform_sequence
         self.waveforms: dict[int, Waveform] = waveforms
-        self.interleave_waveforms: bool = interleave_waveforms
+        self.interleave_waveforms: bool | None = interleave_waveforms
         self.waveform_stitch_delays = waveform_stitch_delays
 
         self._awg_configuration: AwgConfiguration = awg_configuration
@@ -978,7 +1038,7 @@ class PhotonProductionConfiguration(GenericConfiguration):
 
     @waveform_sequence.setter
     def waveform_sequence(self, value):
-        print("Setting waveform sequence to", value, [type(x) for x in value])
+        logger.debug("Setting waveform sequence to %s %s", value, [type(x) for x in value])
         self._waveform_sequence = value
 
     @waveform_sequence.deleter
@@ -989,27 +1049,27 @@ class PhotonProductionConfiguration(GenericConfiguration):
     tdc_configuration = make_property("_tdc_configuration")
 
 
-class AbsorbtionImagingConfiguration(GenericConfiguration):
+class AbsorptionImagingConfiguration(GenericConfiguration):
     """
-    This object stores and presents for editing the settings for absorbtion imaging experiments.
+    This object stores and presents for editing the settings for absorption imaging experiments.
 
         scan_abs_img_freq - TODO
         abs_img_freq_ch - TODO
         abs_img_freqs - TODO
         camera_trig_ch, imag_power_ch - The DAQ channels that trigger the camera and control the imaging light power.
-        camera_pulse_width, imag_pulse_width - How long to make the trigger pulse and absorbtion imaging flash in microseconds.
+        camera_pulse_width, imag_pulse_width - How long to make the trigger pulse and absorption imaging flash in microseconds.
         t_imgs - The times at which to take images (in microseconds where 0 is the beginning of the sequence).
         mot_reload_time - The MOT reload time in ms
         bkg_off_channels - A list of channels (specified by channel number) to turn off during background pictures.
-        n_backgrounds - The number of background images to take for each absorbtion image.
+        n_backgrounds - The number of background images to take for each absorption image.
         cam_gain - The gain setting for the camera when taking the picture.
         cam_exposure - How long the camera exposure should be.  Passes as an integer x which corresponds to an exposure time of 1/x seconds.
         save_location - The folder to save images to as 'save_location/{date}/{time}/'
-        save_raw_images - Boolean determining whether the raw images (i.e. processed absorbtion images and all background contributing to
+        save_raw_images - Boolean determining whether the raw images (i.e. processed absorption images and all background contributing to
                           the background average) are saved.
-        save_processed_images - Boolean determining whether the processed images (i.e. absorbtion images after background subtraction and
+        save_processed_images - Boolean determining whether the processed images (i.e. absorption images after background subtraction and
                                 average backgrounds) are automatically saved.
-        review_processed_images - Boolean determining whether the Absorbtion_imaging_review_UI is launched after the images are processed
+        review_processed_images - Boolean determining whether the Absorption_imaging_review_UI is launched after the images are processed
                                   to allow the user to review the images, add notes and decide whether to save or not. Note that since the
                                   user is given the chance to review the processed images, the option to automatically save them is disabled
                                   when review_processed_images=True.
@@ -1054,7 +1114,7 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
         self.t_imgs = t_imgs
         self.mot_reload_time = mot_reload
         self.n_backgrounds = n_backgrounds
-        self.bkg_off_channels = bkg_off_channels
+        self.bkg_off_channels: list[DAQChannel] = bkg_off_channels
         self.cam_gain = cam_gain
         self.cam_exposure = cam_exposure
         self.cam_gain_lims = cam_gain_lims
@@ -1063,6 +1123,10 @@ class AbsorbtionImagingConfiguration(GenericConfiguration):
         self.save_raw_images = save_raw_images
         self.save_processed_images = save_processed_images
         self.review_processed_images = review_processed_images
+
+
+# Backward-compatible alias for the old misspelling
+AbsorbtionImagingConfiguration = AbsorptionImagingConfiguration
 
 
 class SingleExperimentConfig(GenericConfiguration):
@@ -1082,20 +1146,20 @@ class SingleExperimentConfig(GenericConfiguration):
 
     def __init__(
         self,
-        daq_channel_static_values,
-        sequence_fname,
-        sequence,
-        iterations,
-        mot_reload,
-        modulation_frequencies,
-        save_location=None,
+        daq_channel_static_values: list[tuple[int, float]],
+        sequence_fname: str,
+        sequence: DaqSequence,
+        iterations: int,
+        mot_reload: float,
+        modulation_frequencies: list[float],
+        save_location: str | None = None,
     ):
 
         self._daq_channel_static_values = daq_channel_static_values
         self._sequence_fname = sequence_fname
         self._sequence = sequence
         self._modulation_frequencies = modulation_frequencies
-        super().__init__(save_location, mot_reload, iterations)
+        super().__init__(cast(str, save_location), mot_reload, iterations)
 
     daq_channel_static_values = make_property("_daq_channel_static_values")
     sequence_fname = make_property("_sequence_fname")

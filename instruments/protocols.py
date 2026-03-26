@@ -20,6 +20,14 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import pandas as pd
 
+from classes.daq import DAQChannel
+
+__all__ = [
+    "AWGProtocol",
+    "DAQControllerProtocol",
+    "OscilloscopeProtocol",
+]
+
 # ---------------------------------------------------------------------------
 #  Oscilloscope
 # ---------------------------------------------------------------------------
@@ -136,7 +144,10 @@ class DAQControllerProtocol(Protocol):
     def update_channel_value(self, ch_num: int, new_value: float) -> None: ...
     def get_channel_values(self) -> np.ndarray: ...
 
-    def get_channels(self, only_visible: bool = ...) -> list: ...
+    def get_channels(self, only_visible: bool = ...) -> list[DAQChannel]: ...
     def get_dios(self) -> list: ...
+
+    def get_channel_number_name_dict(self, only_visible: bool = ...) -> dict: ...
+    def get_channel_calibration_dict(self) -> dict: ...
 
     def toggle_continuous_output(self) -> None: ...

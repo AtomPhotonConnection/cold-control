@@ -7,6 +7,7 @@ Updated 28/02/2026 — migrated to AWGManager and OscilloscopeManager classes.
 @author: Marina Llano
 """
 
+import ast
 import time
 
 import matplotlib.pylab as plt
@@ -31,7 +32,7 @@ def to_bool(string):
 
 def setup_awg(config):
     """Configures the AWG and returns the AwgConfiguration and PhotonProductionConfiguration."""
-    waveform_sequence = list(eval(config["waveform sequence"]))
+    waveform_sequence = list(ast.literal_eval(config["waveform sequence"]))
 
     waveforms: dict[int, Waveform] = {}
     for key, v in config["waveforms"].items():
@@ -44,7 +45,7 @@ def setup_awg(config):
         )
 
     marker_width_raw = config["AWG"].get("marker width")
-    marker_width_samps = int(eval(marker_width_raw)) if marker_width_raw else None
+    marker_width_samps = int(ast.literal_eval(marker_width_raw)) if marker_width_raw else None
 
     awg_config = AwgConfiguration(
         waveform_sequence=waveform_sequence,
@@ -59,14 +60,14 @@ def setup_awg(config):
     )
 
     tdc_config = TdcConfiguration(
-        counter_channels=[int(eval(ch)) for ch in config["TDC"]["counter channels"]],
+        counter_channels=[int(ast.literal_eval(ch)) for ch in config["TDC"]["counter channels"]],
         marker_channel=int(config["TDC"]["marker channel"]),
         timestamp_buffer_size=int(config["TDC"]["timestamp buffer size"]),
     )
 
     photon_production_config = PhotonProductionConfiguration(
         save_location=config["save location"],
-        mot_reload=eval(config["mot reload"]),
+        mot_reload=ast.literal_eval(config["mot reload"]),
         iterations=int(config["iterations"]),
         waveform_sequence=waveform_sequence,
         waveforms=waveforms,
