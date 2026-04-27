@@ -17,12 +17,23 @@ from PIL import Image, ImageTk
 
 import UI_classes.ToolTip_UI as tooltip
 from classes.config_readers import DaqReader
-from classes.daq import DAQChannel, DAQController
+from classes.daq import DAQChannel, DAQController, DAQInputChannel
 from UI_classes.UI_helpers import ImageButton, arrow_key_increment
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Analogue input display configuration
+# ---------------------------------------------------------------------------
+# List the AI channel numbers to show in the "Analogue inputs" panel.
+# Set to an empty list [] to hide the panel entirely.
+# Example: AI_DISPLAY_CHANNELS = [0, 1, 2, 3]
+AI_DISPLAY_CHANNELS: list[int] = []
+
+# How often to refresh the AI readings in the UI (milliseconds).
+AI_POLL_INTERVAL_MS: int = 500
 
 
 class DaqUI(tk.Frame):
@@ -132,6 +143,15 @@ class DaqUI(tk.Frame):
         self.Frame_Channels.pack(side=tk.TOP, fill=tk.X)
         self.Frame_DIOs.pack(side=tk.BOTTOM, fill=tk.X)
 
+        # Analogue input readings panel (only shown when AI_DISPLAY_CHANNELS is set)
+        if AI_DISPLAY_CHANNELS:
+            self.Frame_AI = tk.LabelFrame(self, text="Analogue inputs", font=font)
+            self.aiReadingFrame = AiReadingFrame(
+                self.Frame_AI, self.daq_controller, AI_DISPLAY_CHANNELS, font=font
+            )
+            self.aiReadingFrame.pack(fill=tk.X, padx=5, pady=5)
+            self.Frame_AI.pack(side=tk.BOTTOM, fill=tk.X)
+
     def update_for_new_daq_config(self):
         for ch_frame in self.channelFrames:
             ch_frame.reload()
@@ -152,6 +172,91 @@ class DaqUI(tk.Frame):
             """TODO : NOT WORKING"""
             if self.daq_controller.continuous_output:
                 self.daq_controller.write_channel_values()
+
+
+class AiReadingFrame(tk.Frame):
+    """Polls and displays analogue input channel readings.
+
+    Channels to display are specified by the ``AI_DISPLAY_CHANNELS``
+    module-level variable.  Readings refresh every ``AI_POLL_INTERVAL_MS``
+    milliseconds.  Labels turn red on read error.
+    """
+
+    def __init__(
+        self,
+        parent,
+        daq_controller,
+        channel_nums: list[int],
+        font=("Helvetica", 16),
+    ):
+        tk.Frame.__init__(self, parent)
+        self._controller = daq_controller
+        self._channel_nums = channel_nums
+        self._value_labels: dict[int, tk.Label] = {}
+        self._unit_labels: dict[int, tk.Label] = {}
+        self._after_id = None
+
+        label_font = (font[0], 12) if isinstance(font, tuple) else font
+        value_font = (font[0], 12, "bold") if isinstance(font, tuple) else font
+
+        ai_channels_map: dict[int, DAQInputChannel] = {
+            ch.chNum: ch for ch in daq_controller.get_ai_channels()
+        }
+
+        for r, ch_num in enumerate(channel_nums):
+            ai_ch = ai_channels_map.get(ch_num)
+            name = ai_ch.chName if ai_ch else f"AI Ch {ch_num}"
+            units = (ai_ch.calibrationUnits if (ai_ch and ai_ch.isCalibrated) else "V")
+
+            tk.Label(self, text=name, width=22, anchor="w", font=label_font).grid(
+                row=r, column=0, padx=5, pady=2, sticky=tk.W
+            )
+            val_lbl = tk.Label(
+                self,
+                text="---",
+                width=10,
+                anchor="e",
+                font=value_font,
+                relief=tk.SUNKEN,
+                bg="white",
+            )
+            val_lbl.grid(row=r, column=1, padx=5, pady=2, sticky=tk.E + tk.W)
+            unit_lbl = tk.Label(self, text=units, width=6, anchor="w", font=label_font)
+            unit_lbl.grid(row=r, column=2, padx=(0, 5), pady=2, sticky=tk.W)
+
+            self._value_labels[ch_num] = val_lbl
+            self._unit_labels[ch_num] = unit_lbl
+
+            if ai_ch is not None:
+                tooltip.create_tool_tip(val_lbl, ai_ch.get_help_text(), open_delay=2000)
+
+        self.grid_columnconfigure(1, weight=1)
+        self._poll()
+
+    def _poll(self) -> None:
+        """Read each displayed channel and update its label."""
+        ai_channels_map: dict[int, DAQInputChannel] = {
+            ch.chNum: ch for ch in self._controller.get_ai_channels()
+        }
+        for ch_num, val_lbl in self._value_labels.items():
+            try:
+                voltage = self._controller.read_ai_channel(ch_num)
+                ai_ch = ai_channels_map.get(ch_num)
+                if ai_ch is not None:
+                    display_val, units = ai_ch.get_display_value(voltage)
+                else:
+                    display_val, units = voltage, "V"
+                val_lbl.configure(text=f"{display_val:.4f}", bg="white")
+                self._unit_labels[ch_num].configure(text=units)
+            except Exception:
+                val_lbl.configure(text="ERROR", bg="#ffcccc")
+        self._after_id = self.after(AI_POLL_INTERVAL_MS, self._poll)
+
+    def stop_polling(self) -> None:
+        """Cancel periodic polling.  Call before destroying the widget."""
+        if self._after_id is not None:
+            self.after_cancel(self._after_id)
+            self._after_id = None
 
 
 class FrameDAQChannel(tk.Frame):

@@ -36,7 +36,7 @@ class DummyDAQController:
     Stores channel state in memory and prints writes to stdout.
     """
 
-    def __init__(self, channels: list, dios: list | None = None, continuous_output: bool = False):
+    def __init__(self, channels: list, dios: list | None = None, ai_channels: list | None = None, continuous_output: bool = False):
         """
         Parameters
         ----------
@@ -52,6 +52,9 @@ class DummyDAQController:
         self.channels = list(channels)
         self.dios = list(dios) if dios else []
         self.continuous_output = continuous_output
+
+        # Analogue input channels (metadata only — reads return 0.0 in dummy mode)
+        self.ai_channels = list(ai_channels) if ai_channels else []
 
         # Build the same channelValues dict as the real controller
         self.channelValues: dict[int, float] = {ch.chNum: ch.defaultValue for ch in self.channels}
@@ -163,6 +166,26 @@ class DummyDAQController:
                     ch.calibrationFromVFunc,
                 )
         return result
+
+    # -- analogue input (read-only, returns 0.0 in dummy mode) --
+
+    def get_ai_channels(self, only_visible: bool = False) -> list:
+        """Return registered AI channel metadata objects."""
+        if only_visible:
+            return [ch for ch in self.ai_channels if ch.isUIVisible]
+        return list(self.ai_channels)
+
+    def read_ai_channel(self, ch_num: int) -> float:
+        """Return 0.0 (no hardware in dummy mode)."""
+        _log.debug("[DummyDAQ] read_ai_channel %d → 0.0 V (dummy)", ch_num)
+        return 0.0
+
+    def read_ai_channels(self, ch_nums: list[int] | None = None) -> dict[int, float]:
+        """Return 0.0 for every channel (no hardware in dummy mode)."""
+        if ch_nums is None:
+            ch_nums = [ch.chNum for ch in self.ai_channels]
+        _log.debug("[DummyDAQ] read_ai_channels %s → 0.0 V each (dummy)", ch_nums)
+        return {n: 0.0 for n in ch_nums}
 
 
 # ---------------------------------------------------------------------------
