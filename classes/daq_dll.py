@@ -13,6 +13,7 @@ Created on 2 Apr 2016. Revised 8 Jan 2025. Split out Feb 2026.
 @author: tombarrett
 """
 
+import logging
 from ctypes import (
     POINTER,
     WinDLL,
@@ -26,7 +27,6 @@ from ctypes import (
     c_ushort,
     c_void_p,
 )
-import logging
 
 import numpy as np
 
