@@ -924,6 +924,7 @@ class DAQController:
             self.write_channel_values()
 
     def update_channel_value(self, ch_num, new_value):
+        logger.info("Updating DAQ channel %s to %s", ch_num, new_value)
         self.channelValues[ch_num] = new_value
         if self.continuous_output:
             # TODO : WHY DO I NEED THIS HACK???
@@ -935,6 +936,7 @@ class DAQController:
         Set a digital output line by its DIO number.
         Example: daq.update_dio(5, True)  # set DIO 5 high
         """
+        logger.info("Updating DIO %s to %s", dio_num, value)
         for dio in self.get_dios():
             if dio.dio_num == dio_num:
                 try:
@@ -946,6 +948,7 @@ class DAQController:
 
     def write_channel_values(self):
         # TODO : WHY DO I NEED THIS HACK???
+        logger.info("Writing current DAQ channel values")
         self._write_channel_values()
         self._write_channel_values()
 
@@ -957,6 +960,7 @@ class DAQController:
 
     def toggle_continuous_output(self):
         self.continuous_output = not self.continuous_output
+        logger.info("Continuous DAQ output set to %s", self.continuous_output)
         if self.continuous_output:
             self.write(np.array([[v] for _, v in sorted(self.channelValues.items())]))
         else:
@@ -1023,6 +1027,12 @@ class DAQController:
                 4. Stop the master card. (It's not yet clear if this step is essential.)
                 5. Wait for the slaves to finish if they are still playing.
                 6. Stop the slave cards."""
+        logger.info(
+            "DAQController.play t_step=%s clear_cards=%s buffer_id=%s",
+            t_step,
+            clear_cards,
+            buffer_id,
+        )
         for slave in self.slaves:
             slave.play(t_step)
         self.master.play(t_step)

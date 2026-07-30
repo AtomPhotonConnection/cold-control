@@ -63,6 +63,7 @@ class OscilloscopeManager:
         for attempt in range(retries):
             try:
                 self.scope = cast(MessageBasedResource, self.scope)
+                self._log.info("Scope write: %s", cmd)
                 self.scope.write(cmd)
                 self._delay()
                 return
@@ -80,8 +81,10 @@ class OscilloscopeManager:
         for attempt in range(retries):
             try:
                 self.scope = cast(MessageBasedResource, self.scope)
+                self._log.info("Scope query: %s", cmd)
                 resp = self.scope.query(cmd)
                 self._delay()
+                self._log.debug("Scope response: %s -> %s", cmd, resp.strip())
                 return resp
             except Exception as e:
                 last_exc = e
