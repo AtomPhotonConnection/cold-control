@@ -199,6 +199,11 @@ AD_U_2_V = 27
 AD_U_0_5_V = 28
 AD_U_0_4_V = 29
 
+# Default voltage range for all analogue input (AI) channels.
+# Change this constant to use a different range globally.
+# Example alternatives: AD_B_5_V (±5 V), AD_U_10_V (0 → +10 V).
+AI_DEFAULT_AD_RANGE: int = AD_B_10_V
+
 # DIO Port Direction
 INPUT_PORT = 1
 OUTPUT_PORT = 2
@@ -706,16 +711,118 @@ class DAQDio:
         return self.read()
 
 
+class DAQInputChannel:
+    """Stores metadata about a single analogue input (AI) channel on the DAQ card.
+
+    The DAQ-2502 card supports up to 16 single-ended AI channels.  Each channel
+    is read-only: it measures an external voltage on the physical connector.
+
+    Input mode note
+    ---------------
+    The default mode is RSE (Referenced Single-Ended): each channel voltage is
+    measured with respect to a common analogue ground (AGND).  This is the
+    simplest and most common configuration.  The alternative DIFF (differential)
+    mode pairs two physical channels to reject common-mode noise, halving the
+    available channel count; NRSE is a floating-source variant.
+    """
+
+    def __init__(
+        self,
+        ch_num: int,
+        ch_name: str = "",
+        ad_range: int = AI_DEFAULT_AD_RANGE,
+        input_mode: int = AI_RSE,
+        is_ui_visible: bool = True,
+    ):
+        self.chNum = ch_num
+        self.chName = ch_name.strip() if ch_name.strip() else f"AI Ch {ch_num}"
+        self.ad_range = ad_range
+        self.input_mode = input_mode
+        self.isUIVisible = is_ui_visible
+        self.isCalibrated = False
+        self.calibrationUnits = "V"
+        self.calibrationFromVFunc = None  # voltage → physical units
+        self.calibrationToVFunc = None    # physical units → voltage
+
+    def calibrate(self, calibration_fname: str) -> None:
+        """Apply a voltage-to-physical-units calibration from a CSV file.
+
+        The CSV should have two columns: voltage (V) as the first column and the
+        physical quantity as the second, with units in parentheses in the header
+        (e.g. ``Temperature (degC)``).
+        """
+        try:
+            df = pd.read_csv(calibration_fname)
+        except FileNotFoundError:
+            logger.error("Calibration file not found: %s", calibration_fname)
+            return
+        try:
+            voltage_col = df.columns[0]
+            data_col = df.columns[1]
+            units = str(data_col).split(" ")[-1].strip("()")
+        except IndexError:
+            logger.error("Invalid calibration file format: %s", calibration_fname)
+            return
+
+        self.calibrationUnits = units
+        v_data = np.asarray(df[voltage_col].values, dtype=float)
+        cal_data = np.asarray(df[data_col].values, dtype=float)
+        sorted_idx = np.argsort(v_data)
+        v_data = v_data[sorted_idx]
+        cal_data = cal_data[sorted_idx]
+
+        self.calibrationFromVFunc = lambda x: np.interp(x, v_data, cal_data)
+        self.calibrationToVFunc = lambda x: np.interp(x, cal_data, v_data)
+        self.isCalibrated = True
+        self.calibrationFname = calibration_fname
+
+    def remove_calibration(self) -> None:
+        """Remove any calibration, reverting the channel to reading in Volts."""
+        self.isCalibrated = False
+        self.calibrationFromVFunc = None
+        self.calibrationToVFunc = None
+        self.calibrationUnits = "V"
+
+    def get_display_value(self, voltage: float) -> tuple[float, str]:
+        """Convert a raw voltage to a display value and its units string.
+
+        Returns the calibrated value and units if a calibration is applied,
+        otherwise returns the raw voltage in Volts.
+        """
+        if self.isCalibrated and self.calibrationFromVFunc is not None:
+            return float(self.calibrationFromVFunc(voltage)), self.calibrationUnits
+        return voltage, "V"
+
+    def get_help_text(self) -> str:
+        mode_names = {
+            AI_RSE: "RSE (single-ended, referenced to AGND)",
+            AI_DIFF: "DIFF (differential)",
+            AI_NRSE: "NRSE (non-referenced single-ended)",
+        }
+        lines = [
+            f"DAQ analogue input channel: {self.chNum}",
+            f"Name: {self.chName}",
+            f"Input mode: {mode_names.get(self.input_mode, str(self.input_mode))}",
+        ]
+        if self.isCalibrated:
+            lines.append(f"Calibrated units: {self.calibrationUnits}")
+        else:
+            lines.append("No calibration applied (reads in Volts).")
+        return "\n".join(lines)
+
+
 class DAQCard(DAQ2502):  # type: ignore
     """A subclass of DAQ2502 to extend it's functionality to be more user friendly.  In particular the conversion of
     sequences from a user friendly format (arrays of voltages on channel in numeric order) to the form expected by the
     DAQ card is handled at this level."""
 
-    def __init__(self, card_number, channels=None, dios=None):
+    def __init__(self, card_number, channels=None, dios=None, ai_channels=None):
         if dios is None:
             dios = []
         if channels is None:
             channels = []
+        if ai_channels is None:
+            ai_channels = []
         DAQ2502.__init__(self, card_number)
         # Hard-coded limits - there are exactly 8 channels on the DAC card, each capable of outputting digital
         # values from 0 to 4095.<--> -/+10V.
@@ -742,6 +849,9 @@ class DAQCard(DAQ2502):  # type: ignore
         self.channels = self.validate_and_sort_channels(channels)
 
         self.dios = self.validate_and_register_digital_ios(dios)
+
+        # Analogue input channels (read-only; no hardware validation needed)
+        self.ai_channels: list[DAQInputChannel] = ai_channels
 
     def array_to_digital_values(self, sequence_array, req_ch_order=None):
         """Takes a numpy array denoting the desired voltages on each DAQ channel of the form:
@@ -889,6 +999,40 @@ class DAQCard(DAQ2502):  # type: ignore
                 )
 
         return registered_lines
+
+    # ------------------------------------------------------------------ #
+    #  Analogue Input                                                      #
+    # ------------------------------------------------------------------ #
+
+    def read_ai_voltage(self, ch_num: int) -> float:
+        """Read a single AI channel voltage.
+
+        Uses the ``ad_range`` configured on the matching ``DAQInputChannel``.
+        Falls back to ``AI_DEFAULT_AD_RANGE`` if no channel object is found.
+
+        Args:
+            ch_num: The analogue input channel number (0-indexed).
+
+        Returns:
+            Measured voltage in Volts.
+        """
+        ai_ch = next((ch for ch in self.ai_channels if ch.chNum == ch_num), None)
+        ad_range = ai_ch.ad_range if ai_ch is not None else AI_DEFAULT_AD_RANGE
+        return DAQ2502.read_ai_voltage(self, ch_num, ad_range=ad_range)
+
+    def read_ai_channels(self, ch_nums: list[int] | None = None) -> dict[int, float]:
+        """Read one or more AI channels on this card.
+
+        Args:
+            ch_nums: Channel numbers to read.  If ``None``, reads all
+                     ``DAQInputChannel`` objects registered on this card.
+
+        Returns:
+            Dictionary mapping channel number → voltage (V).
+        """
+        if ch_nums is None:
+            ch_nums = [ch.chNum for ch in self.ai_channels]
+        return {n: self.read_ai_voltage(n) for n in ch_nums}
 
 
 class DAQController:
@@ -1114,6 +1258,45 @@ class DAQController:
                 if ch.isCalibrated
             ]
         )
+
+    def get_ai_channels(self, only_visible: bool = False) -> list[DAQInputChannel]:
+        """Return a flat list of all ``DAQInputChannel`` objects across all cards."""
+        channels: list[DAQInputChannel] = functools.reduce(
+            operator.iadd,
+            [card.ai_channels for card in [self.master, *self.slaves]],
+            [],
+        )
+        if only_visible:
+            channels = [ch for ch in channels if ch.isUIVisible]
+        return channels
+
+    def read_ai_channel(self, ch_num: int) -> float:
+        """Read a single analogue input channel by its number, routing to the correct card.
+
+        Returns:
+            Voltage in Volts.
+
+        Raises:
+            ValueError: If no AI channel with that number is registered on any card.
+        """
+        for card in [self.master, *self.slaves]:
+            if any(ch.chNum == ch_num for ch in card.ai_channels):
+                return card.read_ai_voltage(ch_num)
+        raise ValueError(f"No AI channel with number {ch_num} registered on any card.")
+
+    def read_ai_channels(self, ch_nums: list[int] | None = None) -> dict[int, float]:
+        """Read one or more analogue input channels.
+
+        Args:
+            ch_nums: Channel numbers to read.  If ``None``, reads all
+                     registered ``DAQInputChannel`` objects across all cards.
+
+        Returns:
+            Dictionary mapping channel number → voltage (V).
+        """
+        if ch_nums is None:
+            ch_nums = [ch.chNum for ch in self.get_ai_channels()]
+        return {n: self.read_ai_channel(n) for n in ch_nums}
 
     def get_master(self):
         return self.__master

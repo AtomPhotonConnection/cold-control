@@ -1630,8 +1630,65 @@ class DAQ2502:
         self.n_samples = {}
 
     # Analog Input
+
+    def read_ai_voltage(self, ch_num: int, ad_range: int = AD_B_10_V) -> float:
+        """Read a single analogue input channel, returning the voltage in Volts.
+
+        The channel is configured with the given input range before each read.
+        ``D2K_AI_VReadChannel`` performs any necessary scaling and returns a
+        calibrated float directly from the DLL.
+
+        Args:
+            ch_num:   The analogue input channel number (0-indexed).
+            ad_range: One of the ``AD_*`` range constants (e.g. ``AD_B_10_V``
+                      for ±10 V).  Defaults to ``AD_B_10_V``.
+
+        Returns:
+            The measured voltage as a Python float.
+
+        Raises:
+            Daq2502Error: If any DLL call returns a non-zero error code.
+        """
+        err = dll.D2K_AI_CH_Config(self.card, ch_num, ad_range)
+        if err != 0:
+            raise Daq2502Error(
+                f"Error configuring AI channel {ch_num} on card {self.card}: "
+                f"{warning_code.get(err, err)}",
+                err,
+            )
+        voltage = F64(0.0)
+        err = dll.D2K_AI_VReadChannel(self.card, ch_num, byref(voltage))
+        if err != 0:
+            raise Daq2502Error(
+                f"Error reading AI channel {ch_num} on card {self.card}: "
+                f"{warning_code.get(err, err)}",
+                err,
+            )
+        return voltage.value
+
+    def read_ai_channels(
+        self, ch_nums: list[int], ad_range: int = AD_B_10_V
+    ) -> dict[int, float]:
+        """Read multiple analogue input channels.
+
+        Args:
+            ch_nums:  List of channel numbers to read.
+            ad_range: Voltage range constant applied to every channel.
+
+        Returns:
+            Dictionary mapping channel number → voltage (V).
+        """
+        return {ch: self.read_ai_voltage(ch, ad_range) for ch in ch_nums}
+
     def read(self):
-        # I16 D2K_AI_ScanReadChannels (U16 CardNumber, U16 NumChans, U16 *Chans, U16 *Buffer)
+        """Deprecated: use ``read_ai_voltage()`` or ``read_ai_channels()`` instead."""
+        import warnings
+
+        warnings.warn(
+            "DAQ2502.read() is deprecated. Use read_ai_voltage(ch_num) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         ad_ch = (U16 * 4)(0, 1, 2, 3)
         digital_values = np.zeros([4], I16)
         logger.debug("DAQ2502.read card=%s", self.card)
