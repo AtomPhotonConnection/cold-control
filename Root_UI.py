@@ -39,6 +39,7 @@ def setup_logging(env="prod"):
 
         # Apply the configuration
         logging.config.dictConfig(logging_config)
+        logging.getLogger("pyvisa").setLevel(logging.DEBUG)
         logging.info(f"Loaded {env} logging configuration from pyproject.toml.")
 
     except (FileNotFoundError, KeyError) as e:
@@ -87,9 +88,7 @@ class ColdControlUI(tk.Frame):
 
         self.master: tk.Misc = parent
 
-        self.config_reader = ConfigReader(
-            str(Path.cwd() / "configs" / "rootConfig.ini")
-        )
+        self.config_reader = ConfigReader(str(Path.cwd() / "configs" / "rootConfig.ini"))
         self.development_mode = self.config_reader.is_development_mode()
 
         self.master.wm_title("Cold Control Heavy")
@@ -98,9 +97,7 @@ class ColdControlUI(tk.Frame):
 
         """Load DAQ channels and cards from the config file.  Set up the DAQ_controller with these."""
         self.daq_config_fname = self.config_reader.get_daq_config_fname()
-        self.daq_UI = DaqUI(
-            self, self.daq_config_fname, development_mode=self.development_mode
-        )
+        self.daq_UI = DaqUI(self, self.daq_config_fname, development_mode=self.development_mode)
 
         """Load a sequence — prefer from experiment config, fall back to rootConfig."""
         self.experiment_config_fname = self.config_reader.get_experiment_config_fname()
@@ -153,9 +150,7 @@ class ColdControlUI(tk.Frame):
         grid_opts: dict[str, Any] = {"padx": 10, "pady": 10}
 
         self.title.grid(row=0, column=0, columnspan=3, **grid_opts)
-        self.daq_UI.grid(
-            row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **grid_opts
-        )
+        self.daq_UI.grid(row=1, column=1, columnspan=2, sticky=tk.N + tk.E + tk.W, **grid_opts)
         self.experimental_UI.grid(row=2, column=1, columnspan=2, sticky=tk.N)
         self.camera_UI.grid(row=1, column=0, sticky=tk.N + tk.E + tk.W)
         self.labbook_UI.grid(row=1, column=3, sticky=tk.N + tk.E + tk.W)

@@ -13,6 +13,7 @@ Created on 2 Apr 2016. Revised 8 Jan 2025. Split out Feb 2026.
 @author: tombarrett
 """
 
+import logging
 from ctypes import (
     POINTER,
     WinDLL,
@@ -28,6 +29,8 @@ from ctypes import (
 )
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Windows API data types
 BOOLEAN = c_ubyte
@@ -1535,7 +1538,7 @@ class DAQ2502:
         if self.card < 0:
             raise Exception(warning_code[self.card])
         else:
-            print("Registered card", card_number, "as card number", self.card)
+            logger.info("Registered DAQ card %s as card number %s", card_number, self.card)
 
         dll.D2K_AO_Group_Setup(self.card, DA_Group_AB, 8, da_ch)
         dll.D2K_AO_Config(
@@ -1544,12 +1547,15 @@ class DAQ2502:
 
     def release(self):
         dll.D2K_Release_Card(self.card)
-        print("Released card", self.card)
+        logger.info("Released DAQ card %s", self.card)
 
     # Analog Output
     def write(self, digital_values):
         # AO channels are in order [0, 1, 2, 3, 4, 5, 6, 7]
         # Speed test: 512 samples in 13 ms = 40 ksps
+        logger.debug(
+            "DAQ2502.write card=%s shape=%s", self.card, getattr(digital_values, "shape", None)
+        )
         dll.D2K_AO_Group_Update(self.card, DA_Group_AB, digital_values.ctypes.data_as(POINTER(I16)))
 
     def load(self, digital_values):
@@ -1558,6 +1564,13 @@ class DAQ2502:
         self.digital_values = digital_values
 
         n_samples, n_channels = digital_values.shape
+        logger.debug(
+            "DAQ2502.load card=%s shape=%s samples=%s channels=%s",
+            self.card,
+            digital_values.shape,
+            n_samples,
+            n_channels,
+        )
         if n_channels != self.numChs:
             print(
                 "WARNING: Trying to load",
@@ -1582,6 +1595,12 @@ class DAQ2502:
     def play(self, update_interval=40, buffer_id=None):
         if not buffer_id:
             buffer_id = self.last_buffer
+        logger.info(
+            "DAQ2502.play card=%s buffer_id=%s update_interval=%s",
+            self.card,
+            buffer_id,
+            update_interval,
+        )
         dll.D2K_AO_Group_WFM_Start(
             self.card, DA_Group_AB, buffer_id, 0, self.n_samples[buffer_id], 1, update_interval, 1
         )
@@ -1589,6 +1608,7 @@ class DAQ2502:
     def wait(self):
         write_finished = BOOLEAN(0)
         write_count = U32(0)
+        logger.debug("DAQ2502.wait card=%s", self.card)
         #         print write_finished.value
         while write_finished.value == 0:
             dll.D2K_AO_Group_WFM_AsyncCheck(self.card, DA_Group_AB, write_finished, write_count)
@@ -1597,6 +1617,7 @@ class DAQ2502:
 
     def stop(self):
         write_count = U32(0)
+        logger.info("DAQ2502.stop card=%s", self.card)
         dll.D2K_AO_Group_WFM_AsyncClear(
             self.card, DA_Group_AB, write_count, DAQ2K_DA_TerminateImmediate
         )
@@ -1604,6 +1625,7 @@ class DAQ2502:
     #         print write_count.value, "samples written in total on card", self.card
 
     def clear(self):
+        logger.debug("DAQ2502.clear card=%s", self.card)
         dll.D2K_AO_ContBufferReset(self.card)
         self.n_samples = {}
 
@@ -1669,6 +1691,7 @@ class DAQ2502:
         )
         ad_ch = (U16 * 4)(0, 1, 2, 3)
         digital_values = np.zeros([4], I16)
+        logger.debug("DAQ2502.read card=%s", self.card)
         dll.D2K_AI_ScanReadChannels(
             self.card, 4, ad_ch, digital_values.ctypes.data_as(POINTER(I16))
         )
@@ -1683,6 +1706,12 @@ class DAQ2502:
     #             raise Daq2502Exception('Error configuring the digital line', err)
 
     def configure_digital_port(self, port, direction):
+        logger.info(
+            "DAQ2502.configure_digital_port card=%s port=%s direction=%s",
+            self.card,
+            port,
+            direction,
+        )
         err = dll.D2K_DIO_PortConfig(self.card, port, direction)
         if err != 0:
             print(err)
@@ -1690,13 +1719,30 @@ class DAQ2502:
 
     # Digital output
     def write_digital_port(self, bit_values, port):
+        logger.info(
+            "DAQ2502.write_digital_port card=%s port=%s value=%s", self.card, port, bit_values
+        )
         dll.D2K_DO_WritePort(self.card, port, bit_values)
 
     def write_digital_line(self, port, line, state):
+        logger.info(
+            "DAQ2502.write_digital_line card=%s port=%s line=%s state=%s",
+            self.card,
+            port,
+            line,
+            state,
+        )
         dll.D2K_DO_WriteLine(self.card, port, line, state)
 
     def read_digital_line(self, port, line, direction):
         state = U16(2)
+        logger.debug(
+            "DAQ2502.read_digital_line card=%s port=%s line=%s direction=%s",
+            self.card,
+            port,
+            line,
+            direction,
+        )
 
         if direction == OUTPUT_LINE:
             dll.D2K_DO_ReadLine(self.card, port, line, byref(state))
