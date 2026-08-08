@@ -326,7 +326,11 @@ class AbsorptionImagingExperiment(GenericExperiment):
                 next(
                     ch.chLimits[1]
                     if not ch.isCalibrated
-                    else ch.calibrationFromVFunc(ch.chLimits[1])  # type:ignore
+                    else (
+                        ch.calibration.from_voltage(ch.chLimits[1])
+                        if getattr(ch, "calibration", None) is not None
+                        else ch.chLimits[1]
+                    )  # type:ignore
                     for ch in daq_controller.get_channels()
                     if ch.chNum == c.camera_trig_ch
                 ),
@@ -337,7 +341,11 @@ class AbsorptionImagingExperiment(GenericExperiment):
                 next(
                     ch.chLimits[1]
                     if not ch.isCalibrated
-                    else ch.calibrationFromVFunc(ch.chLimits[1])  # type:ignore
+                    else (
+                        ch.calibration.from_voltage(ch.chLimits[1])
+                        if getattr(ch, "calibration", None) is not None
+                        else ch.chLimits[1]
+                    )  # type:ignore
                     for ch in daq_controller.get_channels()
                     if ch.chNum == c.imag_power_ch
                 ),
@@ -1882,8 +1890,8 @@ class ExperimentalAutomationRunner:
             return
 
         start_val = self.daq_controller.channelValues[channel_number]
-        if channel.isCalibrated:
-            start_val = channel.calibrationFromVFunc(start_val)  # type: ignore
+        if channel.isCalibrated and getattr(channel, "calibration", None) is not None:
+            start_val = channel.calibration.from_voltage(start_val)  # type: ignore
 
         logger.info(
             f"Updating channel {channel_number} from {start_val} to {float(new_val)}",
@@ -1894,7 +1902,7 @@ class ExperimentalAutomationRunner:
         ):
             self.daq_controller.update_channel_value(
                 channel.chNum,
-                val if not channel.isCalibrated else channel.calibrationToVFunc(val),  # type: ignore
+                val if not channel.isCalibrated else channel.calibration.to_voltage(val),  # type: ignore
             )
             time.sleep(self.experimental_automation_configuration.daq_channel_update_delay)
             logger.debug(".")
@@ -1930,7 +1938,11 @@ class ExperimentalAutomationRunner:
                         ch_num,
                         orig_val
                         if not channel.isCalibrated
-                        else channel.calibrationFromVFunc(orig_val),  # type: ignore
+                        else (
+                            channel.calibration.from_voltage(orig_val)
+                            if getattr(channel, "calibration", None) is not None
+                            else orig_val
+                        ),  # type: ignore
                     )
                 )
 

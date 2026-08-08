@@ -206,7 +206,7 @@ class AiReadingFrame(tk.Frame):
         for r, ch_num in enumerate(channel_nums):
             ai_ch = ai_channels_map.get(ch_num)
             name = ai_ch.chName if ai_ch else f"AI Ch {ch_num}"
-            units = (ai_ch.calibrationUnits if (ai_ch and ai_ch.isCalibrated) else "V")
+            units = ai_ch.calibrationUnits if (ai_ch and ai_ch.isCalibrated) else "V"
 
             tk.Label(self, text=name, width=22, anchor="w", font=label_font).grid(
                 row=r, column=0, padx=5, pady=2, sticky=tk.W
@@ -351,16 +351,21 @@ class DaqChannelEntry(tk.Entry):
         self.controller = daq_controller
         self.channel = daq_channel
 
-        self.chLimits = (
-            self.channel.chLimits
-            if not self.channel.isCalibrated
-            else sorted(self.channel.calibrationFromVFunc(self.channel.chLimits))
-        )
-        self.defaultValue = (
-            self.channel.defaultValue
-            if not self.channel.isCalibrated
-            else self.channel.calibrationFromVFunc(self.channel.defaultValue)
-        )
+        if not self.channel.isCalibrated or getattr(self.channel, "calibration", None) is None:
+            self.chLimits = tuple(self.channel.chLimits)
+            self.defaultValue = float(self.channel.defaultValue)
+        else:
+            try:
+                self.chLimits = tuple(sorted(self.channel.calibration.range_in_units()))
+                self.defaultValue = float(
+                    self.channel.calibration.from_voltage(self.channel.defaultValue)
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to compute display limits for channel %s", self.channel.chNum
+                )
+                self.chLimits = tuple(self.channel.chLimits)
+                self.defaultValue = float(self.channel.defaultValue)
         if not self.chLimits[0] <= self.defaultValue <= self.chLimits[1]:
             logger.warning(
                 "Default value for DAQ channel of %s is not within set limits of %s. "
@@ -413,12 +418,17 @@ class DaqChannelEntry(tk.Entry):
         if flash_col:
             self.flash(flash_col)
         # Update channel value (after converting it to a voltage if the channel is calibrated)
-        self.controller.update_channel_value(
-            self.channel.chNum,
-            self.chValue
-            if not self.channel.isCalibrated
-            else self.channel.calibrationToVFunc(self.chValue),
-        )
+        voltage = self.chValue
+        if self.channel.isCalibrated and getattr(self.channel, "calibration", None) is not None:
+            try:
+                voltage = float(self.channel.calibration.to_voltage(self.chValue))
+            except Exception:
+                logger.exception(
+                    "Failed to convert display value to voltage for channel %s", self.channel.chNum
+                )
+                voltage = self.chValue
+
+        self.controller.update_channel_value(self.channel.chNum, voltage)
 
 
 class DaqConfigUI:
@@ -575,8 +585,11 @@ class DaqConfigUI:
             ch_def_val_lab.grid(row=r, column=0, **ch_lab_grid_opts)
             ch_def_val_wid = e = tk.Entry(frame)
             value = ""
-            if ch.calibrationFromVFunc is not None:
-                value = str(ch.calibrationFromVFunc(ch.defaultValue))
+            if ch.isCalibrated and getattr(ch, "calibration", None) is not None:
+                try:
+                    value = str(ch.calibration.from_voltage(ch.defaultValue))
+                except Exception:
+                    value = str(ch.defaultValue)
             e.insert(0, str(ch.defaultValue) if not ch.isCalibrated else value)
             e.grid(row=r, column=1, **ch_wid_grid_opts)
             r += 1
@@ -806,8 +819,8 @@ class DaqConfigUI:
             raw_val = float(wid.get())
 
             # 2. Handle Calibration logic with explicit None checks for Pylance
-            if ch.isCalibrated and ch.calibrationToVFunc is not None:
-                new_default_value = float(ch.calibrationToVFunc(raw_val))
+            if ch.isCalibrated and getattr(ch, "calibration", None) is not None:
+                new_default_value = float(ch.calibration.to_voltage(raw_val))
             else:
                 new_default_value = raw_val
 
@@ -819,17 +832,23 @@ class DaqConfigUI:
             ch.defaultValue = new_default_value
 
             # If calibrated, update the widget (in case the function modified/clipped the value)
-            if ch.isCalibrated and ch.calibrationFromVFunc is not None:
-                wid.delete(0, tk.END)
-                wid.insert(0, ch.calibrationFromVFunc(new_default_value))
+            if ch.isCalibrated and getattr(ch, "calibration", None) is not None:
+                try:
+                    wid.delete(0, tk.END)
+                    wid.insert(0, ch.calibration.from_voltage(new_default_value))
+                except Exception:
+                    wid.insert(0, new_default_value)
 
         except (ValueError, TypeError, IndexError):
             # 5. Failure Path
             flash_col = "red"
             wid.delete(0, tk.END)
 
-            if ch.isCalibrated and ch.calibrationFromVFunc is not None:
-                wid.insert(0, ch.calibrationFromVFunc(old_default_val))
+            if ch.isCalibrated and getattr(ch, "calibration", None) is not None:
+                try:
+                    wid.insert(0, ch.calibration.from_voltage(old_default_val))
+                except Exception:
+                    wid.insert(0, old_default_val)
             else:
                 wid.insert(0, old_default_val)
 
@@ -847,8 +866,11 @@ class DaqConfigUI:
             ch.calibrate(wid.get())
             default_value_label.configure(text=f"Default value ({ch.calibrationUnits}):")
             default_value_widget.delete(0, tk.END)
-            if ch.calibrationFromVFunc is not None:
-                value = ch.calibrationFromVFunc(ch.defaultValue)
+            if getattr(ch, "calibration", None) is not None:
+                try:
+                    value = ch.calibration.from_voltage(ch.defaultValue)
+                except Exception:
+                    value = ch.defaultValue
             else:
                 raise ValueError("Calibration function is None")
             default_value_widget.insert(0, value)

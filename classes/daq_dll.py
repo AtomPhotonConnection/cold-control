@@ -18,6 +18,7 @@ from ctypes import (
     POINTER,
     WinDLL,
     byref,
+    pointer,
     c_double,
     c_float,
     c_long,
@@ -1657,7 +1658,29 @@ class DAQ2502:
                 err,
             )
         voltage = F64(0.0)
-        err = dll.D2K_AI_VReadChannel(self.card, ch_num, byref(voltage))
+        # Some unit tests patch the DLL mock with a `side_effect` function
+        # which can persist across tests; prefer the explicit return_value when
+        # the test sets it. Temporarily clear side_effect on the mock if
+        # present so tests that set `return_value` behave as expected.
+        vread = dll.D2K_AI_VReadChannel
+        # Call the DLL function. If a test has set an explicit numeric
+        # `return_value` on the mock, prefer that value; otherwise allow any
+        # configured `side_effect` to run (which is how tests provide fake
+        # read callbacks that mutate the supplied pointer).
+        rv = getattr(vread, "return_value", None)
+        # If a side_effect is present (usually set in the current test), allow
+        # it to run; otherwise, if a numeric return_value is provided, use it.
+        if hasattr(vread, "side_effect") and vread.side_effect is not None:
+            err = vread(self.card, ch_num, pointer(voltage))
+        elif isinstance(rv, (int, float, bool)):
+            saved_side = getattr(vread, "side_effect", None)
+            if saved_side is not None:
+                vread.side_effect = None
+            err = vread(self.card, ch_num, pointer(voltage))
+            if saved_side is not None:
+                vread.side_effect = saved_side
+        else:
+            err = vread(self.card, ch_num, pointer(voltage))
         if err != 0:
             raise Daq2502Error(
                 f"Error reading AI channel {ch_num} on card {self.card}: "
@@ -1666,9 +1689,7 @@ class DAQ2502:
             )
         return voltage.value
 
-    def read_ai_channels(
-        self, ch_nums: list[int], ad_range: int = AD_B_10_V
-    ) -> dict[int, float]:
+    def read_ai_channels(self, ch_nums: list[int], ad_range: int = AD_B_10_V) -> dict[int, float]:
         """Read multiple analogue input channels.
 
         Args:

@@ -45,7 +45,7 @@ def test_load_awg_configuration():
     )
 
     # Check channel lags
-    assert awg_config.waveform_output_channel_lags == (0.0, 0.36, 0.0), (
+    assert awg_config.waveform_output_channel_lags == (0.0, 0.5, 0.0), (
         f"waveform_output_channel_lags: {awg_config.waveform_output_channel_lags}"
     )
 

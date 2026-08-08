@@ -36,7 +36,13 @@ class DummyDAQController:
     Stores channel state in memory and prints writes to stdout.
     """
 
-    def __init__(self, channels: list, dios: list | None = None, ai_channels: list | None = None, continuous_output: bool = False):
+    def __init__(
+        self,
+        channels: list,
+        dios: list | None = None,
+        ai_channels: list | None = None,
+        continuous_output: bool = False,
+    ):
         """
         Parameters
         ----------
@@ -159,11 +165,12 @@ class DummyDAQController:
     def get_channel_calibration_dict(self) -> dict:
         result = {}
         for ch in self.channels:
-            if ch.isCalibrated:
+            if ch.isCalibrated and getattr(ch, "calibration", None) is not None:
+                cal = ch.calibration
                 result[ch.chNum] = (
-                    ch.calibrationUnits,
-                    ch.calibrationToVFunc,
-                    ch.calibrationFromVFunc,
+                    cal.units,
+                    lambda x, _cal=cal: _cal.to_voltage(x),
+                    lambda x, _cal=cal: _cal.from_voltage(x),
                 )
         return result
 

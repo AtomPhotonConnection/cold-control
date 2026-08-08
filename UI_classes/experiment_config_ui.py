@@ -406,8 +406,13 @@ class AbsorptionImagingConfigurationUi:
                         x,
                         *configured_imaging_freq_channel.chLimits
                         if not configured_imaging_freq_channel.isCalibrated
-                        else configured_imaging_freq_channel.calibrationFromVFunc(
-                            configured_imaging_freq_channel.chLimits
+                        else (
+                            tuple(
+                                sorted(configured_imaging_freq_channel.calibration.range_in_units())
+                            )
+                            if getattr(configured_imaging_freq_channel, "calibration", None)
+                            is not None
+                            else configured_imaging_freq_channel.chLimits
                         ),
                     ),
                     entered_freqs,
@@ -418,7 +423,10 @@ class AbsorptionImagingConfigurationUi:
                 new_entered_freqs
                 if not configured_imaging_freq_channel.isCalibrated
                 else list(
-                    map(configured_imaging_freq_channel.calibrationToVFunc, new_entered_freqs)
+                    map(
+                        lambda x: configured_imaging_freq_channel.calibration.to_voltage(x),
+                        new_entered_freqs,
+                    )
                 )
             )
         # If there was an error while converting the entered text to the correct form, catch it and flash red.
@@ -431,7 +439,10 @@ class AbsorptionImagingConfigurationUi:
             self.c.abs_img_freqs
             if not configured_imaging_freq_channel.isCalibrated
             else list(
-                map(configured_imaging_freq_channel.calibrationFromVFunc, self.c.abs_img_freqs)
+                map(
+                    lambda x: configured_imaging_freq_channel.calibration.from_voltage(x),
+                    self.c.abs_img_freqs,
+                )
             ),
         )
         imaging_freqs_widget.config(bg=flash_col)
@@ -480,7 +491,7 @@ class AbsorptionImagingConfigurationUi:
                         x,
                         *configured_trigger_channel.chLimits
                         if not configured_trigger_channel.isCalibrated
-                        else configured_trigger_channel.calibrationFromVFunc(
+                        else configured_trigger_channel.calibration.from_voltage(
                             configured_trigger_channel.chLimits
                         ),
                     ),

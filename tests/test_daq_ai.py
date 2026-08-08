@@ -25,6 +25,7 @@ from classes.daq import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_card(card_num: int = 0, ai_channel_nums: list[int] | None = None):
     """Return a MagicMock that behaves like a DAQCard for AI purposes."""
     card = MagicMock(spec=DAQCard)
@@ -72,6 +73,7 @@ def _make_controller(master_ai_chs=None, slave_ai_chs=None):
 # ---------------------------------------------------------------------------
 # DAQInputChannel
 # ---------------------------------------------------------------------------
+
 
 class TestDAQInputChannel:
     """Tests for the DAQInputChannel metadata class."""
@@ -131,10 +133,11 @@ class TestDAQInputChannel:
         ch.remove_calibration()
         assert ch.isCalibrated is False
         assert ch.calibrationUnits == "V"
-        assert ch.calibrationFromVFunc is None
+        assert getattr(ch, "calibration", None) is None
 
     def test_calibrate_missing_file_logs_error(self, caplog):
         import logging
+
         ch = DAQInputChannel(0)
         with caplog.at_level(logging.ERROR):
             ch.calibrate("/nonexistent/path/cal.csv")
@@ -164,6 +167,7 @@ class TestDAQInputChannel:
 # ---------------------------------------------------------------------------
 # DAQController AI routing
 # ---------------------------------------------------------------------------
+
 
 class TestDAQControllerAI:
     """Tests for the AI methods on DAQController (using mock cards)."""
@@ -224,7 +228,8 @@ class TestDAQControllerAI:
 # DAQ2502.read_ai_voltage (DLL mocked at import time)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
+
+@pytest.fixture
 def daq_dll_module():
     """Import daq_dll with WinDLL mocked so the DLL file isn't needed."""
     import sys
@@ -240,6 +245,7 @@ def daq_dll_module():
         # Remove any cached import so it re-runs the module body
         sys.modules.pop("classes.daq_dll", None)
         import classes.daq_dll as mod
+
         yield mod
 
     # Restore original module (removes the mock-based one)
@@ -306,4 +312,3 @@ class TestDAQ2502ReadAiVoltage:
         assert result[0] == pytest.approx(0.0)
         assert result[1] == pytest.approx(0.5)
         assert result[2] == pytest.approx(1.0)
-
