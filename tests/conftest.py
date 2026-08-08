@@ -28,6 +28,7 @@ from classes.daq import DAQChannel  # noqa: E402
 from classes.daq_sequence import DaqSequence, IntervalStyle  # noqa: E402
 from classes.experimental_configs import (  # noqa: E402
     MotFluoresceConfiguration,
+    MotFluorescenceAlignmentConfiguration,
     ScopeConfiguration,
 )
 from instruments.dummy import DummyDAQController  # noqa: E402
@@ -62,7 +63,7 @@ def dummy_daq():
         DAQChannel(ch_num=0, ch_name="Test Ch 0", ch_limits=(-10, 10), default_value=0.0),
         DAQChannel(ch_num=1, ch_name="Test Ch 1", ch_limits=(-10, 10), default_value=0.0),
     ]
-    return DummyDAQController(channels=channels, continuous_ouput=False)
+    return DummyDAQController(channels=channels, continuous_output=False)
 
 
 # ---------------------------------------------------------------------------
@@ -105,4 +106,19 @@ def mot_config_with_scope(tmp_path, minimal_scope_config):
         scope_config=minimal_scope_config,
         awg_config=None,
         cam_dict=None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# MotFluorescenceAlignmentConfiguration fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def alignment_config(mot_config_no_hw, basic_seq):
+    """MotFluorescenceAlignmentConfiguration with no hardware and no background."""
+    return MotFluorescenceAlignmentConfiguration(
+        base_config=mot_config_no_hw,
+        base_sequence=basic_seq,
+        background_folder=None,
     )

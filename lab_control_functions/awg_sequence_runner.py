@@ -164,7 +164,7 @@ if __name__ == "__main__":
         daq_controller = DaqReader(daq_config_fname).load_daq_controller()
 
         # Manual DAQ channel control
-        daq_controller.continuousOutput = True
+        daq_controller.continuous_output = True
         daq_controller.update_channel_value(22, 2.6)
         daq_controller.update_channel_value(14, 2.485)
         daq_controller.update_channel_value(8, 0.0048)

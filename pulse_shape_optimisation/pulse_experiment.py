@@ -103,8 +103,8 @@ def compute_error_metrics(
 
     if time_array is not None and len(time_array) == len(theoretical):
         trapz_error = float(
-            np.trapz(np.abs(measured - theoretical), time_array)
-            / np.trapz(np.abs(theoretical), time_array)
+            np.trapezoid(np.abs(measured - theoretical), time_array)
+            / np.trapezoid(np.abs(theoretical), time_array)
         )
         metrics["trapz_error"] = trapz_error
 

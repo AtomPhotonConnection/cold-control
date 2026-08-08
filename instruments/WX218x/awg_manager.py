@@ -245,6 +245,7 @@ class AWGManager:
         last_exc: Exception | None = None
         for attempt in range(retries):
             try:
+                self._log.info("AWG write: %s", cmd)
                 self.inst.write(cmd)
                 self._delay()
                 return
@@ -260,8 +261,10 @@ class AWGManager:
         last_exc: Exception | None = None
         for attempt in range(retries):
             try:
+                self._log.info("AWG query: %s", cmd)
                 resp = self.inst.query(cmd)
                 self._delay()
+                self._log.debug("AWG response: %s -> %s", cmd, resp.strip())
                 return resp.strip()
             except Exception as exc:
                 last_exc = exc
@@ -918,6 +921,7 @@ class AWGManager:
             The AWG configuration object containing all necessary settings.
         """
         self._upload_core(awg_cfg, continuous=True)
+        self.set_continuous(True)
         self.initiate()
 
         self._log.info("AWG playing continuously.")

@@ -164,7 +164,7 @@ def awg_driven_aom_response(
 
             awg.enable_channel(awg_channel)
             time.sleep(delay)
-            cal_data[i] = power_meter.read
+            cal_data[i] = power_meter.read  # type: ignore
 
             print(cal_data[i])
 

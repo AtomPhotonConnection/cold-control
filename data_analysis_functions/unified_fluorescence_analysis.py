@@ -53,7 +53,7 @@ MARKER_CHANNEL = 1  # Channel containing timing marker
 ROLLING_WINDOW = 64  # Window size for rolling average smoothing (None = no smoothing)
 
 # Voltage thresholds
-FLUOR_DROP_VOLTAGE = 19.7e-3  # Voltage threshold for MOT drop detection (V)
+FLUOR_DROP_VOLTAGE = 0.5e-3  # Voltage threshold for MOT drop detection (V)
 
 # Time windows (relative to MOT drop time, in seconds)
 # These define which regions of the trace to use for normalization and analysis
@@ -61,8 +61,8 @@ TIME_BEFORE_DROP = 1.1e-3  # How far back from MOT drop to include in alignment 
 TIME_AFTER_DROP = 5e-3  # How far forward from MOT drop to include in alignment (s)
 
 MOT_ON_WINDOW = (-0.5e-3, 0)  # MOT on (high fluorescence) - before drop
-MOT_OFF_WINDOW = (2.5e-3, 4e-3)  # MOT off (low fluorescence) - after sequence
-IMAGING_WINDOW = (1.0e-3, 1.48e-3)  # Imaging pulse time window
+# MOT_OFF_WINDOW = (2.5e-3, 4e-3)  # MOT off (low fluorescence) - after sequence
+IMAGING_WINDOW = (1.0077e-3, 1.4910e-3)  # Imaging pulse time window
 
 # Interpolation settings
 NUM_INTERPOLATION_POINTS = 50000  # Number of points for aligned/averaged traces
@@ -840,10 +840,10 @@ class FluorescenceAnalyser:
 
         for _, row in signal_df.iterrows():
             ar = self.analyse_single_point(
-                F_max_act=float(row["F_max"]),
-                F_max_act_sem=float(row["F_max_sem"]),
-                F_img_act=float(row["F_img"]),
-                F_img_act_sem=float(row["F_img_sem"]),
+                F_max_act=float(row["F_max"]),  # type: ignore[arg-type]
+                F_max_act_sem=float(row["F_max_sem"]),  # type: ignore[arg-type]
+                F_img_act=float(row["F_img"]),  # type: ignore[arg-type]
+                F_img_act_sem=float(row["F_img_sem"]),  # type: ignore[arg-type]
             )
             # Carry metadata through
             ar.shot_name = str(row.get("shot_name", "") or "")
