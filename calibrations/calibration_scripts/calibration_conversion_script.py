@@ -44,8 +44,9 @@ def main_loop():
     for channel in channels:
         # print(channel.chNum)
         if channel.chNum == ch_num:
-            calib_to_v = channel.calibrationToVFunc
-            calib_from_v = channel.calibrationFromVFunc
+            if getattr(channel, "calibration", None) is not None:
+                calib_to_v = channel.calibration.to_voltage
+                calib_from_v = channel.calibration.from_voltage
             print(f"This channel is {channel.chName}")
 
     if calib_to_v is None or calib_from_v is None:

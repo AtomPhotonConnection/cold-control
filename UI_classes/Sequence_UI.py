@@ -55,7 +55,9 @@ class DaqSequenceUI(tk.Toplevel):
         """parent - parent widget
         sequence - initial sequence to be configured with
         configured_channel_labels - dict. of {channel number:channel label} as currently configured.
-        configured_channel_calibrations= - dict. of {channel number:(calibrationUnits, calibrationToVFunc, calibrationFromVFunc)} as currently configured.
+        configured_channel_calibrations= - dict. of {channel number: (calibrationUnits, Calibration)} as currently configured.
+            The `Calibration` instance exposes `to_voltage(value)` and `from_voltage(voltage)` methods
+            for converting between voltages and physical units.
 
         Note - the sequecnce_UI doen't validate that the configured sequence matches the configured DAQ channels
         (for channel limits etc.) as a) sequence validation is performed by the DAQ_controller before it is run

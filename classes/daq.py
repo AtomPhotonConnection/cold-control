@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+from .calibration import Calibration, CalibrationMeta
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ AD_U_0_4_V = 29
 
 # Default voltage range for all analogue input (AI) channels.
 # Change this constant to use a different range globally.
-# Example alternatives: AD_B_5_V (±5 V), AD_U_10_V (0 → +10 V).
+# Example alternatives: AD_B_5_V (±5 V), AD_U_10_V (0 -> +10 V).
 AI_DEFAULT_AD_RANGE: int = AD_B_10_V
 
 # DIO Port Direction
@@ -555,25 +556,19 @@ class DAQChannel:
                 if match:
                     v_data.append(float(match.group(1)))
                     cal_data.append(float(match.group(2)))
-
-        if cal_data[0] <= cal_data[-1]:
-            self.calibrationToVFunc = lambda x: np.interp(x, cal_data, v_data)
-        else:
-            logger.info("%s: calibration to Voltage being reversed...", self.chName)
-            self.calibrationToVFunc = lambda x: np.interp(
-                x, [x for x in reversed(cal_data)], [x for x in reversed(v_data)]
-            )
-
-        if v_data[0] <= v_data[-1]:
-            self.calibrationFromVFunc = lambda x: np.interp(x, v_data, cal_data)
-        else:
-            logger.info("%s: calibration from Voltage being reversed...", self.chName)
-            self.calibrationFromVFunc = lambda x: np.interp(
-                x, [x for x in reversed(v_data)], [x for x in reversed(cal_data)]
-            )
-
-        self.isCalibrated = True
-        self.calibrationFname = calibration_fname
+        # Build a Calibration object from parsed arrays
+        v_arr = np.asarray(v_data, dtype=float)
+        cal_arr = np.asarray(cal_data, dtype=float)
+        meta = CalibrationMeta(units=self.calibrationUnits, source_path=Path(calibration_fname))
+        # sort by voltage
+        sort_idx = np.argsort(v_arr)
+        try:
+            self.calibration = Calibration(v_arr[sort_idx], cal_arr[sort_idx], meta)
+            self.isCalibrated = True
+            self.calibrationFname = calibration_fname
+        except Exception:
+            logger.exception("Failed to create Calibration from %s", calibration_fname)
+            self.isCalibrated = False
 
     def calibrate(self, calibration_fname, from_csv=True):
         """
@@ -592,45 +587,37 @@ class DAQChannel:
             return
 
         try:
-            df = pd.read_csv(calibration_fname)
+            cal = Calibration.from_file(calibration_fname)
         except FileNotFoundError:
             logger.error("Calibration file not found: %s", calibration_fname)
             return
-
-        try:
-            voltage_col = df.columns[0]  # Get the voltage column name (e.g., "Voltage (V)")
-            data_col = df.columns[1]  # get the column containing the calibration data
-            units = str(data_col).split(" ")[-1].strip("()")  # Extract units
-        except IndexError:
-            logger.error("Invalid calibration file format: %s", calibration_fname)
+        except Exception:
+            logger.exception("Invalid calibration file: %s", calibration_fname)
             return
 
-        self.calibrationUnits = units
-        v_data = df[voltage_col].values
-        cal_data = df[data_col].values
-
-        # Sort data by voltage for consistent interpolation
-        sorted_idx = np.argsort(np.array(v_data))
-        v_data = np.array(v_data)[sorted_idx]
-        cal_data = np.array(cal_data)[sorted_idx]
-
-        self.calibrationToVFunc = lambda x: np.interp(x, cal_data, v_data)
-        self.calibrationFromVFunc = lambda x: np.interp(x, v_data, cal_data)
-
+        self.calibration = cal
+        self.calibrationUnits = cal.units
         self.isCalibrated = True
-        self.calibrationFname = calibration_fname
+        self.calibrationFname = str(cal.meta.source_path)
+        # Calibration is stored as a `Calibration` object. Use its
+        # `from_voltage` / `to_voltage` methods for conversions.
 
     def remove_calibration(self):
         self.isCalibrated = False
-        self.calibrationToVFunc, self.calibrationFromVFunc = None, None
+        self.calibration = None
         self.calibrationUnits = ""
+        # Calibration object removed; callers should use channel.calibration
+        # when present and its `from_voltage`/`to_voltage` helpers.
 
     def get_help_text(self):
         format_args = [self.chNum, self.chLimits, self.defaultValue]
-        if self.isCalibrated and self.calibrationFromVFunc is not None:
-            format_args[2] = (
-                f"{self.calibrationFromVFunc(self.defaultValue)}{self.calibrationUnits}"
-            )
+        if self.isCalibrated and getattr(self, "calibration", None) is not None:
+            try:
+                format_args[2] = (
+                    f"{self.calibration.from_voltage(self.defaultValue)}{self.calibrationUnits}"
+                )
+            except Exception:
+                format_args[2] = f"{self.defaultValue} V"
         return (
             "DAQ channel: {0}\n"
             + "Channel limits: {1}V\n"
@@ -639,19 +626,20 @@ class DAQChannel:
         ).format(*format_args)
 
     def get_calibration_text(self):
-        if (
-            not self.isCalibrated
-            or self.calibrationToVFunc is None
-            or self.calibrationFromVFunc is None
-        ):
+        if not self.isCalibrated or getattr(self, "calibration", None) is None:
             return "There is no calibration on this channel."
         else:
-            return ("Channel units: {0}\n" + "Calibration range: {1}V <-> {2}{3}").format(
-                self.calibrationUnits,
-                self.calibrationToVFunc((-np.inf, np.inf)),
-                self.calibrationFromVFunc((-np.inf, np.inf)),
-                self.calibrationUnits,
-            )
+            try:
+                vmin, vmax = self.calibration.range_in_voltage()
+                umin, umax = self.calibration.range_in_units()
+                return ("Channel units: {0}\n" + "Calibration range: {1}V <-> {2}{3}").format(
+                    self.calibrationUnits,
+                    f"{vmin:.6g} - {vmax:.6g}",
+                    f"{umin:.6g} - {umax:.6g}",
+                    self.calibrationUnits,
+                )
+            except Exception:
+                return "Calibration present but failed to describe range."
 
 
 class DAQDio:
@@ -741,8 +729,8 @@ class DAQInputChannel:
         self.isUIVisible = is_ui_visible
         self.isCalibrated = False
         self.calibrationUnits = "V"
-        self.calibrationFromVFunc = None  # voltage → physical units
-        self.calibrationToVFunc = None    # physical units → voltage
+        # Use `self.calibration.from_voltage` / `self.calibration.to_voltage`
+        # when a calibration is applied.
 
     def calibrate(self, calibration_fname: str) -> None:
         """Apply a voltage-to-physical-units calibration from a CSV file.
@@ -752,35 +740,23 @@ class DAQInputChannel:
         (e.g. ``Temperature (degC)``).
         """
         try:
-            df = pd.read_csv(calibration_fname)
+            cal = Calibration.from_file(calibration_fname)
         except FileNotFoundError:
             logger.error("Calibration file not found: %s", calibration_fname)
             return
-        try:
-            voltage_col = df.columns[0]
-            data_col = df.columns[1]
-            units = str(data_col).split(" ")[-1].strip("()")
-        except IndexError:
-            logger.error("Invalid calibration file format: %s", calibration_fname)
+        except Exception:
+            logger.exception("Invalid calibration file: %s", calibration_fname)
             return
 
-        self.calibrationUnits = units
-        v_data = np.asarray(df[voltage_col].values, dtype=float)
-        cal_data = np.asarray(df[data_col].values, dtype=float)
-        sorted_idx = np.argsort(v_data)
-        v_data = v_data[sorted_idx]
-        cal_data = cal_data[sorted_idx]
-
-        self.calibrationFromVFunc = lambda x: np.interp(x, v_data, cal_data)
-        self.calibrationToVFunc = lambda x: np.interp(x, cal_data, v_data)
+        self.calibration = cal
+        self.calibrationUnits = cal.units
         self.isCalibrated = True
-        self.calibrationFname = calibration_fname
+        self.calibrationFname = str(cal.meta.source_path)
 
     def remove_calibration(self) -> None:
         """Remove any calibration, reverting the channel to reading in Volts."""
         self.isCalibrated = False
-        self.calibrationFromVFunc = None
-        self.calibrationToVFunc = None
+        self.calibration = None
         self.calibrationUnits = "V"
 
     def get_display_value(self, voltage: float) -> tuple[float, str]:
@@ -789,8 +765,12 @@ class DAQInputChannel:
         Returns the calibrated value and units if a calibration is applied,
         otherwise returns the raw voltage in Volts.
         """
-        if self.isCalibrated and self.calibrationFromVFunc is not None:
-            return float(self.calibrationFromVFunc(voltage)), self.calibrationUnits
+        if self.isCalibrated and getattr(self, "calibration", None) is not None:
+            try:
+                return float(self.calibration.from_voltage(voltage)), self.calibrationUnits
+            except Exception:
+                logger.exception("Calibration conversion failed for voltage %s", voltage)
+                return voltage, "V"
         return voltage, "V"
 
     def get_help_text(self) -> str:
@@ -1028,7 +1008,7 @@ class DAQCard(DAQ2502):  # type: ignore
                      ``DAQInputChannel`` objects registered on this card.
 
         Returns:
-            Dictionary mapping channel number → voltage (V).
+            Dictionary mapping channel number -> voltage (V).
         """
         if ch_nums is None:
             ch_nums = [ch.chNum for ch in self.ai_channels]
@@ -1249,13 +1229,19 @@ class DAQController:
         return dict([(ch.chNum, ch.chName) for ch in self.get_channels(only_visible)])
 
     def get_channel_calibration_dict(self):
-        """Returns a dictonary of all calibrated channels of the form
-        {channel number:(calibrationUnits, calibrationToVFunc, calibrationFromVFunc)}."""
+        """Returns a dictonary of all calibrated channels of the form"""
+
+        def make_wrappers(ch):
+            cal = getattr(ch, "calibration", None)
+            if cal is None:
+                return None
+            return (cal.units, lambda x: cal.to_voltage(x), lambda x: cal.from_voltage(x))
+
         return dict(
             [
-                (ch.chNum, (ch.calibrationUnits, ch.calibrationToVFunc, ch.calibrationFromVFunc))
+                (ch.chNum, make_wrappers(ch))
                 for ch in self.get_channels(only_visible=False)
-                if ch.isCalibrated
+                if ch.isCalibrated and getattr(ch, "calibration", None) is not None
             ]
         )
 
@@ -1292,7 +1278,7 @@ class DAQController:
                      registered ``DAQInputChannel`` objects across all cards.
 
         Returns:
-            Dictionary mapping channel number → voltage (V).
+            Dictionary mapping channel number -> voltage (V).
         """
         if ch_nums is None:
             ch_nums = [ch.chNum for ch in self.get_ai_channels()]
