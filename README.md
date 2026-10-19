@@ -4,6 +4,16 @@ This is the GUI used to control all aspects of the atomic cavity-QED physics exp
 
 For a flavor of the work this underpins see the [Atom-Photon connection group website](https://www2.physics.ox.ac.uk/research/the-atom-photon-connection).
 
+## Running on the Windows lab PC
+
+Open this folder in VS Code and select the `cold-control` Python interpreter; use **Cold Control: Root UI** with **F5** to debug.
+New **Cold Control (Conda)** terminals activate Conda automatically; run `python Root_UI.py`.
+Alternatively, from a Command Prompt in this folder:
+```
+call C:\ProgramData\miniconda3\Scripts\activate.bat cold-control
+python Root_UI.py
+```
+
 # Overview of the functionality
 
 The below is not an exhaustive list and neglects most specifics, however it hopefully provides a pointer to the relevant code underlying the core functionality provided by cold-control.

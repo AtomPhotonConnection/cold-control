@@ -12,6 +12,21 @@
     },
     "ruff.lint.enable": true,
     "python.analysis.autoImportCompletions": true,
-    "python.defaultInterpreterPath": "C:\\Users\\kingm\\.conda\\envs\\cold-control\\python.exe",
-    "python.terminal.activateEnvironment": true,
+    "python.condaPath": "C:\\ProgramData\\miniconda3\\Scripts\\conda.exe",
+    "python.defaultInterpreterPath": "C:\\Users\\LabUser\\.conda\\envs\\cold-control\\python.exe",
+    // The terminal profile activates Conda; avoid a second activation command.
+    "python.terminal.activateEnvironment": false,
+    "python-envs.terminal.autoActivationType": "off",
+    "terminal.integrated.profiles.windows": {
+        "Cold Control (Conda)": {
+            "path": "C:\\Windows\\System32\\cmd.exe",
+            "args": [
+                "/D",
+                "/K",
+                "C:\\ProgramData\\miniconda3\\Scripts\\activate.bat",
+                "cold-control"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "Cold Control (Conda)",
 }
