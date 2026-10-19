@@ -33,7 +33,7 @@ import numpy as np
 from PIL import Image
 
 try:
-    import instruments.Oscilloscopes.keysight_3104A as osc
+    import instruments.Oscilloscopes.agilent_mso9254A as osc
 except (ImportError, ModuleNotFoundError):
     osc = None  # type: ignore[assignment]
 
